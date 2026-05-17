@@ -12,7 +12,14 @@
       "Bash(JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ./gradlew :app:compileDebugKotlin)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(/usr/bin/git init *)"
+      "Bash(/usr/bin/git init *)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(cp \"/Users/rohitha/.claude/projects/-Users-rohitha-AndroidStudioProjects-ExpenseTracker/aa81a0dd-4065-4d7f-b88d-2b2c51a56612/tool-results/webfetch-1779050617001-206ehk.bin\" /tmp/design.gz)",
+      "Bash(gunzip -f /tmp/design.gz)",
+      "Read(//tmp/**)",
+      "Bash(/usr/libexec/java_home)",
+      "Bash(export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\")",
+      "Bash(xargs cat)"
     ]
   }
 }

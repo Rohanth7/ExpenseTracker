@@ -9,6 +9,7 @@ class RecurringTemplateRepository(private val dao: RecurringTemplateDao) {
 
     suspend fun getAllEnabled(): List<RecurringTemplate> = dao.getAllEnabled()
     suspend fun insert(template: RecurringTemplate) = dao.insert(template)
+    suspend fun insertAll(templates: List<RecurringTemplate>) = dao.insertAll(templates)
     suspend fun update(template: RecurringTemplate) = dao.update(template)
     suspend fun delete(template: RecurringTemplate) = dao.delete(template)
     suspend fun deleteAll() = dao.deleteAll()

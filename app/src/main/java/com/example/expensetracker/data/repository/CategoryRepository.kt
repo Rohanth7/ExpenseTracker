@@ -9,6 +9,7 @@ class CategoryRepository(private val dao: CategoryDao, private val expenseDao: E
     val allCategories: Flow<List<Category>> = dao.getAll()
 
     suspend fun insert(category: Category): Long = dao.insert(category)
+    suspend fun insertAll(categories: List<Category>) = dao.insertAll(categories)
     suspend fun update(category: Category) = dao.update(category)
     suspend fun getById(id: Long): Category? = dao.getById(id)
 

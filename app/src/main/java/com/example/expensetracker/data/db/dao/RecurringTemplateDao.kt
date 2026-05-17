@@ -15,6 +15,9 @@ interface RecurringTemplateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(template: RecurringTemplate): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(templates: List<RecurringTemplate>)
+
     @Update
     suspend fun update(template: RecurringTemplate)
 

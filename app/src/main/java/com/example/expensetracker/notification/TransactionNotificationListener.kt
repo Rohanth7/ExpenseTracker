@@ -4,11 +4,14 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.db.dao.MappingHelper
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class TransactionNotificationListener : NotificationListenerService() {
@@ -36,21 +39,33 @@ class TransactionNotificationListener : NotificationListenerService() {
 
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
+            if (db.categoryDao().getCount() == 0) return@launch // Avoid adding without category
+
+            val categories = db.categoryDao().getAll().first()
             val now = System.currentTimeMillis()
             // Cross-source: bank SMS + UPI notification for same transaction (3-min window)
-            if (db.expenseDao().getRecentByAmountFromDifferentSource(transaction.amount, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
+            // Description might be slightly different between SMS and Notification, but usually contains merchant
+            if (db.expenseDao().getRecentByAmountAndDescriptionFromDifferentSource(transaction.amount, transaction.description, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
+            
             // Same-source: UPI app notification fired twice (30-sec window)
-            if (db.expenseDao().getRecentByAmountFromSameSource(transaction.amount, "UPI", now - 30 * 1000L) > 0) return@launch
+            if (db.expenseDao().getRecentByAmountAndContentFromSameSource(transaction.amount, "UPI", body, now - 30 * 1000L) > 0) return@launch
+            
+            // Smart auto-categorization with fuzzy matching
+            val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)
+            val finalCategoryId = mappedCategoryId ?: -1L
+
             val expense = Expense(
                 amount = transaction.amount,
                 description = transaction.description,
-                categoryId = -1L,
-                source = "UPI"
+                categoryId = finalCategoryId,
+                source = "UPI",
+                rawSms = body
             )
             val id = db.expenseDao().insert(expense)
             NotificationHelper.showCategorizationNotification(
-                applicationContext, id, transaction.amount, transaction.description
+                applicationContext, id, transaction.amount, transaction.description, categories
             )
+            WidgetUpdateHelper.update(applicationContext)
         }
     }
 }

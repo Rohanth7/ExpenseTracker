@@ -27,8 +27,17 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
     suspend fun getRecentByAmountFromDifferentSource(amount: Double, source: String, since: Long): Int
 
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND description = :description AND source != :source AND date >= :since")
+    suspend fun getRecentByAmountAndDescriptionFromDifferentSource(amount: Double, description: String, source: String, since: Long): Int
+
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND date >= :since")
     suspend fun getRecentByAmountFromSameSource(amount: Double, source: String, since: Long): Int
+
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND rawSms = :rawSms AND date >= :since")
+    suspend fun getRecentByAmountAndContentFromSameSource(amount: Double, source: String, rawSms: String, since: Long): Int
+
+    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE date BETWEEN :start AND :end")
+    suspend fun getTotalSpentInRange(start: Long, end: Long): Double
 
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE categoryId = :categoryId AND date BETWEEN :start AND :end")
     suspend fun getSpentForCategory(categoryId: Long, start: Long, end: Long): Double
@@ -41,6 +50,9 @@ interface ExpenseDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(expense: Expense): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(expenses: List<Expense>)
 
     @Update
     suspend fun update(expense: Expense)
