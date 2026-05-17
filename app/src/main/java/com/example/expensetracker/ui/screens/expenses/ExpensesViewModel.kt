@@ -49,15 +49,15 @@ class ExpensesViewModel(
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setCategoryFilter(id: Long?) { _categoryFilter.value = id }
 
-    fun addExpense(amount: Double, description: String, categoryId: Long) = viewModelScope.launch {
-        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId))
+    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long) = viewModelScope.launch {
+        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date))
         if (categoryId != -1L) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
         }
     }
 
-    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long) = viewModelScope.launch {
-        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId))
+    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long) = viewModelScope.launch {
+        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date))
         if (categoryId != -1L) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
         }

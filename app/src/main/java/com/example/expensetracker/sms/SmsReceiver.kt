@@ -51,10 +51,12 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    // Suppress duplicate if same amount was already saved within the last 2 minutes
     private suspend fun isDuplicate(db: AppDatabase, amount: Double): Boolean {
-        val since = System.currentTimeMillis() - 2 * 60 * 1000L
-        val recent = db.expenseDao().getRecentByAmount(amount, since)
-        return recent > 0
+        val now = System.currentTimeMillis()
+        // Cross-source: UPI notification + bank SMS for same transaction (3-min window)
+        if (db.expenseDao().getRecentByAmountFromDifferentSource(amount, "SMS", now - 3 * 60 * 1000L) > 0) return true
+        // Same-source: SMS broadcast fired twice (30-sec window)
+        if (db.expenseDao().getRecentByAmountFromSameSource(amount, "SMS", now - 30 * 1000L) > 0) return true
+        return false
     }
 }

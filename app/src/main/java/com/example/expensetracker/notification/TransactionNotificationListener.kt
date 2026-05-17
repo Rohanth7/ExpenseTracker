@@ -36,9 +36,11 @@ class TransactionNotificationListener : NotificationListenerService() {
 
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
-            // Skip if the same amount was already recorded in the last 2 minutes (SMS + UPI duplicate)
-            val since = System.currentTimeMillis() - 2 * 60 * 1000L
-            if (db.expenseDao().getRecentByAmount(transaction.amount, since) > 0) return@launch
+            val now = System.currentTimeMillis()
+            // Cross-source: bank SMS + UPI notification for same transaction (3-min window)
+            if (db.expenseDao().getRecentByAmountFromDifferentSource(transaction.amount, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
+            // Same-source: UPI app notification fired twice (30-sec window)
+            if (db.expenseDao().getRecentByAmountFromSameSource(transaction.amount, "UPI", now - 30 * 1000L) > 0) return@launch
             val expense = Expense(
                 amount = transaction.amount,
                 description = transaction.description,

@@ -24,6 +24,12 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
+    suspend fun getRecentByAmountFromDifferentSource(amount: Double, source: String, since: Long): Int
+
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND date >= :since")
+    suspend fun getRecentByAmountFromSameSource(amount: Double, source: String, since: Long): Int
+
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE categoryId = :categoryId AND date BETWEEN :start AND :end")
     suspend fun getSpentForCategory(categoryId: Long, start: Long, end: Long): Double
 

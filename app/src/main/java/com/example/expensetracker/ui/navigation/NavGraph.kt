@@ -2,6 +2,7 @@ package com.example.expensetracker.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -34,18 +35,21 @@ import com.example.expensetracker.ui.screens.expenses.ExpensesScreen
 import com.example.expensetracker.ui.screens.expenses.ExpensesViewModel
 import com.example.expensetracker.ui.screens.settings.SettingsScreen
 import com.example.expensetracker.ui.screens.settings.SettingsViewModel
+import com.example.expensetracker.ui.screens.statistics.StatisticsScreen
+import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
 
 sealed class Screen(val route: String, val label: String) {
     object Dashboard : Screen("dashboard", "Dashboard")
     object Expenses : Screen("expenses", "Expenses")
     object Categories : Screen("categories", "Categories")
+    object Statistics : Screen("statistics", "Stats")
     object Settings : Screen("settings", "Settings")
     object Categorize : Screen("categorize/{expenseId}", "Categorize") {
         fun route(expenseId: Long) = "categorize/$expenseId"
     }
 }
 
-private val bottomNavItems = listOf(Screen.Dashboard, Screen.Expenses, Screen.Categories, Screen.Settings)
+private val bottomNavItems = listOf(Screen.Dashboard, Screen.Expenses, Screen.Categories, Screen.Statistics, Screen.Settings)
 
 @Composable
 fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit = {}) {
@@ -94,6 +98,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                                     Screen.Dashboard -> Icon(Icons.Default.Home, screen.label)
                                     Screen.Expenses -> Icon(Icons.AutoMirrored.Filled.List, screen.label)
                                     Screen.Categories -> Icon(Icons.Default.Category, screen.label)
+                                    Screen.Statistics -> Icon(Icons.Default.BarChart, screen.label)
                                     Screen.Settings -> Icon(Icons.Default.Settings, screen.label)
                                     else -> {}
                                 }
@@ -133,6 +138,12 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                     factory = CategoriesViewModel.factory(categoryRepo)
                 )
                 CategoriesScreen(viewModel = vm)
+            }
+            composable(Screen.Statistics.route) {
+                val vm: StatisticsViewModel = viewModel(
+                    factory = StatisticsViewModel.factory(expenseRepo, categoryRepo)
+                )
+                StatisticsScreen(viewModel = vm)
             }
             composable(Screen.Settings.route) {
                 val vm: SettingsViewModel = viewModel(
