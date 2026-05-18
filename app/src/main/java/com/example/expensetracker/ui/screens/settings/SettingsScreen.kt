@@ -574,13 +574,35 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     }
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Week start
+                    var showWeekStartInfo by remember { mutableStateOf(false) }
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { viewModel.setWeekStartsOnMonday(!weekStartsOnMonday) }.padding(vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Week starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Week starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "Info",
+                                tint = Muted,
+                                modifier = Modifier.size(15.dp).clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) { showWeekStartInfo = !showWeekStartInfo }
+                            )
+                        }
                         Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                    }
+                    androidx.compose.animation.AnimatedVisibility(visible = showWeekStartInfo) {
+                        Text(
+                            "Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
+                            fontSize = 11.5.sp,
+                            color = Muted,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Canvas)
+                                .padding(10.dp, 8.dp)
+                                .padding(bottom = 6.dp)
+                        )
                     }
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Privacy Mode
