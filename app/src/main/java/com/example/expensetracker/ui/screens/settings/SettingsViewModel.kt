@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -65,8 +64,8 @@ class SettingsViewModel(
 
     fun deleteLoan(loan: Loan) = viewModelScope.launch { loanRepo.delete(loan) }
 
-    fun addBill(name: String, amount: Double, dueDayOfMonth: Int, reminderDays: Int, categoryId: Long) = viewModelScope.launch {
-        billRepo.insert(Bill(name = name, amount = amount, dueDayOfMonth = dueDayOfMonth, reminderDays = reminderDays, categoryId = categoryId))
+    fun addBill(name: String, amount: Double, dueDayOfMonth: Int, reminderDays: Int, categoryId: Long, autoLog: Boolean = false) = viewModelScope.launch {
+        billRepo.insert(Bill(name = name, amount = amount, dueDayOfMonth = dueDayOfMonth, reminderDays = reminderDays, categoryId = categoryId, autoLog = autoLog))
     }
 
     fun toggleBill(bill: Bill) = viewModelScope.launch {
@@ -136,26 +135,6 @@ class SettingsViewModel(
     private val _monthlyIncome = MutableStateFlow(prefs.monthlyIncome)
     val monthlyIncome: StateFlow<Double> = _monthlyIncome.asStateFlow()
     fun setMonthlyIncome(value: Double) { prefs.monthlyIncome = value; _monthlyIncome.value = value }
-
-    // ── UPI capture stats ───────────────────────────────────────
-
-    data class CaptureStats(val today: Int, val thisMonth: Int, val allTime: Int)
-
-    val captureStats: StateFlow<CaptureStats> = expenseRepo.allExpenses.map { expenses ->
-        val autoExpenses = expenses.filter { it.source != "Manual" && it.source != "Recurring" }
-        val todayStart = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val monthStart = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        CaptureStats(
-            today = autoExpenses.count { it.date >= todayStart },
-            thisMonth = autoExpenses.count { it.date >= monthStart },
-            allTime = autoExpenses.size
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CaptureStats(0, 0, 0))
 
     // ── Backup / restore ────────────────────────────────────────
 
@@ -275,8 +254,8 @@ class SettingsViewModel(
 
         (mayExpenses + aprExpenses + marExpenses).forEach { expenseRepo.insert(it) }
 
-        // Bills
-        billRepo.insert(Bill(name = "Rent",          amount = 22000.0, dueDayOfMonth = 1,  reminderDays = 5, categoryId = rentId))
+        // Bills & Recurring
+        billRepo.insert(Bill(name = "Rent",          amount = 22000.0, dueDayOfMonth = 1,  reminderDays = 0, categoryId = rentId,       autoLog = true))
         billRepo.insert(Bill(name = "Electricity",   amount = 1800.0,  dueDayOfMonth = 10, reminderDays = 3, categoryId = utilitiesId))
         billRepo.insert(Bill(name = "Airtel Internet", amount = 999.0, dueDayOfMonth = 5,  reminderDays = 3, categoryId = utilitiesId))
         billRepo.insert(Bill(name = "Netflix",       amount = 499.0,   dueDayOfMonth = 15, reminderDays = 2, categoryId = entertainId))

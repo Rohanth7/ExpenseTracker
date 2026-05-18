@@ -11,5 +11,6 @@ data class Bill(
     val dueDayOfMonth: Int,
     val reminderDays: Int = 3,
     val categoryId: Long = -1L,
-    val isEnabled: Boolean = true
+    val isEnabled: Boolean = true,
+    val autoLog: Boolean = false
 )

@@ -18,6 +18,9 @@ interface BillDao {
     @Delete
     suspend fun delete(bill: Bill)
 
+    @Query("SELECT * FROM bills WHERE autoLog = 1 AND isEnabled = 1")
+    suspend fun getAutoLogEnabled(): List<Bill>
+
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
 }

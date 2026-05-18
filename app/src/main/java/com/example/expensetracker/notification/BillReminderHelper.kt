@@ -70,7 +70,7 @@ class BillReminderWorker(context: Context, params: WorkerParameters) : Coroutine
             val today = cal.get(Calendar.DAY_OF_MONTH)
             val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 
-            bills.filter { it.isEnabled }.forEach { bill ->
+            bills.filter { it.isEnabled && !it.autoLog }.forEach { bill ->
                 val diff = bill.dueDayOfMonth - today
                 // Wrap negative diffs: bill due early next month (e.g. due on 2nd, today is 28th)
                 val daysUntilDue = if (diff < 0) diff + daysInMonth else diff

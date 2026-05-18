@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
-import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
@@ -48,7 +47,6 @@ private fun fmtINR(amount: Double): String =
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel) {
     val categories by viewModel.categories.collectAsState()
-    val templates by viewModel.recurringTemplates.collectAsState()
     val bills by viewModel.bills.collectAsState()
     val loans by viewModel.loans.collectAsState()
     val privacyMode by viewModel.privacyMode.collectAsState()
@@ -60,18 +58,17 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
-    val captureStats by viewModel.captureStats.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
     val pendingImportUri = viewModel.pendingImportUri
     val snackbarHostState = remember { SnackbarHostState() }
-    var showAddRecurring by remember { mutableStateOf(false) }
     var showAddBill by remember { mutableStateOf(false) }
     var showAddLoan by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var showMockDataDialog by remember { mutableStateOf(false) }
-    var templateToDelete by remember { mutableStateOf<RecurringTemplate?>(null) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
     var loanToDelete by remember { mutableStateOf<Loan?>(null) }
+    var selectedBill by remember { mutableStateOf<Bill?>(null) }
+    var selectedLoan by remember { mutableStateOf<Loan?>(null) }
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -154,36 +151,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 Spacer(Modifier.height(24.dp))
             }
 
-            // ── Auto-track Stats ───────────────────────────────
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(20.dp)
-                ) {
-                    Text(
-                        "AUTO-TRACKING STATS",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
-                        letterSpacing = 1.6.sp,
-                        color = Muted
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatItem("Today", captureStats.today.toString())
-                        StatItem("This Month", captureStats.thisMonth.toString())
-                        StatItem("All Time", captureStats.allTime.toString())
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-            }
-
-            // ── Recurring Expenses ──────────────────────────────
+            // ── Bills & Recurring ───────────────────────────────
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -191,64 +159,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "RECURRING",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.6.sp,
-                        color = Muted
-                    )
-                    if (categories.isNotEmpty()) {
-                        Text(
-                            text = "Add +",
-                            fontSize = 12.sp,
-                            color = Jade,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable { showAddRecurring = true }
-                        )
-                    }
-                }
-            }
-
-            if (templates.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Paper)
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "No recurring expenses set up.",
-                            fontSize = 12.sp,
-                            color = Muted
-                        )
-                    }
-                }
-            } else {
-                items(templates) { template ->
-                    val category = categories.find { it.id == template.categoryId }
-                    RecurringRow(
-                        template = template,
-                        category = category,
-                        onToggle = { viewModel.toggleTemplate(template) },
-                        onDelete = { templateToDelete = template }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-
-            // ── Bills ──────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(24.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "BILLS",
+                        text = "BILLS & RECURRING",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         letterSpacing = 1.6.sp,
@@ -274,7 +185,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             .padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No bills set up yet.\nTap Add + to track rent, EMI, subscriptions.", fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+                        Text(
+                            "No bills set up yet.\nTap Add + to track subscriptions, rent, or auto-log recurring expenses.",
+                            fontSize = 12.sp,
+                            color = Muted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
                     }
                 }
             } else {
@@ -284,7 +201,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         bill = bill,
                         category = category,
                         onToggle = { viewModel.toggleBill(bill) },
-                        onDelete = { billToDelete = bill }
+                        onDelete = { billToDelete = bill },
+                        onClick = { selectedBill = bill }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -338,7 +256,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 items(loans) { loan ->
                     LoanRow(
                         loan = loan,
-                        onDelete = { loanToDelete = loan }
+                        onDelete = { loanToDelete = loan },
+                        onClick = { selectedLoan = loan }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -507,16 +426,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         .background(Paper)
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    // Currency
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Currency", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("₹ INR", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Muted, letterSpacing = 0.4.sp)
-                    }
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Budget Alerts
                     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
                         Row(
@@ -675,8 +584,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         AddBillDialog(
             categories = categories,
             onDismiss = { showAddBill = false },
-            onConfirm = { name, amount, day, reminderDays, catId ->
-                viewModel.addBill(name, amount, day, reminderDays, catId)
+            onConfirm = { name, amount, day, reminderDays, catId, autoLog ->
+                viewModel.addBill(name, amount, day, reminderDays, catId, autoLog)
                 showAddBill = false
             }
         )
@@ -701,33 +610,18 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         )
     }
 
-    if (showAddRecurring) {
-        AddRecurringDialog(
-            categories = categories,
-            onDismiss = { showAddRecurring = false },
-            onConfirm = { name, amount, catId ->
-                viewModel.addTemplate(name, amount, catId)
-                showAddRecurring = false
-            }
+    selectedBill?.let { bill ->
+        BillDetailDialog(
+            bill = bill,
+            category = categories.find { it.id == bill.categoryId },
+            onDismiss = { selectedBill = null }
         )
     }
 
-    templateToDelete?.let { template ->
-        AlertDialog(
-            onDismissRequest = { templateToDelete = null },
-            containerColor = Paper,
-            titleContentColor = Ink,
-            textContentColor = Muted,
-            title = { Text("Delete recurring expense?") },
-            text = { Text("\"${template.name}\" will no longer be added automatically each month.") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteTemplate(template); templateToDelete = null }) {
-                    Text("Delete", color = Coral)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { templateToDelete = null }) { Text("Cancel", color = Muted) }
-            }
+    selectedLoan?.let { loan ->
+        LoanDetailDialog(
+            loan = loan,
+            onDismiss = { selectedLoan = null }
         )
     }
 
@@ -788,45 +682,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 }
 
 @Composable
-private fun StatItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
-        Text(label, fontSize = 10.sp, color = Muted)
-    }
-}
-
-@Composable
-private fun RecurringRow(template: RecurringTemplate, category: Category?, onToggle: () -> Unit, onDelete: () -> Unit) {
-    val catColor = category?.let { parseColor(it.colorHex) } ?: Muted
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Paper)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(catColor.copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(category?.emoji ?: "🔁", fontSize = 18.sp)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(template.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text("₹${fmtINR(template.amount)}/mo", fontSize = 11.sp, color = Muted)
-        }
-        Switch(
-            checked = template.enabled,
-            onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline)
-        )
-        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
-    }
-}
-
-@Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -866,7 +721,8 @@ private fun BillRow(
     bill: Bill,
     category: Category?,
     onToggle: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     val ordinal = when {
         bill.dueDayOfMonth in 11..13 -> "${bill.dueDayOfMonth}th"
@@ -880,6 +736,7 @@ private fun BillRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Paper)
+            .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -891,12 +748,31 @@ private fun BillRow(
                 .background(if (category != null) parseColor(category.colorHex).copy(alpha = 0.15f) else Muted.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(category?.emoji ?: "📋", fontSize = 18.sp)
+            Text(category?.emoji ?: if (bill.autoLog) "🔁" else "📋", fontSize = 18.sp)
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (bill.autoLog) JadeSoft else Canvas)
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        if (bill.autoLog) "AUTO" else "REMIND",
+                        fontSize = 8.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = if (bill.autoLog) JadeInk else Muted
+                    )
+                }
+            }
             Text(
-                "₹${fmtINR(bill.amount)} · due $ordinal · remind ${bill.reminderDays}d before",
+                if (bill.autoLog)
+                    "₹${fmtINR(bill.amount)} · logs on 1st of month"
+                else
+                    "₹${fmtINR(bill.amount)} · due $ordinal · remind ${bill.reminderDays}d before",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 color = Muted
@@ -916,7 +792,7 @@ private fun BillRow(
 private fun AddBillDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, Int, Int, Long) -> Unit
+    onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -924,23 +800,47 @@ private fun AddBillDialog(
     var reminderDays by remember { mutableStateOf("3") }
     var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
     var expanded by remember { mutableStateOf(false) }
+    var autoLog by remember { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         titleContentColor = Ink,
-        title = { Text("Add Bill") },
+        title = { Text("Add Bill / Recurring") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Bill name (e.g. Rent, Netflix)") },
+                    label = { Text("Name (e.g. Rent, Netflix)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (autoLog) JadeSoft else Canvas)
+                        .clickable { autoLog = !autoLog }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Text(
+                            if (autoLog) "Expense added on 1st of each month" else "Send a reminder notification instead",
+                            fontSize = 11.sp, color = Muted
+                        )
+                    }
+                    Switch(
+                        checked = autoLog,
+                        onCheckedChange = { autoLog = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline)
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = amount,
@@ -951,25 +851,29 @@ private fun AddBillDialog(
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
+                    if (!autoLog) {
+                        OutlinedTextField(
+                            value = dueDay,
+                            onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
+                            label = { Text("Due day") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.weight(0.7f),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                        )
+                    }
+                }
+                if (!autoLog) {
                     OutlinedTextField(
-                        value = dueDay,
-                        onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
-                        label = { Text("Due day") },
+                        value = reminderDays,
+                        onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
+                        label = { Text("Remind N days before") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        modifier = Modifier.weight(0.7f),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
                 }
-                OutlinedTextField(
-                    value = reminderDays,
-                    onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
-                    label = { Text("Remind N days before") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
-                )
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                         OutlinedTextField(
@@ -993,9 +897,14 @@ private fun AddBillDialog(
         confirmButton = {
             TextButton(onClick = {
                 val amt = amount.toDoubleOrNull() ?: return@TextButton
-                val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
-                val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
-                if (name.isNotBlank()) onConfirm(name.trim(), amt, day, remind, selectedCategoryId)
+                if (name.isBlank()) return@TextButton
+                if (autoLog) {
+                    onConfirm(name.trim(), amt, 1, 0, selectedCategoryId, true)
+                } else {
+                    val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
+                    val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
+                    onConfirm(name.trim(), amt, day, remind, selectedCategoryId, false)
+                }
             }) { Text("Add", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
@@ -1003,7 +912,7 @@ private fun AddBillDialog(
 }
 
 @Composable
-private fun LoanRow(loan: Loan, onDelete: () -> Unit) {
+private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
     val paidMonths = run {
         val now = java.util.Calendar.getInstance()
         val startCal = java.util.Calendar.getInstance().apply { timeInMillis = loan.startDate }
@@ -1020,6 +929,7 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Paper)
+            .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1055,6 +965,109 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit) {
             )
         }
         IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
+    }
+}
+
+@Composable
+private fun BillDetailDialog(bill: Bill, category: Category?, onDismiss: () -> Unit) {
+    val ordinal = when {
+        bill.dueDayOfMonth in 11..13 -> "${bill.dueDayOfMonth}th"
+        bill.dueDayOfMonth % 10 == 1 -> "${bill.dueDayOfMonth}st"
+        bill.dueDayOfMonth % 10 == 2 -> "${bill.dueDayOfMonth}nd"
+        bill.dueDayOfMonth % 10 == 3 -> "${bill.dueDayOfMonth}rd"
+        else -> "${bill.dueDayOfMonth}th"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper,
+        titleContentColor = Ink,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(category?.emoji ?: "📋", fontSize = 22.sp)
+                Text(bill.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Amount", "₹${fmtINR(bill.amount)}")
+                DetailRow("Mode", if (bill.autoLog) "Auto-log expense on 1st" else "Send reminder notification")
+                if (!bill.autoLog) {
+                    DetailRow("Due date", "Every $ordinal of the month")
+                    DetailRow("Reminder", "${bill.reminderDays} day${if (bill.reminderDays != 1) "s" else ""} before due date")
+                }
+                DetailRow("Category", category?.let { "${it.emoji} ${it.name}" } ?: "Uncategorized")
+                DetailRow("Status", if (bill.isEnabled) "Active" else "Disabled")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = Jade) }
+        }
+    )
+}
+
+@Composable
+private fun LoanDetailDialog(loan: Loan, onDismiss: () -> Unit) {
+    val paidMonths = run {
+        val now = java.util.Calendar.getInstance()
+        val startCal = java.util.Calendar.getInstance().apply { timeInMillis = loan.startDate }
+        var elapsed = (now.get(java.util.Calendar.YEAR) - startCal.get(java.util.Calendar.YEAR)) * 12 +
+            (now.get(java.util.Calendar.MONTH) - startCal.get(java.util.Calendar.MONTH))
+        if (now.get(java.util.Calendar.DAY_OF_MONTH) < loan.dueDayOfMonth) elapsed--
+        elapsed.coerceIn(0, loan.tenureMonths)
+    }
+    val remaining = loan.tenureMonths - paidMonths
+    val paidAmount = paidMonths * loan.monthlyEmi
+    val outstandingAmount = (remaining * loan.monthlyEmi).coerceAtLeast(0.0)
+    val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
+    val startFmt = java.text.SimpleDateFormat("MMM yyyy", java.util.Locale.getDefault())
+        .format(java.util.Date(loan.startDate))
+    val ordinal = when {
+        loan.dueDayOfMonth in 11..13 -> "${loan.dueDayOfMonth}th"
+        loan.dueDayOfMonth % 10 == 1 -> "${loan.dueDayOfMonth}st"
+        loan.dueDayOfMonth % 10 == 2 -> "${loan.dueDayOfMonth}nd"
+        loan.dueDayOfMonth % 10 == 3 -> "${loan.dueDayOfMonth}rd"
+        else -> "${loan.dueDayOfMonth}th"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper,
+        titleContentColor = Ink,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(loan.emoji, fontSize = 22.sp)
+                Text(loan.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Total amount", "₹${fmtINR(loan.totalAmount)}")
+                DetailRow("Monthly EMI", "₹${fmtINR(loan.monthlyEmi)}")
+                DetailRow("Tenure", "${loan.tenureMonths} months")
+                DetailRow("Started", startFmt)
+                DetailRow("EMI due", "Every $ordinal of the month")
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                DetailRow("EMIs paid", "$paidMonths of ${loan.tenureMonths}")
+                DetailRow("EMIs remaining", "$remaining")
+                DetailRow("Amount paid", "₹${fmtINR(paidAmount)}")
+                DetailRow("Outstanding", "₹${fmtINR(outstandingAmount)}")
+                Spacer(Modifier.height(2.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(100.dp)).background(Canvas)) {
+                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Jade))
+                }
+                Text("${"%.0f".format(progress * 100)}% repaid", fontSize = 11.sp, color = Muted)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close", color = Jade) }
+        }
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontSize = 12.sp, color = Muted)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
     }
 }
 
@@ -1167,36 +1180,3 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddRecurringDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Long) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
-    var expanded by remember { mutableStateOf(false) }
-    val selectedCategory = categories.find { it.id == selectedCategoryId }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        titleContentColor = Ink,
-        title = { Text("Add Recurring") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Category", onValueChange = {}, readOnly = true, label = { Text("Category") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
-                        categories.forEach { cat ->
-                            DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { amount.toDoubleOrNull()?.let { onConfirm(name, it, selectedCategoryId) } }) { Text("Add", color = Jade) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
-}

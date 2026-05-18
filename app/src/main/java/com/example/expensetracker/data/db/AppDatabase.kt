@@ -21,7 +21,7 @@ import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 
-@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class], version = 10, exportSchema = false)
+@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class], version = 11, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
@@ -114,6 +114,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE bills ADD COLUMN autoLog INTEGER NOT NULL DEFAULT 0")
+                // Migrate recurring templates into bills (autoLog=1, dueDayOfMonth=1, reminderDays=0)
+                database.execSQL(
+                    "INSERT INTO bills (name, amount, dueDayOfMonth, reminderDays, categoryId, isEnabled, autoLog) " +
+                    "SELECT name, amount, 1, 0, categoryId, enabled, 1 FROM recurring_templates"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -121,7 +132,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "expense_tracker.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
             }

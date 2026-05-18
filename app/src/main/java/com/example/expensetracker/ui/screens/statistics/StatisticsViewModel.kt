@@ -11,6 +11,8 @@ import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
 
+enum class ViewMode { MONTHLY, ANNUAL }
+
 data class MonthStat(val label: String, val total: Double, val start: Long, val end: Long)
 data class CategoryYearlyStat(val category: Category, val total: Double)
 data class CategoryTrend(val label: String, val amount: Double)
@@ -23,6 +25,17 @@ data class PaymentSplit(
 ) {
     val total get() = autoAmount + manualAmount + recurringAmount
     fun fraction(amount: Double) = if (total > 0) (amount / total).toFloat().coerceIn(0f, 1f) else 0f
+}
+
+data class AutoTrackStats(
+    val autoCount: Int = 0,
+    val totalCount: Int = 0,
+    val monthlyAutoCounts: List<Int> = emptyList(),
+    val todayCount: Int = 0,
+    val thisMonthCount: Int = 0,
+    val allTimeCount: Int = 0
+) {
+    val rate: Int get() = if (totalCount > 0) (autoCount * 100 / totalCount) else 0
 }
 
 data class StatisticsUiState(
@@ -38,7 +51,17 @@ data class StatisticsUiState(
     val selectedCategoryTrend: List<CategoryTrend>? = null,
     val selectedCategory: Category? = null,
     val paymentSplit: PaymentSplit = PaymentSplit(),
-    val subcategoryBreakdown: List<SubcategoryBreakdown>? = null
+    val subcategoryBreakdown: List<SubcategoryBreakdown>? = null,
+    val autoTrackStats: AutoTrackStats = AutoTrackStats(),
+    // Monthly view
+    val monthLabel: String = "",
+    val monthTotal: Double = 0.0,
+    val monthCategories: List<CategoryYearlyStat> = emptyList(),
+    val monthVsLastPct: Int? = null,
+    val monthPaymentSplit: PaymentSplit = PaymentSplit(),
+    val canGoForwardMonth: Boolean = false,
+    val monthStart: Long = 0L,
+    val monthEnd: Long = 0L
 )
 
 class StatisticsViewModel(
@@ -49,13 +72,21 @@ class StatisticsViewModel(
     private val MONTHS = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
     private val _yearOffset = MutableStateFlow(0)
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
+    private val _monthOffset = MutableStateFlow(0)
+    private val _viewMode = MutableStateFlow(ViewMode.MONTHLY)
+
+    val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+    fun setViewMode(mode: ViewMode) { _viewMode.value = mode }
+    fun goToPreviousMonthStats() { _monthOffset.value-- }
+    fun goToNextMonthStats() { if (_monthOffset.value < 0) _monthOffset.value++ }
 
     val uiState: StateFlow<StatisticsUiState> = combine(
         expenseRepo.allExpenses,
         categoryRepo.allCategories,
         _yearOffset,
-        _selectedCategoryId
-    ) { expenses, categories, offset, selectedId ->
+        _selectedCategoryId,
+        _monthOffset
+    ) { expenses, categories, offset, selectedId, monthOffset ->
         val year = Calendar.getInstance().get(Calendar.YEAR) + offset
 
         val yearStart = Calendar.getInstance().apply {
@@ -143,10 +174,30 @@ class StatisticsViewModel(
             }
         }
 
+        fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
         val split = PaymentSplit(
-            autoAmount = yearExpenses.filter { it.source != "Manual" && it.source != "Recurring" }.sumOf { it.amount },
+            autoAmount = yearExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
             manualAmount = yearExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
             recurringAmount = yearExpenses.filter { it.source == "Recurring" }.sumOf { it.amount }
+        )
+
+        val todayStartMs = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val thisMonthStartMs = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val allAutoExpenses = expenses.filter { isAutoSource(it.source) }
+        val autoStats = AutoTrackStats(
+            autoCount = yearExpenses.count { isAutoSource(it.source) },
+            totalCount = yearExpenses.size,
+            monthlyAutoCounts = monthStats.map { ms ->
+                yearExpenses.count { isAutoSource(it.source) && it.date in ms.start..ms.end }
+            },
+            todayCount = allAutoExpenses.count { it.date >= todayStartMs },
+            thisMonthCount = allAutoExpenses.count { it.date >= thisMonthStartMs },
+            allTimeCount = allAutoExpenses.size
         )
 
         val subcategoryBreakdown = selectedCategory?.let { cat ->
@@ -165,6 +216,47 @@ class StatisticsViewModel(
             }
         }
 
+        // ── Monthly stats ────────────────────────────────────────
+        val mCal = Calendar.getInstance().apply { add(Calendar.MONTH, monthOffset) }
+        val mYear = mCal.get(Calendar.YEAR)
+        val mMonth = mCal.get(Calendar.MONTH)
+        val mStart = Calendar.getInstance().apply {
+            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val mEnd = Calendar.getInstance().apply {
+            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        val monthExpenses = expenses.filter { it.date in mStart..mEnd }
+        val mTotal = monthExpenses.sumOf { it.amount }
+        val prevCal = Calendar.getInstance().apply {
+            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0); add(Calendar.MONTH, -1)
+        }
+        val prevStart = Calendar.getInstance().apply {
+            set(prevCal.get(Calendar.YEAR), prevCal.get(Calendar.MONTH), 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val prevEnd = Calendar.getInstance().apply {
+            set(prevCal.get(Calendar.YEAR), prevCal.get(Calendar.MONTH), 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        val prevTotal = expenses.filter { it.date in prevStart..prevEnd }.sumOf { it.amount }
+        val mVsLastPct = if (prevTotal > 0) ((mTotal - prevTotal) / prevTotal * 100).toInt() else null
+        val mLabel = "${MONTHS[mMonth]} $mYear"
+        val mCategories = parentCategories.map { parent ->
+            val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
+            val total = monthExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
+            CategoryYearlyStat(parent, total)
+        }.filter { it.total > 0 }.sortedByDescending { it.total }
+        val mPaymentSplit = PaymentSplit(
+            autoAmount = monthExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
+            manualAmount = monthExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
+            recurringAmount = monthExpenses.filter { it.source == "Recurring" }.sumOf { it.amount }
+        )
+
         StatisticsUiState(
             yearLabel = year.toString(),
             totalThisYear = totalThisYear,
@@ -178,7 +270,16 @@ class StatisticsViewModel(
             selectedCategoryTrend = trend,
             selectedCategory = selectedCategory,
             paymentSplit = split,
-            subcategoryBreakdown = subcategoryBreakdown
+            subcategoryBreakdown = subcategoryBreakdown,
+            autoTrackStats = autoStats,
+            monthLabel = mLabel,
+            monthTotal = mTotal,
+            monthCategories = mCategories,
+            monthVsLastPct = mVsLastPct,
+            monthPaymentSplit = mPaymentSplit,
+            canGoForwardMonth = monthOffset < 0,
+            monthStart = mStart,
+            monthEnd = mEnd
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatisticsUiState())
 

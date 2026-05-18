@@ -30,6 +30,7 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.util.Locale
+import kotlin.math.abs
 
 private fun fmtINR(amount: Double): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
@@ -61,12 +62,13 @@ private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) -> Unit) {
     val state by viewModel.uiState.collectAsState()
+    val viewMode by viewModel.viewMode.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().background(Canvas)) {
         // Header
         Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
             Text(
-                text = "ANNUAL VIEW",
+                text = "STATISTICS",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.5.sp,
                 letterSpacing = 1.8.sp,
@@ -78,7 +80,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
-                    text = state.yearLabel,
+                    text = if (viewMode == ViewMode.MONTHLY) state.monthLabel else state.yearLabel,
                     fontFamily = FontFamily.Serif,
                     fontSize = 36.sp,
                     fontStyle = FontStyle.Italic,
@@ -95,35 +97,34 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             .clip(CircleShape)
                             .background(Paper)
                             .border(1.dp, Hairline, CircleShape)
-                            .clickable { viewModel.goToPreviousYear() },
+                            .clickable {
+                                if (viewMode == ViewMode.MONTHLY) viewModel.goToPreviousMonthStats()
+                                else viewModel.goToPreviousYear()
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.ChevronLeft,
-                            contentDescription = "Previous year",
-                            tint = Ink,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = Ink, modifier = Modifier.size(16.dp))
                     }
+                    val canGoForward = if (viewMode == ViewMode.MONTHLY) state.canGoForwardMonth else state.canGoForward
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(Paper)
                             .border(1.dp, Hairline, CircleShape)
-                            .graphicsLayer { alpha = if (state.canGoForward) 1f else 0.4f }
-                            .clickable(enabled = state.canGoForward) { viewModel.goToNextYear() },
+                            .graphicsLayer { alpha = if (canGoForward) 1f else 0.4f }
+                            .clickable(enabled = canGoForward) {
+                                if (viewMode == ViewMode.MONTHLY) viewModel.goToNextMonthStats()
+                                else viewModel.goToNextYear()
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = "Next year",
-                            tint = if (state.canGoForward) Ink else Muted,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = if (canGoForward) Ink else Muted, modifier = Modifier.size(16.dp))
                     }
                 }
             }
+            Spacer(Modifier.height(14.dp))
+            ViewModeToggle(viewMode = viewMode, onModeChange = viewModel::setViewMode)
         }
 
         LazyColumn(
@@ -131,7 +132,45 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (state.totalThisYear == 0.0) {
+            if (viewMode == ViewMode.MONTHLY) {
+                if (state.monthTotal == 0.0) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No expenses for ${state.monthLabel}.", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Muted)
+                        }
+                    }
+                } else {
+                    item { MonthlyTotalCard(monthTotal = state.monthTotal, monthVsLastPct = state.monthVsLastPct, onViewAll = { onMonthClick(state.monthStart, state.monthEnd) }) }
+                    if (state.monthCategories.isNotEmpty()) {
+                        item {
+                            Text("TOP CATEGORIES", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                        }
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(Paper)
+                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                            ) {
+                                state.monthCategories.forEachIndexed { index, stat ->
+                                    if (index > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                                    CategoryStatRow(stat = stat, yearTotal = state.monthTotal, onClick = { viewModel.selectCategory(stat.category.id) })
+                                }
+                            }
+                        }
+                    }
+                    if (state.monthPaymentSplit.total > 0) {
+                        item {
+                            Text("HOW YOU PAY", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                        }
+                        item { PaymentSplitCard(split = state.monthPaymentSplit) }
+                    }
+                }
+            } else if (state.totalThisYear == 0.0) {
                 item {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
@@ -335,6 +374,23 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     }
                 }
 
+                // Auto-tracking card
+                if (state.autoTrackStats.allTimeCount > 0) {
+                    item {
+                        Text(
+                            text = "AUTO-TRACKING",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.6.sp,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                        )
+                    }
+                    item {
+                        AutoTrackingCard(stats = state.autoTrackStats, yearLabel = state.yearLabel)
+                    }
+                }
+
                 // Insight card
                 item {
                     Row(
@@ -374,6 +430,106 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             subcategoryBreakdown = state.subcategoryBreakdown,
             onDismiss = { viewModel.selectCategory(null) }
         )
+    }
+}
+
+@Composable
+private fun ViewModeToggle(viewMode: ViewMode, onModeChange: (ViewMode) -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(Paper)
+            .border(1.dp, Hairline, RoundedCornerShape(100.dp))
+            .padding(3.dp)
+    ) {
+        ViewMode.entries.forEach { mode ->
+            val selected = viewMode == mode
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(if (selected) Ink else Color.Transparent)
+                    .clickable { onModeChange(mode) }
+                    .padding(horizontal = 22.dp, vertical = 7.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (mode == ViewMode.MONTHLY) "Monthly" else "Annual",
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) Canvas else Muted
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, onViewAll: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Deep)
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column {
+                Text(
+                    text = "TOTAL SPENT",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    letterSpacing = 1.6.sp,
+                    color = Ink.copy(alpha = 0.55f)
+                )
+                Spacer(Modifier.height(4.dp))
+                MoneyDisplay(monthTotal, size = 38, color = Ink)
+            }
+            if (monthVsLastPct != null && monthVsLastPct != 0) {
+                val isUp = monthVsLastPct > 0
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(if (isUp) Coral.copy(alpha = 0.18f) else Jade.copy(alpha = 0.18f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "${if (isUp) "▲" else "▼"} ${abs(monthVsLastPct)}%",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isUp) Coral else Jade
+                    )
+                }
+            }
+        }
+        if (monthVsLastPct != null) {
+            Spacer(Modifier.height(5.dp))
+            Text(
+                text = "vs last month",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = Ink.copy(alpha = 0.5f)
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(Ink.copy(alpha = 0.12f))
+                .clickable { onViewAll() }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "View all expenses →",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = Ink.copy(alpha = 0.85f)
+            )
+        }
     }
 }
 
@@ -619,6 +775,139 @@ private fun SubcategoryBreakdownChart(breakdown: List<SubcategoryBreakdown>) {
                 modifier = Modifier.width(28.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Paper)
+            .padding(18.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(JadeSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("📡", fontSize = 24.sp)
+            }
+            Column {
+                Text(
+                    text = "${stats.rate}%",
+                    fontFamily = FontFamily.Serif,
+                    fontStyle = FontStyle.Italic,
+                    fontSize = 34.sp,
+                    color = Ink,
+                    lineHeight = 36.sp
+                )
+                Text(
+                    text = "auto-captured in $yearLabel",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = Muted
+                )
+                Text(
+                    text = "${stats.autoCount} of ${stats.totalCount} expenses",
+                    fontSize = 11.sp,
+                    color = InkSoft,
+                    modifier = Modifier.padding(top = 1.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(100.dp))
+                .background(HairlineSoft)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(stats.rate / 100f)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(Jade)
+            )
+        }
+        if (stats.monthlyAutoCounts.any { it > 0 }) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = "BY MONTH",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 8.5.sp,
+                letterSpacing = 1.4.sp,
+                color = Muted
+            )
+            Spacer(Modifier.height(8.dp))
+            val maxCount = stats.monthlyAutoCounts.maxOrNull()?.coerceAtLeast(1) ?: 1
+            val monthLabels = listOf("J","F","M","A","M","J","J","A","S","O","N","D")
+            Row(
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                stats.monthlyAutoCounts.forEachIndexed { i, count ->
+                    val frac = count.toFloat() / maxCount
+                    val barH = if (count > 0) (40f * frac).coerceAtLeast(3f).dp else 0.dp
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barH)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Jade.copy(alpha = if (count > 0) (0.5f + 0.5f * frac) else 0f))
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(monthLabels[i], fontSize = 8.sp, color = Muted, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+        Spacer(Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            AutoStatPill("Today", stats.todayCount.toString())
+            AutoStatPill("This Month", stats.thisMonthCount.toString())
+            AutoStatPill("All Time", stats.allTimeCount.toString())
+        }
+    }
+}
+
+@Composable
+private fun AutoStatPill(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontFamily = FontFamily.Serif,
+            fontStyle = FontStyle.Italic,
+            fontSize = 24.sp,
+            color = Ink
+        )
+        Text(
+            text = label,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp,
+            color = Muted
+        )
     }
 }
 

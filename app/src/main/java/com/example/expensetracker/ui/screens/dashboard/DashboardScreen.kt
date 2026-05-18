@@ -33,7 +33,6 @@ import com.example.expensetracker.ui.screens.dashboard.UpcomingBill
 import com.example.expensetracker.ui.components.PieChart
 import com.example.expensetracker.ui.components.PieSlice
 import com.example.expensetracker.ui.theme.*
-import com.example.expensetracker.ui.util.NotificationAccessUtil
 import com.example.expensetracker.ui.util.SmsPermissionUtil
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
@@ -51,15 +50,14 @@ fun DashboardScreen(
     val context = LocalContext.current
     var showIncomeDialog by remember { mutableStateOf(false) }
     var showAddGoalDialog by remember { mutableStateOf(false) }
+    var showNotifCenter by remember { mutableStateOf(false) }
     var goalToUpdate by remember { mutableStateOf<SavingsGoal?>(null) }
-    val notificationAccessGranted = remember { mutableStateOf(NotificationAccessUtil.isGranted(context)) }
     val smsPermissionGranted = remember { mutableStateOf(SmsPermissionUtil.isGranted(context)) }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                notificationAccessGranted.value = NotificationAccessUtil.isGranted(context)
                 smsPermissionGranted.value = SmsPermissionUtil.isGranted(context)
             }
         }
@@ -67,10 +65,6 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val today = remember { Calendar.getInstance() }
-    val dayOfMonth = today.get(Calendar.DAY_OF_MONTH)
-    val dailyPace = if (!state.canGoForward && dayOfMonth > 0 && state.totalSpent > 0)
-        state.totalSpent / dayOfMonth else 0.0
     val spentFraction = if (state.monthlyIncome > 0)
         (state.totalSpent / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat() else 0f
 
@@ -186,15 +180,7 @@ fun DashboardScreen(
                             .clip(CircleShape)
                             .background(Paper)
                             .border(1.dp, Hairline, CircleShape)
-                            .clickable {
-                                if (!notificationAccessGranted.value) {
-                                    NotificationAccessUtil.openSettings(context)
-                                } else if (state.pendingCount > 0) {
-                                    onViewPending()
-                                } else {
-                                    android.widget.Toast.makeText(context, "No pending transactions to categorize", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            },
+                            .clickable { showNotifCenter = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -203,7 +189,7 @@ fun DashboardScreen(
                             tint = Ink,
                             modifier = Modifier.size(18.dp)
                         )
-                        if (state.pendingCount > 0) {
+                        if (state.notifItems.any { it.isUrgent }) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
@@ -290,69 +276,6 @@ fun DashboardScreen(
                     )
                 }
 
-                // Daily pace inset tile
-                if (!state.canGoForward && dailyPace > 0) {
-                    val paceVsPrev = if (state.prevMonthDailyPace > 0)
-                        ((dailyPace - state.prevMonthDailyPace) / state.prevMonthDailyPace * 100).roundToInt()
-                    else null
-                    val paceOver = paceVsPrev != null && paceVsPrev > 10
-                    val paceUnder = paceVsPrev != null && paceVsPrev < -10
-                    val paceStatusText = when {
-                        paceOver -> "over pace"
-                        paceUnder -> "under pace"
-                        else -> "on track"
-                    }
-                    val paceStatusColor = if (paceOver) Coral else Jade
-                    val paceChipColor = if (paceOver) Coral.copy(alpha = 0.15f) else Jade.copy(alpha = 0.15f)
-                    val paceChipTextColor = if (paceOver) Coral else JadeInk
-
-                    Spacer(Modifier.height(18.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(SurfaceOverlay06)
-                            .padding(14.dp, 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                "DAILY PACE",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.6.sp,
-                                color = Ink.copy(alpha = 0.5f)
-                            )
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                buildAnnotatedString {
-                                    append("₹${fmtINR(dailyPace)} per day · ")
-                                    withStyle(SpanStyle(color = paceStatusColor)) { append(paceStatusText) }
-                                },
-                                fontSize = 13.sp,
-                                color = Ink,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        if (paceVsPrev != null) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(100.dp))
-                                    .background(paceChipColor)
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                val sign = if (paceVsPrev >= 0) "+" else ""
-                                Text(
-                                    "${sign}${paceVsPrev}% vs prev",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
-                                    color = paceChipTextColor
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -453,7 +376,13 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(summary.category.emoji, fontSize = 16.sp, modifier = Modifier.width(22.dp))
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 10.dp)
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(parseColor(summary.category.colorHex))
+                            )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                                 Text(
@@ -471,8 +400,8 @@ fun DashboardScreen(
             }
         }
 
-        // ── Insights Strip ──────────────────────────────────────
-        if (state.monthlyIncome > 0 && !state.canGoForward) {
+        // ── Smart Insight ───────────────────────────────────────
+        state.smartInsight?.let { insight ->
             item {
                 Spacer(Modifier.height(12.dp))
                 Row(
@@ -480,37 +409,41 @@ fun DashboardScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(JadeSoft)
+                        .background(Paper)
                         .padding(16.dp, 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Jade),
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(JadeSoft),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "₹",
-                            fontFamily = FontFamily.Serif,
-                            fontSize = 18.sp,
-                            color = Deep
-                        )
+                        Text(insight.emoji, fontSize = 22.sp)
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Safe to spend today",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Ink
+                            "INSIGHT",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.5.sp,
+                            letterSpacing = 1.4.sp,
+                            color = Muted
                         )
                         Text(
-                            "₹${fmtINR(state.safeToSpendToday)} remaining",
-                            fontSize = 11.sp,
-                            color = JadeInk,
+                            insight.label,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Ink,
                             modifier = Modifier.padding(top = 1.dp)
+                        )
+                        Text(
+                            insight.detail,
+                            fontSize = 11.sp,
+                            color = InkSoft,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
                     }
                 }
@@ -551,7 +484,13 @@ fun DashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(summary.category.emoji, fontSize = 14.sp, modifier = Modifier.padding(end = 8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .padding(end = 10.dp)
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(catColor)
+                                )
                                 Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f))
                                 Text(
                                     buildAnnotatedString {
@@ -714,6 +653,13 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (showNotifCenter) {
+        NotificationBottomSheet(
+            items = state.notifItems,
+            onDismiss = { showNotifCenter = false }
+        )
     }
 
     if (showIncomeDialog) {
@@ -1074,6 +1020,143 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Unit) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Canvas,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 8.dp)
+                    .size(36.dp, 4.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(Hairline)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            Text(
+                "NOTIFICATIONS",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.5.sp,
+                letterSpacing = 1.8.sp,
+                color = Muted,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Activity",
+                fontFamily = FontFamily.Serif,
+                fontStyle = FontStyle.Italic,
+                fontSize = 26.sp,
+                color = Ink,
+                lineHeight = 28.sp
+            )
+            Spacer(Modifier.height(20.dp))
+
+            if (items.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Paper)
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("You're all caught up!", fontSize = 13.sp, color = Muted)
+                }
+            } else {
+                // Group by type and render each section
+                val captures = items.filter { it.type == NotifType.CAPTURE }
+                val budgets  = items.filter { it.type == NotifType.BUDGET }
+                val bills    = items.filter { it.type == NotifType.BILL }
+
+                if (captures.isNotEmpty()) {
+                    NotifSection(label = "RECENT CAPTURES") {
+                        captures.forEachIndexed { i, item -> NotifRow(item, isLast = i == captures.lastIndex) }
+                    }
+                }
+                if (budgets.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    NotifSection(label = "BUDGET ALERTS") {
+                        budgets.forEachIndexed { i, item -> NotifRow(item, isLast = i == budgets.lastIndex) }
+                    }
+                }
+                if (bills.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    NotifSection(label = "UPCOMING BILLS") {
+                        bills.forEachIndexed { i, item -> NotifRow(item, isLast = i == bills.lastIndex) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotifSection(label: String, content: @Composable () -> Unit) {
+    Text(
+        label,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 9.sp,
+        letterSpacing = 1.4.sp,
+        color = Muted,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Paper)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun NotifRow(item: NotifItem, isLast: Boolean = false) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (item.isUrgent) CoralSoft else Canvas),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(item.emoji, fontSize = 18.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(item.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(item.subtitle, fontSize = 11.sp, color = if (item.isUrgent) Coral else Muted, modifier = Modifier.padding(top = 1.dp))
+        }
+        if (item.isUrgent) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(Coral)
+            )
+        }
+    }
+    if (!isLast) Box(Modifier.fillMaxWidth().height(0.5.dp).background(HairlineSoft))
 }
 
 private fun fmtINR(n: Double): String {

@@ -6,8 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import java.text.NumberFormat
+import java.util.Locale
+import kotlin.math.roundToInt
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -25,6 +29,17 @@ data class CategorySummary(
 )
 
 data class MonthlyTrend(val label: String, val total: Double)
+
+data class SmartInsight(val emoji: String, val label: String, val detail: String)
+
+enum class NotifType { CAPTURE, BUDGET, BILL }
+data class NotifItem(
+    val type: NotifType,
+    val emoji: String,
+    val title: String,
+    val subtitle: String,
+    val isUrgent: Boolean = false
+)
 
 data class UpcomingBill(val bill: Bill, val daysUntilDue: Int)
 
@@ -50,7 +65,9 @@ data class DashboardUiState(
     val monthlySurplus: Double = 0.0,
     val upcomingBills: List<UpcomingBill> = emptyList(),
     val activeLoans: List<LoanStatus> = emptyList(),
-    val totalMonthlyEmi: Double = 0.0
+    val totalMonthlyEmi: Double = 0.0,
+    val smartInsight: SmartInsight? = null,
+    val notifItems: List<NotifItem> = emptyList()
 )
 
 class DashboardViewModel(
@@ -113,7 +130,7 @@ class DashboardViewModel(
         val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         val daysInMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
         val upcomingBills = if (offset == 0) {
-            bills.filter { it.isEnabled }.mapNotNull { bill ->
+            bills.filter { it.isEnabled && !it.autoLog }.mapNotNull { bill ->
                 val diff = bill.dueDayOfMonth - today
                 val daysLeft = if (diff < -3) diff + daysInMonth else diff
                 if (daysLeft in -1..6) UpcomingBill(bill, daysLeft) else null
@@ -139,6 +156,14 @@ class DashboardViewModel(
         }.sortedBy { it.loan.name }
         val totalMonthlyEmi = activeLoans.sumOf { it.loan.monthlyEmi }
 
+        val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+        val insightPool = if (offset != 0 || total == 0.0 || dayOfMonth < 3) emptyList()
+        else buildInsights(allMonthExpenses, summaries, total, prevTotal, prevDays, dayOfMonth)
+        val smartInsight = if (insightPool.isEmpty()) null else insightPool[dayOfMonth % insightPool.size]
+
+        // Notification centre items — always from full expense list; budget alerts only for current month
+        val notifItems = buildNotifItems(expenses, if (offset == 0) summaries else emptyList(), categories, upcomingBills)
+
         DashboardUiState(
             totalSpent = total,
             monthlyIncome = income,
@@ -154,7 +179,9 @@ class DashboardViewModel(
             monthlySurplus = surplus,
             upcomingBills = upcomingBills,
             activeLoans = activeLoans,
-            totalMonthlyEmi = totalMonthlyEmi
+            totalMonthlyEmi = totalMonthlyEmi,
+            smartInsight = smartInsight,
+            notifItems = notifItems
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
@@ -178,6 +205,166 @@ class DashboardViewModel(
         if (amount <= 0) return@launch
         savingsRepo.update(goal.copy(currentAmount = (goal.currentAmount + amount).coerceAtMost(goal.targetAmount)))
     }
+
+    private fun buildInsights(
+        allMonthExpenses: List<Expense>,
+        summaries: List<CategorySummary>,
+        total: Double,
+        prevTotal: Double,
+        prevDays: Double,
+        dayOfMonth: Int
+    ): List<SmartInsight> {
+        val result = mutableListOf<SmartInsight>()
+
+        // vs last month pace (pro-rated to same day)
+        val prevPaced = if (prevDays > 0) prevTotal / prevDays * dayOfMonth else 0.0
+        if (prevPaced > 0) {
+            val pct = ((total - prevPaced) / prevPaced * 100).roundToInt()
+            when {
+                pct > 20 -> result.add(SmartInsight("📈", "${pct}% up on last month",
+                    "₹${fmtVM(total - prevPaced)} more than at this point last month"))
+                pct < -15 -> result.add(SmartInsight("📉", "${-pct}% under last month's pace",
+                    "₹${fmtVM(prevPaced - total)} less than at this point last month — great job!"))
+            }
+        }
+
+        // Most frequent merchant (same exact description, ≥ 3 times)
+        val topMerchant = allMonthExpenses
+            .groupBy { it.description.trim().lowercase() }
+            .entries.filter { it.value.size >= 3 }
+            .maxByOrNull { it.value.size }
+        if (topMerchant != null) {
+            val displayName = allMonthExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
+            val merchantTotal = topMerchant.value.sumOf { it.amount }
+            result.add(SmartInsight("🛒", "$displayName · ${topMerchant.value.size}×",
+                "₹${fmtVM(merchantTotal)} across ${topMerchant.value.size} transactions this month"))
+        }
+
+        // No-spend days (days with zero transactions)
+        val daysWithSpend = allMonthExpenses.map { exp ->
+            Calendar.getInstance().apply { timeInMillis = exp.date }.get(Calendar.DAY_OF_MONTH)
+        }.toSet()
+        val noSpendDays = (1..dayOfMonth).count { it !in daysWithSpend }
+        if (noSpendDays >= 3) {
+            result.add(SmartInsight("✨", "$noSpendDays no-spend days so far",
+                "You went without any spending on $noSpendDays day${if (noSpendDays != 1) "s" else ""} this month"))
+        }
+
+        // Weekend vs weekday daily spend
+        var weekendTotal = 0.0; var weekdayTotal = 0.0
+        allMonthExpenses.forEach { exp ->
+            val dow = Calendar.getInstance().apply { timeInMillis = exp.date }.get(Calendar.DAY_OF_WEEK)
+            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) weekendTotal += exp.amount
+            else weekdayTotal += exp.amount
+        }
+        val cal = Calendar.getInstance()
+        val yr = cal.get(Calendar.YEAR); val mo = cal.get(Calendar.MONTH)
+        var wkendDays = 0; var wkdayDays = 0
+        for (d in 1..dayOfMonth) {
+            val dow = Calendar.getInstance().apply { set(yr, mo, d) }.get(Calendar.DAY_OF_WEEK)
+            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendDays++ else wkdayDays++
+        }
+        val wkendPerDay = if (wkendDays > 0) weekendTotal / wkendDays else 0.0
+        val wkdayPerDay = if (wkdayDays > 0) weekdayTotal / wkdayDays else 0.0
+        if (wkdayPerDay > 100 && wkendPerDay > 0 && wkendPerDay / wkdayPerDay >= 1.6) {
+            val ratio = "%.1f".format(wkendPerDay / wkdayPerDay)
+            result.add(SmartInsight("🎉", "${ratio}× more on weekends",
+                "₹${fmtVM(wkendPerDay)}/day on weekends vs ₹${fmtVM(wkdayPerDay)}/day on weekdays"))
+        }
+
+        // Top category dominance (> 38% of total)
+        val top = summaries.firstOrNull()
+        if (top != null && top.percentage > 38f) {
+            result.add(SmartInsight(top.category.emoji, "${top.category.name} takes the most",
+                "${top.percentage.roundToInt()}% of this month's spending — ₹${fmtVM(top.spent)}"))
+        }
+
+        // Biggest single expense (always present as fallback)
+        val biggest = allMonthExpenses.maxByOrNull { it.amount }
+        if (biggest != null) {
+            result.add(SmartInsight("💸", "Biggest expense this month",
+                "${biggest.description} · ₹${fmtVM(biggest.amount)}"))
+        }
+
+        return result
+    }
+
+    private fun buildNotifItems(
+        expenses: List<Expense>,
+        summaries: List<CategorySummary>,
+        categories: List<Category>,
+        upcomingBills: List<UpcomingBill>
+    ): List<NotifItem> = buildList {
+        // Recent auto-captured transactions (last 7, newest first)
+        expenses
+            .filter { it.source != "Manual" && it.source != "Recurring" }
+            .sortedByDescending { it.date }
+            .take(7)
+            .forEach { exp ->
+                val cat = categories.find { it.id == exp.categoryId }
+                val isPending = exp.categoryId == -1L
+                add(NotifItem(
+                    type = NotifType.CAPTURE,
+                    emoji = if (isPending) "🔔" else (cat?.emoji ?: "📱"),
+                    title = exp.description,
+                    subtitle = "₹${fmtVM(exp.amount)} · ${relativeTime(exp.date)}" +
+                        if (isPending) " · needs category" else "",
+                    isUrgent = isPending
+                ))
+            }
+
+        // Budget alerts (categories at or above the alert threshold)
+        val threshold = prefs.budgetAlertThreshold
+        summaries.filter { it.category.monthlyLimit > 0 }.forEach { s ->
+            val pct = (s.spent / s.category.monthlyLimit * 100).roundToInt()
+            if (pct >= threshold) {
+                val isOver = pct >= 100
+                add(NotifItem(
+                    type = NotifType.BUDGET,
+                    emoji = s.category.emoji,
+                    title = "${s.category.name} ${if (isOver) "over budget" else "near limit"}",
+                    subtitle = "${pct}% of ₹${fmtVM(s.category.monthlyLimit)} limit used this month",
+                    isUrgent = isOver
+                ))
+            }
+        }
+
+        // Upcoming bills (already filtered: enabled, not autoLog, within window)
+        upcomingBills.forEach { upcoming ->
+            val dueText = when (upcoming.daysUntilDue) {
+                -1 -> "Overdue since yesterday"
+                0  -> "Due today"
+                1  -> "Due tomorrow"
+                else -> "Due in ${upcoming.daysUntilDue} days"
+            }
+            add(NotifItem(
+                type = NotifType.BILL,
+                emoji = "📋",
+                title = upcoming.bill.name,
+                subtitle = "$dueText · ₹${fmtVM(upcoming.bill.amount)}",
+                isUrgent = upcoming.daysUntilDue <= 0
+            ))
+        }
+    }
+
+    private fun relativeTime(ts: Long): String {
+        val diff = System.currentTimeMillis() - ts
+        val mins = diff / 60_000
+        val hours = diff / 3_600_000
+        val days = diff / 86_400_000
+        return when {
+            mins < 2    -> "Just now"
+            mins < 60   -> "${mins}m ago"
+            hours < 24  -> "${hours}h ago"
+            days == 1L  -> "Yesterday"
+            else        -> "${days}d ago"
+        }
+    }
+
+    private fun fmtVM(n: Double): String =
+        NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN"))
+            .apply { maximumFractionDigits = 0; minimumFractionDigits = 0 }
+            .format(n.toLong())
 
     private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component1() = first
