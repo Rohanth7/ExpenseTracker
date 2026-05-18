@@ -60,7 +60,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
     val captureStats by viewModel.captureStats.collectAsState()
-    val monthlyIncome by viewModel.monthlyIncome.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
     val pendingImportUri = viewModel.pendingImportUri
     val snackbarHostState = remember { SnackbarHostState() }
@@ -72,7 +71,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     var templateToDelete by remember { mutableStateOf<RecurringTemplate?>(null) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
     var loanToDelete by remember { mutableStateOf<Loan?>(null) }
-    var showIncomeDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -524,16 +522,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         Text("₹ INR", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Muted, letterSpacing = 0.4.sp)
                     }
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    // Monthly Income
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showIncomeDialog = true }.padding(vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Monthly Income", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("₹${fmtINR(monthlyIncome)}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
-                    }
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Budget Alerts
                     ToggleRow(
                         title = "Budget alerts",
@@ -594,14 +582,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     }
 
     // ── Dialogs ──────────────────────────────────────────
-
-    if (showIncomeDialog) {
-        IncomeDialog(
-            currentIncome = monthlyIncome,
-            onDismiss = { showIncomeDialog = false },
-            onConfirm = { viewModel.setMonthlyIncome(it); showIncomeDialog = false }
-        )
-    }
 
     if (showAddLoan) {
         AddLoanDialog(
@@ -960,34 +940,6 @@ private fun AddBillDialog(
             }) { Text("Add", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
-}
-
-@Composable
-private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
-    var text by remember { mutableStateOf(if (currentIncome > 0) "%.0f".format(currentIncome) else "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        titleContentColor = Ink,
-        title = { Text("Set Monthly Income") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Income (₹)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { text.toDoubleOrNull()?.let { onConfirm(it) } }) { Text("Save", color = Jade) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
-        }
     )
 }
 
