@@ -36,7 +36,7 @@ class CategorizeViewModel(
                 mappingRepo.saveMapping(expense.description, categoryId)
             }
             if (prefs.budgetAlertsEnabled) {
-                BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
+                BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
             }
             onDone()
         }

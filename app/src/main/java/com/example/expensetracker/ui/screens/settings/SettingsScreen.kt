@@ -58,6 +58,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val driveConnected by viewModel.driveConnected.collectAsState()
     val driveAccountEmail by viewModel.driveAccountEmail.collectAsState()
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
+    val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
     val captureStats by viewModel.captureStats.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
@@ -523,12 +524,54 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     }
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Budget Alerts
-                    ToggleRow(
-                        title = "Budget alerts",
-                        subtitle = "Get notified at 80% & 100% of limit",
-                        checked = budgetAlertsEnabled,
-                        onCheckedChange = { viewModel.setBudgetAlertsEnabled(it) }
-                    )
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Budget alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                                Text(
+                                    if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit"
+                                    else "Disabled",
+                                    fontSize = 11.5.sp, color = Muted
+                                )
+                            }
+                            Switch(
+                                checked = budgetAlertsEnabled,
+                                onCheckedChange = { viewModel.setBudgetAlertsEnabled(it) },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline)
+                            )
+                        }
+                        androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Warning threshold", fontSize = 11.5.sp, color = Muted)
+                                    Text("$budgetAlertThreshold%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Jade, fontFamily = FontFamily.Monospace)
+                                }
+                                Slider(
+                                    value = budgetAlertThreshold.toFloat(),
+                                    onValueChange = { viewModel.setBudgetAlertThreshold(it.toInt()) },
+                                    valueRange = 50f..95f,
+                                    steps = 8,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = SliderDefaults.colors(thumbColor = Jade, activeTrackColor = Jade, inactiveTrackColor = Hairline)
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("50%", fontSize = 10.sp, color = Whisper)
+                                    Text("95%", fontSize = 10.sp, color = Whisper)
+                                }
+                            }
+                        }
+                    }
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     // Week start
                     Row(

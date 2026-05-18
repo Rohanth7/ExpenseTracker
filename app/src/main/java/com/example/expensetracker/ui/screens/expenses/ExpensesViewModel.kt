@@ -163,7 +163,7 @@ class ExpensesViewModel(
                 mappingRepo.saveMapping(it.description, categoryId)
             }
             if (prefs.budgetAlertsEnabled) {
-                BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
+                BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
             }
         }
         _selectedIds.value = emptySet()
@@ -172,7 +172,7 @@ class ExpensesViewModel(
     fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "") = viewModelScope.launch {
         expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags))
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
-            BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
+            BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
         }
     }
 
@@ -182,7 +182,7 @@ class ExpensesViewModel(
             mappingRepo.saveMapping(description, categoryId)
         }
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
-            BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
+            BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
         }
     }
 

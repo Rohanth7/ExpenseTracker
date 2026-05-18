@@ -87,6 +87,10 @@ class SettingsViewModel(
     val budgetAlertsEnabled: StateFlow<Boolean> = _budgetAlertsEnabled.asStateFlow()
     fun setBudgetAlertsEnabled(enabled: Boolean) { prefs.budgetAlertsEnabled = enabled; _budgetAlertsEnabled.value = enabled }
 
+    private val _budgetAlertThreshold = MutableStateFlow(prefs.budgetAlertThreshold)
+    val budgetAlertThreshold: StateFlow<Int> = _budgetAlertThreshold.asStateFlow()
+    fun setBudgetAlertThreshold(value: Int) { prefs.budgetAlertThreshold = value; _budgetAlertThreshold.value = value }
+
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
     fun setWeekStartsOnMonday(monday: Boolean) { prefs.weekStartsOnMonday = monday; _weekStartsOnMonday.value = monday }

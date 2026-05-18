@@ -28,7 +28,8 @@ object BudgetAlertHelper {
         context: Context,
         categoryId: Long,
         categoryRepo: CategoryRepository,
-        expenseRepo: ExpenseRepository
+        expenseRepo: ExpenseRepository,
+        alertThreshold: Int = 80
     ) {
         val category = categoryRepo.getById(categoryId) ?: return
 
@@ -60,11 +61,13 @@ object BudgetAlertHelper {
         val monthKey = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}_${budgetCategory.id}"
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+        val warningRatio = alertThreshold / 100.0
+        val warningKey = "${monthKey}_warn"
         when {
             pct >= 1.0 && !prefs.getBoolean("${monthKey}_over", false) -> {
                 prefs.edit()
                     .putBoolean("${monthKey}_over", true)
-                    .putBoolean("${monthKey}_80", true)
+                    .putBoolean(warningKey, true)
                     .apply()
                 sendNotification(
                     context,
@@ -73,8 +76,8 @@ object BudgetAlertHelper {
                     text = "Spent ₹${"%.0f".format(spent)} of ₹${"%.0f".format(budgetCategory.monthlyLimit)} monthly limit"
                 )
             }
-            pct >= 0.8 && !prefs.getBoolean("${monthKey}_80", false) -> {
-                prefs.edit().putBoolean("${monthKey}_80", true).apply()
+            pct >= warningRatio && !prefs.getBoolean(warningKey, false) -> {
+                prefs.edit().putBoolean(warningKey, true).apply()
                 sendNotification(
                     context,
                     id = 200_000 + budgetCategory.id.toInt(),
