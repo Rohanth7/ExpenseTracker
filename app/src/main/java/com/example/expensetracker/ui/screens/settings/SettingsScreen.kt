@@ -390,13 +390,6 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         danger = true,
                         onClick = { showResetDialog = true }
                     )
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    ToggleRow(
-                        title = "Automatic Cloud Backup",
-                        subtitle = "Daily sync to secure storage",
-                        checked = autoBackupEnabled,
-                        onCheckedChange = { viewModel.setAutoBackupEnabled(it) }
-                    )
                 }
             }
 
@@ -444,11 +437,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             }
                         }
                         Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Backup syncs automatically every week when Auto Cloud Backup is enabled.",
-                            fontSize = 11.sp,
-                            color = Muted,
-                            lineHeight = 16.sp
+                        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                        ToggleRow(
+                            title = "Automatic Cloud Backup",
+                            subtitle = "Weekly sync to your Drive App Data folder",
+                            checked = autoBackupEnabled,
+                            onCheckedChange = { viewModel.setAutoBackupEnabled(it) }
                         )
                     } else {
                         Row(
