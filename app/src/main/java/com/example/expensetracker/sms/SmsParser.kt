@@ -15,8 +15,10 @@ object SmsParser {
 
     private val DEBIT_KEYWORDS = listOf(
         "debited", "deducted", "spent", "paid", "payment", "purchase",
-        "withdrawn", "charged", "debit", "sent to", "transferred to"
+        "withdrawn", "charged", "debit", "sent to", "transferred to", "sent"
     )
+
+    private val STRONG_DEBIT_KEYWORDS = listOf("debited", "deducted", "withdrawn")
 
     private val CREDIT_KEYWORDS = listOf(
         "credited", "received", "deposited", "refund", "cashback",
@@ -43,7 +45,10 @@ object SmsParser {
         val bodyLower = body.lowercase()
         // Require a debit keyword; skip credits
         if (!DEBIT_KEYWORDS.any { bodyLower.contains(it) }) return null
-        if (CREDIT_KEYWORDS.any { bodyLower.contains(it) }) return null
+        // HDFC UPI SMS says "debited from a/c ... PhonePe/ref credited" in the same message.
+        // Only reject on credit keywords when there is no strong explicit debit word.
+        val hasStrongDebit = STRONG_DEBIT_KEYWORDS.any { bodyLower.contains(it) }
+        if (!hasStrongDebit && CREDIT_KEYWORDS.any { bodyLower.contains(it) }) return null
         return ParsedTransaction(amount, extractDescription(sender, body))
     }
 

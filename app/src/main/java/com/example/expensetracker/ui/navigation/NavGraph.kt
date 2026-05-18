@@ -100,14 +100,18 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
         bottomBar = {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDest = navBackStackEntry?.destination
-            val showBottomBar = bottomNavItems.any { it.pattern == currentDest?.route }
+            val showBottomBar = bottomNavItems.any {
+                currentDest?.route == it.pattern || currentDest?.route == it.route
+            }
             if (showBottomBar) {
                 NavigationBar(
                     containerColor = Paper,
                     tonalElevation = 0.dp
                 ) {
                     bottomNavItems.forEach { screen ->
-                        val selected = currentDest?.hierarchy?.any { it.route == screen.pattern } == true
+                        val selected = currentDest?.hierarchy?.any {
+                            it.route == screen.pattern || it.route == screen.route
+                        } == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
