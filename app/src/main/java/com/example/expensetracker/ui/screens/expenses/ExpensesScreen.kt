@@ -68,6 +68,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     BackHandler(isSelectionMode) { viewModel.clearSelection() }
 
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
+    val tagFilter by viewModel.tagFilter.collectAsState()
+    val allTagSummaries by viewModel.allTagSummaries.collectAsState()
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -209,25 +211,52 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
                 }
 
                 // ── Filter chips ────────────────────────────────────
-                if (categories.isNotEmpty()) {
+                val parentCategories = remember(categories) { categories.filter { it.parentId == null } }
+                if (parentCategories.isNotEmpty() || allTagSummaries.isNotEmpty()) {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        item {
-                            ChipPill(
-                                label = "All",
-                                selected = categoryFilter == -1L || categoryFilter == null,
-                                onClick = { viewModel.setCategoryFilter(-1L) }
-                            )
+                        if (parentCategories.isNotEmpty()) {
+                            item {
+                                ChipPill(
+                                    label = "All",
+                                    selected = (categoryFilter == -1L || categoryFilter == null) && tagFilter == null,
+                                    onClick = { viewModel.setCategoryFilter(-1L); viewModel.setTagFilter(null) }
+                                )
+                            }
+                            items(parentCategories) { cat ->
+                                ChipPill(
+                                    label = cat.name,
+                                    selected = categoryFilter == cat.id && tagFilter == null,
+                                    onClick = { viewModel.setCategoryFilter(cat.id); viewModel.setTagFilter(null) }
+                                )
+                            }
                         }
-                        items(categories) { cat ->
-                            ChipPill(
-                                label = cat.name,
-                                selected = categoryFilter == cat.id,
-                                onClick = { viewModel.setCategoryFilter(cat.id) }
-                            )
+                        if (allTagSummaries.isNotEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(28.dp)
+                                        .background(Hairline)
+                                )
+                            }
+                            items(allTagSummaries) { tag ->
+                                TagChipPill(
+                                    label = tag.name,
+                                    selected = tagFilter == tag.name,
+                                    onClick = {
+                                        if (tagFilter == tag.name) {
+                                            viewModel.setTagFilter(null)
+                                        } else {
+                                            viewModel.setTagFilter(tag.name)
+                                            viewModel.setCategoryFilter(-1L)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -320,8 +349,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
         AddExpenseDialog(
             categories = categories,
             onDismiss = { showAddDialog = false },
-            onConfirm = { amount, description, categoryId, date ->
-                viewModel.addExpense(amount, description, categoryId, date)
+            onConfirm = { amount, description, categoryId, date, tags ->
+                viewModel.addExpense(amount, description, categoryId, date, tags)
                 showAddDialog = false
             }
         )
@@ -332,8 +361,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
             expense = expense,
             categories = categories,
             onDismiss = { editingExpense = null },
-            onConfirm = { amount, description, categoryId, date ->
-                viewModel.updateExpense(expense, amount, description, categoryId, date)
+            onConfirm = { amount, description, categoryId, date, tags ->
+                viewModel.updateExpense(expense, amount, description, categoryId, date, tags)
                 editingExpense = null
             }
         )
@@ -480,6 +509,8 @@ private fun BulkCategorizeDialog(
     var expanded by remember { mutableStateOf(false) }
     var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
+    val bulkParents = remember(categories) { categories.filter { it.parentId == null } }
+    val bulkChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -488,7 +519,7 @@ private fun BulkCategorizeDialog(
         text = {
             ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                 OutlinedTextField(
-                    value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Select category",
+                    value = categoryDisplayText(selectedCategory, categories),
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Category") },
@@ -496,11 +527,22 @@ private fun BulkCategorizeDialog(
                     modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                 )
                 ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    categories.forEach { cat ->
+                    bulkParents.forEach { parent ->
                         DropdownMenuItem(
-                            text = { Text("${cat.emoji} ${cat.name}") },
-                            onClick = { selectedCategoryId = cat.id; expanded = false }
+                            text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
+                            onClick = { selectedCategoryId = parent.id; expanded = false }
                         )
+                        bulkChildrenMap[parent.id]?.forEach { child ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row {
+                                        Spacer(Modifier.width(16.dp))
+                                        Text("↳ ${child.emoji} ${child.name}")
+                                    }
+                                },
+                                onClick = { selectedCategoryId = child.id; expanded = false }
+                            )
+                        }
                     }
                 }
             }
@@ -532,6 +574,27 @@ private fun ChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
             fontWeight = FontWeight.Medium,
             color = if (selected) Canvas else InkSoft,
             letterSpacing = 0.1.sp
+        )
+    }
+}
+
+@Composable
+private fun TagChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(if (selected) JadeSoft else Paper)
+            .border(1.dp, if (selected) JadeInk.copy(alpha = 0.4f) else Hairline, RoundedCornerShape(100.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            "#$label",
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (selected) JadeInk else Muted,
+            letterSpacing = 0.1.sp,
+            fontFamily = FontFamily.Monospace
         )
     }
 }
@@ -660,6 +723,32 @@ private fun ExpenseRowItem(
                         )
                     }
                 }
+                val parsedTags = ExpensesViewModel.parseTags(expense.tags)
+                if (parsedTags.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 3.dp)
+                    ) {
+                        parsedTags.take(3).forEach { tag ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(JadeSoft)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    "#$tag",
+                                    fontSize = 9.5.sp,
+                                    color = JadeInk,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                        if (parsedTags.size > 3) {
+                            Text("+${parsedTags.size - 3}", fontSize = 9.5.sp, color = Muted, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                }
             }
         }
 
@@ -687,15 +776,26 @@ private fun ExpenseRowItem(
 
 // ── Dialogs ─────────────────────────────────────────────────────────────────
 
+private fun categoryDisplayText(category: Category?, allCategories: List<Category>, placeholder: String = "Select category"): String {
+    if (category == null) return placeholder
+    return if (category.parentId != null) {
+        val parent = allCategories.find { it.id == category.parentId }
+        "${parent?.emoji ?: ""}${category.emoji} ${category.name}"
+    } else {
+        "${category.emoji} ${category.name}"
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExpenseDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long) -> Unit
+    onConfirm: (Double, String, Long, Long, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var tags by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
@@ -732,10 +832,19 @@ private fun AddExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    label = { Text("Tags (e.g. #vacation, #gift)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (categories.isNotEmpty()) {
+                    val parents = remember(categories) { categories.filter { it.parentId == null } }
+                    val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                         OutlinedTextField(
-                            value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Select category",
+                            value = categoryDisplayText(selectedCategory, categories),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Category") },
@@ -743,11 +852,22 @@ private fun AddExpenseDialog(
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                         )
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            categories.forEach { cat ->
+                            parents.forEach { parent ->
                                 DropdownMenuItem(
-                                    text = { Text("${cat.emoji} ${cat.name}") },
-                                    onClick = { selectedCategoryId = cat.id; expanded = false }
+                                    text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
+                                    onClick = { selectedCategoryId = parent.id; expanded = false }
                                 )
+                                childrenMap[parent.id]?.forEach { child ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row {
+                                                Spacer(Modifier.width(16.dp))
+                                                Text("↳ ${child.emoji} ${child.name}")
+                                            }
+                                        },
+                                        onClick = { selectedCategoryId = child.id; expanded = false }
+                                    )
+                                }
                             }
                         }
                     }
@@ -767,7 +887,7 @@ private fun AddExpenseDialog(
                     if (selectedCategoryId == -1L && categories.isNotEmpty()) {
                         selectedCategoryId = categories.first().id
                     }
-                    onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()))
+                    onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim())
                 }
             ) { Text("Add", color = if (categories.isNotEmpty()) Jade else Muted) }
         },
@@ -781,10 +901,11 @@ private fun EditExpenseDialog(
     expense: Expense,
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long) -> Unit
+    onConfirm: (Double, String, Long, Long, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("%.2f".format(expense.amount)) }
     var description by remember { mutableStateOf(expense.description) }
+    var tags by remember { mutableStateOf(expense.tags) }
     var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
@@ -814,9 +935,18 @@ private fun EditExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    label = { Text("Tags (e.g. #vacation, #gift)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                val editParents = remember(categories) { categories.filter { it.parentId == null } }
+                val editChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Uncategorized",
+                        value = categoryDisplayText(selectedCategory, categories, "Uncategorized"),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Category") },
@@ -824,11 +954,22 @@ private fun EditExpenseDialog(
                         modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        categories.forEach { cat ->
+                        editParents.forEach { parent ->
                             DropdownMenuItem(
-                                text = { Text("${cat.emoji} ${cat.name}") },
-                                onClick = { selectedCategoryId = cat.id; expanded = false }
+                                text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
+                                onClick = { selectedCategoryId = parent.id; expanded = false }
                             )
+                            editChildrenMap[parent.id]?.forEach { child ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row {
+                                            Spacer(Modifier.width(16.dp))
+                                            Text("↳ ${child.emoji} ${child.name}")
+                                        }
+                                    },
+                                    onClick = { selectedCategoryId = child.id; expanded = false }
+                                )
+                            }
                         }
                     }
                 }
@@ -842,7 +983,7 @@ private fun EditExpenseDialog(
             TextButton(onClick = {
                 val amt = amount.toDoubleOrNull()
                 if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
-                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date))
+                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim())
             }) { Text("Save", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }

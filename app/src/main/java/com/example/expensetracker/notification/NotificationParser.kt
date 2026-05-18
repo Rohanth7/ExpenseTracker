@@ -38,7 +38,10 @@ object NotificationParser {
     )
 
     private val CREDIT_KEYWORDS = listOf(
-        "received", "credited", "added", "refund", "cashback", "you received"
+        "received", "credited", "added", "refund", "cashback",
+        "you received", "sent you", "paid you", "paid to you",
+        "to your account", "to your wallet", "money received", "amount received",
+        "transfer received", "credit received"
     )
 
     // Notifications with any of these are reminders/offers, not completed transactions

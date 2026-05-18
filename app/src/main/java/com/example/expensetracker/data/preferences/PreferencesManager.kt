@@ -28,4 +28,16 @@ class PreferencesManager(context: Context) {
     var widgetEnabled: Boolean
         get() = prefs.getBoolean("widget_enabled", true)
         set(value) = prefs.edit().putBoolean("widget_enabled", value).apply()
+
+    var autoBackupEnabled: Boolean
+        get() = prefs.getBoolean("auto_backup_enabled", false)
+        set(value) = prefs.edit().putBoolean("auto_backup_enabled", value).apply()
+
+    var driveConnected: Boolean
+        get() = prefs.getBoolean("drive_connected", false)
+        set(value) = prefs.edit().putBoolean("drive_connected", value).apply()
+
+    var driveAccountEmail: String
+        get() = prefs.getString("drive_account_email", "") ?: ""
+        set(value) = prefs.edit().putString("drive_account_email", value).apply()
 }

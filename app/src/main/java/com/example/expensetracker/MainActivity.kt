@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.notification.NotificationHelper
 import com.example.expensetracker.ui.navigation.AppNavGraph
@@ -37,6 +38,11 @@ class MainActivity : FragmentActivity() {
         requestMissingPermissions()
 
         val prefs = PreferencesManager(this)
+        
+        // Handle Auto-Backup Schedule
+        if (prefs.autoBackupEnabled) {
+            BackupManager(this).scheduleAutoBackup()
+        }
         if (prefs.biometricLockEnabled && !isUnlocked) {
             BiometricUtil.showBiometricPrompt(
                 this,

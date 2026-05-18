@@ -48,9 +48,14 @@ private fun fmtINR(amount: Double): String =
 @Composable
 fun CategoriesScreen(viewModel: CategoriesViewModel) {
     val categories by viewModel.categories.collectAsState()
+    val groupedCategories by viewModel.groupedCategories.collectAsState()
+    val tagSummaries by viewModel.allTagSummaries.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<Category?>(null) }
     var categoryToDelete by remember { mutableStateOf<Category?>(null) }
+    var addSubcategoryFor by remember { mutableStateOf<Category?>(null) }
+    var tagToRename by remember { mutableStateOf<String?>(null) }
+    var tagToDelete by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(Canvas)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -76,8 +81,9 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                         color = Ink,
                         lineHeight = 30.sp
                     )
+                    val subCount = categories.count { it.parentId != null }
                     Text(
-                        text = "${categories.size} active",
+                        text = if (subCount > 0) "${categories.count { it.parentId == null }} + $subCount sub" else "${categories.size} active",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                         color = Muted,
@@ -99,7 +105,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                             .background(Paper)
                             .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        if (categories.isEmpty()) {
+                        if (groupedCategories.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                                 contentAlignment = Alignment.Center
@@ -115,15 +121,24 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                             }
                         } else {
                             Column {
-                                categories.forEachIndexed { index, cat ->
-                                    if (index > 0) {
+                                groupedCategories.forEachIndexed { groupIndex, group ->
+                                    if (groupIndex > 0) {
                                         HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                                     }
                                     CategoryRow(
-                                        category = cat,
-                                        onEdit = { editTarget = cat; showDialog = true },
-                                        onDelete = { categoryToDelete = cat }
+                                        category = group.parent,
+                                        onEdit = { editTarget = group.parent; showDialog = true },
+                                        onDelete = { categoryToDelete = group.parent },
+                                        onAddSubcategory = { addSubcategoryFor = group.parent }
                                     )
+                                    group.children.forEach { child ->
+                                        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                                        SubcategoryRow(
+                                            category = child,
+                                            onEdit = { editTarget = child; showDialog = true },
+                                            onDelete = { categoryToDelete = child }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -196,6 +211,41 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                         }
                     }
                 }
+
+                // Tags section
+                if (tagSummaries.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(20.dp))
+                        Text(
+                            text = "TAGS",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.6.sp,
+                            color = Muted,
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        )
+                    }
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Paper)
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            tagSummaries.forEachIndexed { index, tag ->
+                                if (index > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                                TagRow(
+                                    name = tag.name,
+                                    count = tag.count,
+                                    totalSpent = tag.totalSpent,
+                                    onRename = { tagToRename = tag.name },
+                                    onDelete = { tagToDelete = tag.name }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -220,13 +270,19 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     }
 
     categoryToDelete?.let { cat ->
+        val hasChildren = groupedCategories.find { it.parent.id == cat.id }?.children?.isNotEmpty() == true
+        val deleteMsg = when {
+            hasChildren -> "Delete \"${cat.name}\" and all its subcategories? All expenses will be moved to pending."
+            cat.parentId != null -> "Delete subcategory \"${cat.name}\"? Its expenses will be moved to pending."
+            else -> "Delete \"${cat.name}\"? All its expenses will be moved back to pending."
+        }
         AlertDialog(
             onDismissRequest = { categoryToDelete = null },
             containerColor = Paper,
             titleContentColor = Ink,
             textContentColor = Muted,
             title = { Text("Delete Category") },
-            text = { Text("Delete \"${cat.name}\"? All its expenses will be moved back to pending.") },
+            text = { Text(deleteMsg) },
             confirmButton = {
                 TextButton(onClick = { viewModel.deleteCategory(cat); categoryToDelete = null }) {
                     Text("Delete", color = Coral)
@@ -238,10 +294,40 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
         )
     }
 
+    tagToDelete?.let { name ->
+        AlertDialog(
+            onDismissRequest = { tagToDelete = null },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            textContentColor = Muted,
+            title = { Text("Delete tag?") },
+            text = { Text("Remove \"#$name\" from all expenses?") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteTag(name); tagToDelete = null }) {
+                    Text("Delete", color = Coral)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { tagToDelete = null }) { Text("Cancel", color = Muted) }
+            }
+        )
+    }
+
+    tagToRename?.let { oldName ->
+        RenameTagDialog(
+            currentName = oldName,
+            onDismiss = { tagToRename = null },
+            onConfirm = { newName ->
+                viewModel.renameTag(oldName, newName)
+                tagToRename = null
+            }
+        )
+    }
+
     if (showDialog) {
         CategoryDialog(
             initial = editTarget,
-            onDismiss = { showDialog = false },
+            onDismiss = { showDialog = false; editTarget = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 val existing = editTarget
                 if (existing != null) {
@@ -250,13 +336,26 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                     viewModel.addCategory(name, emoji, colorHex, limit)
                 }
                 showDialog = false
+                editTarget = null
+            }
+        )
+    }
+
+    addSubcategoryFor?.let { parent ->
+        CategoryDialog(
+            initial = null,
+            parentName = parent.name,
+            onDismiss = { addSubcategoryFor = null },
+            onConfirm = { name, emoji, colorHex, limit ->
+                viewModel.addCategory(name, emoji, colorHex, limit, parentId = parent.id)
+                addSubcategoryFor = null
             }
         )
     }
 }
 
 @Composable
-private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> Unit, onAddSubcategory: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -306,6 +405,15 @@ private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> 
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
+                    .clickable(onClick = onAddSubcategory),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add subcategory", tint = Jade, modifier = Modifier.size(16.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
                     .clickable(onClick = onEdit),
                 contentAlignment = Alignment.Center
             ) {
@@ -325,8 +433,181 @@ private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> 
 }
 
 @Composable
+private fun SubcategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp)
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(parseColor(category.colorHex).copy(alpha = 0.7f))
+        )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(parseColor(category.colorHex).copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(category.emoji, fontSize = 16.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = category.name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Ink.copy(alpha = 0.85f)
+            )
+            if (category.monthlyLimit > 0) {
+                Text(
+                    text = "limit ₹${fmtINR(category.monthlyLimit)}/mo",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = Muted
+                )
+            }
+        }
+        Row {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onEdit),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDelete),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagRow(
+    name: String,
+    count: Int,
+    totalSpent: Double,
+    onRename: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(JadeSoft)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                "#$name",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = JadeInk,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "₹${fmtINR(totalSpent)}",
+                fontFamily = FontFamily.Serif,
+                fontStyle = FontStyle.Italic,
+                fontSize = 15.sp,
+                color = Ink
+            )
+            Text(
+                "$count expense${if (count != 1) "s" else ""}",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                color = Muted
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onRename),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Edit, contentDescription = "Rename tag", tint = Muted, modifier = Modifier.size(16.dp))
+        }
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDelete),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Delete, contentDescription = "Delete tag", tint = Muted, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun RenameTagDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var newName by remember { mutableStateOf(currentName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper,
+        titleContentColor = Ink,
+        textContentColor = Muted,
+        title = { Text("Rename tag") },
+        text = {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("New name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Jade,
+                    focusedLabelColor = Jade,
+                    unfocusedBorderColor = Hairline,
+                    unfocusedLabelColor = Muted,
+                    focusedTextColor = Ink,
+                    unfocusedTextColor = Ink,
+                    cursorColor = Jade
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val trimmed = newName.trim().trimStart('#')
+                if (trimmed.isNotBlank()) onConfirm(trimmed)
+            }) { Text("Rename", color = Jade) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
+}
+
+@Composable
 private fun CategoryDialog(
     initial: Category?,
+    parentName: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
@@ -342,7 +623,13 @@ private fun CategoryDialog(
         containerColor = Paper,
         titleContentColor = Ink,
         textContentColor = Muted,
-        title = { Text(if (initial == null) "New Category" else "Edit Category") },
+        title = {
+            Text(when {
+                initial != null -> "Edit ${if (initial.parentId != null) "Subcategory" else "Category"}"
+                parentName != null -> "Add to $parentName"
+                else -> "New Category"
+            })
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(

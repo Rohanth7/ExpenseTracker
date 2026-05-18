@@ -9,5 +9,6 @@ data class Category(
     val name: String,
     val emoji: String = "📦",
     val colorHex: String = "#6200EE",
-    val monthlyLimit: Double = 0.0
+    val monthlyLimit: Double = 0.0,
+    val parentId: Long? = null
 )

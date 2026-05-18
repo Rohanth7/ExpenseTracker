@@ -66,8 +66,9 @@ class SmsReceiver : BroadcastReceiver() {
 
     private suspend fun isDuplicate(db: AppDatabase, amount: Double, description: String, body: String): Boolean {
         val now = System.currentTimeMillis()
-        // Cross-source: UPI notification + bank SMS for same transaction — match amount+description (3-min window)
-        if (db.expenseDao().getRecentByAmountAndDescriptionFromDifferentSource(amount, description, "SMS", now - 3 * 60 * 1000L) > 0) return true
+        // Cross-source: UPI notification + bank SMS arrive within seconds for the same transaction.
+        // Descriptions differ between sources, so match on amount only within 3 minutes.
+        if (db.expenseDao().getRecentByAmountFromDifferentSource(amount, "SMS", now - 3 * 60 * 1000L) > 0) return true
         // Same-source: SMS broadcast fired twice or identical message received (30-sec window)
         if (db.expenseDao().getRecentByAmountAndContentFromSameSource(amount, "SMS", body, now - 30 * 1000L) > 0) return true
         return false

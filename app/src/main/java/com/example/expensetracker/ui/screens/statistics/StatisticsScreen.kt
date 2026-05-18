@@ -318,6 +318,23 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     }
                 }
 
+                // Cash vs Digital split
+                if (state.paymentSplit.total > 0) {
+                    item {
+                        Text(
+                            text = "HOW YOU PAY",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.6.sp,
+                            color = Muted,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                        )
+                    }
+                    item {
+                        PaymentSplitCard(split = state.paymentSplit)
+                    }
+                }
+
                 // Insight card
                 item {
                     Row(
@@ -354,8 +371,86 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
         CategoryDetailDialog(
             category = category,
             trend = state.selectedCategoryTrend ?: emptyList(),
+            subcategoryBreakdown = state.subcategoryBreakdown,
             onDismiss = { viewModel.selectCategory(null) }
         )
+    }
+}
+
+@Composable
+private fun PaymentSplitCard(split: PaymentSplit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Paper)
+            .padding(18.dp)
+    ) {
+        // Segmented bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(100.dp))
+        ) {
+            val autoFrac = split.fraction(split.autoAmount)
+            val manFrac = split.fraction(split.manualAmount)
+            val recFrac = split.fraction(split.recurringAmount)
+            if (autoFrac > 0) Box(Modifier.fillMaxHeight().weight(autoFrac).background(Jade))
+            if (manFrac > 0) Box(Modifier.fillMaxHeight().weight(manFrac).background(Amber))
+            if (recFrac > 0) Box(Modifier.fillMaxHeight().weight(recFrac).background(Coral))
+            // fill remainder if rounding leaves gap
+            val remainder = 1f - autoFrac - manFrac - recFrac
+            if (remainder > 0.001f) Box(Modifier.fillMaxHeight().weight(remainder).background(HairlineSoft))
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (split.autoAmount > 0) {
+                PaymentSplitLegend(
+                    label = "UPI / SMS",
+                    amount = split.autoAmount,
+                    pct = (split.fraction(split.autoAmount) * 100).toInt(),
+                    color = Jade,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (split.manualAmount > 0) {
+                PaymentSplitLegend(
+                    label = "Cash / Manual",
+                    amount = split.manualAmount,
+                    pct = (split.fraction(split.manualAmount) * 100).toInt(),
+                    color = Amber,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (split.recurringAmount > 0) {
+                PaymentSplitLegend(
+                    label = "Recurring",
+                    amount = split.recurringAmount,
+                    pct = (split.fraction(split.recurringAmount) * 100).toInt(),
+                    color = Coral,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentSplitLegend(label: String, amount: Double, pct: Int, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
+            Text(label, fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(amount)) }
+            }
+        )
+        Text("$pct%", fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -363,6 +458,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
 private fun CategoryDetailDialog(
     category: com.example.expensetracker.data.db.entity.Category,
     trend: List<CategoryTrend>,
+    subcategoryBreakdown: List<SubcategoryBreakdown>?,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -381,6 +477,12 @@ private fun CategoryDetailDialog(
                 Text("LAST 6 MONTHS TREND", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
                 Spacer(Modifier.height(20.dp))
                 CategoryTrendChart(trend = trend, color = parseColor(category.colorHex))
+                if (!subcategoryBreakdown.isNullOrEmpty()) {
+                    Spacer(Modifier.height(24.dp))
+                    Text("THIS YEAR BY SUBCATEGORY", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
+                    Spacer(Modifier.height(14.dp))
+                    SubcategoryBreakdownChart(subcategoryBreakdown)
+                }
             }
         },
         confirmButton = {
@@ -460,6 +562,62 @@ private fun MonthlyBarChart(monthStats: List<MonthStat>, busiestLabel: String, o
                     fontWeight = if (isBusiest) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SubcategoryBreakdownChart(breakdown: List<SubcategoryBreakdown>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(100.dp))
+    ) {
+        breakdown.forEach { item ->
+            if (item.fraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .weight(item.fraction)
+                        .background(parseColor(item.category.colorHex))
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    breakdown.forEach { item ->
+        val pct = (item.fraction * 100).toInt()
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(parseColor(item.category.colorHex))
+            )
+            Text(
+                text = "${item.category.emoji} ${item.category.name}",
+                fontSize = 12.sp,
+                color = Ink,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(fontSize = 10.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                    withStyle(SpanStyle(fontSize = 14.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(item.amount)) }
+                }
+            )
+            Text(
+                text = "$pct%",
+                fontSize = 10.sp,
+                color = Muted,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.width(28.dp)
+            )
         }
     }
 }

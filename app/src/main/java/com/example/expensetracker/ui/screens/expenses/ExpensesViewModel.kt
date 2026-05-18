@@ -24,6 +24,7 @@ class ExpensesViewModel(
 
     private val _searchQuery = MutableStateFlow("")
     private val _categoryFilter = MutableStateFlow<Long?>(-1L)
+    private val _tagFilter = MutableStateFlow<String?>(null)
     private val _sortByAmount = MutableStateFlow(false)
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
     private val _dateRange = MutableStateFlow<Pair<Long, Long>?>(null)
@@ -32,6 +33,7 @@ class ExpensesViewModel(
 
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val categoryFilter: StateFlow<Long?> = _categoryFilter.asStateFlow()
+    val tagFilter: StateFlow<String?> = _tagFilter.asStateFlow()
     val sortByAmount: StateFlow<Boolean> = _sortByAmount.asStateFlow()
     val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
     val dateRange: StateFlow<Pair<Long, Long>?> = _dateRange.asStateFlow()
@@ -51,24 +53,48 @@ class ExpensesViewModel(
     val expenses: StateFlow<List<Expense>> = combine(
         _allExpenses,
         _searchQuery,
-        _categoryFilter,
-        combine(_sortByAmount, _dateRange, _minAmount, _maxAmount) { b, r, min, max ->
-            Quad(b, r, min, max)
+        combine(_categoryFilter, categories) { f, cats -> f to cats },
+        combine(_sortByAmount, _dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
+            Quint(b, r, min, max, tag)
         }
-    ) { all, query, catFilter, extra ->
-        val (byAmount, range, minAmt, maxAmt) = extra
+    ) { all, query, (catFilter, cats), extra ->
+        val (byAmount, range, minAmt, maxAmt, tag) = extra
         val filtered = all.filter { expense ->
-            val matchesQuery = query.isBlank() || expense.description.contains(query, ignoreCase = true)
-            val matchesCat = catFilter == null || catFilter == -1L || expense.categoryId == catFilter
+            val matchesQuery = query.isBlank() ||
+                expense.description.contains(query, ignoreCase = true) ||
+                expense.tags.contains(query, ignoreCase = true)
+            val matchesCat = catFilter == null || catFilter == -1L ||
+                expense.categoryId == catFilter ||
+                cats.find { it.id == expense.categoryId }?.parentId == catFilter
             val matchesRange = range == null || expense.date in range.first..range.second
             val matchesMin = minAmt == null || expense.amount >= minAmt
             val matchesMax = maxAmt == null || expense.amount <= maxAmt
-            matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax
+            val matchesTag = tag == null || parseTags(expense.tags).any { it.equals(tag, ignoreCase = true) }
+            matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+    data class TagSummary(val name: String, val count: Int, val totalSpent: Double)
+
+    val allTagSummaries: StateFlow<List<TagSummary>> = _allExpenses.map { expenses ->
+        val map = mutableMapOf<String, Pair<Int, Double>>()
+        expenses.forEach { expense ->
+            parseTags(expense.tags).forEach { tag ->
+                val (c, t) = map.getOrDefault(tag, 0 to 0.0)
+                map[tag] = (c + 1) to (t + expense.amount)
+            }
+        }
+        map.entries.map { TagSummary(it.key, it.value.first, it.value.second) }
+            .sortedByDescending { it.totalSpent }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private data class Quint<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)
+    private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component1() = first
+    private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component2() = second
+    private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component3() = third
+    private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component4() = fourth
+    private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component5() = fifth
 
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
@@ -77,6 +103,7 @@ class ExpensesViewModel(
 
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setCategoryFilter(id: Long?) { _categoryFilter.value = id }
+    fun setTagFilter(tag: String?) { _tagFilter.value = tag }
     fun toggleSortOrder() { _sortByAmount.value = !_sortByAmount.value }
     fun setDateRange(start: Long, end: Long) { _dateRange.value = start to end }
     fun clearDateRange() { _dateRange.value = null }
@@ -85,9 +112,28 @@ class ExpensesViewModel(
     fun clearAllFilters() {
         _searchQuery.value = ""
         _categoryFilter.value = -1L
+        _tagFilter.value = null
         _dateRange.value = null
         _minAmount.value = null
         _maxAmount.value = null
+    }
+
+    fun renameTag(oldName: String, newName: String) = viewModelScope.launch {
+        val trimNew = newName.trim().trimStart('#')
+        if (trimNew.isBlank() || trimNew == oldName.trimStart('#')) return@launch
+        _allExpenses.value.filter { parseTags(it.tags).any { t -> t.equals(oldName, ignoreCase = true) } }.forEach { expense ->
+            val updated = parseTags(expense.tags).map { if (it.equals(oldName, ignoreCase = true)) trimNew else it }
+            expenseRepo.update(expense.copy(tags = updated.joinToString(",")))
+        }
+        if (_tagFilter.value?.equals(oldName, ignoreCase = true) == true) _tagFilter.value = trimNew
+    }
+
+    fun deleteTag(name: String) = viewModelScope.launch {
+        _allExpenses.value.filter { parseTags(it.tags).any { t -> t.equals(name, ignoreCase = true) } }.forEach { expense ->
+            val updated = parseTags(expense.tags).filter { !it.equals(name, ignoreCase = true) }
+            expenseRepo.update(expense.copy(tags = updated.joinToString(",")))
+        }
+        if (_tagFilter.value?.equals(name, ignoreCase = true) == true) _tagFilter.value = null
     }
 
     fun toggleSelection(id: Long) {
@@ -123,15 +169,15 @@ class ExpensesViewModel(
         _selectedIds.value = emptySet()
     }
 
-    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long) = viewModelScope.launch {
-        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date))
+    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "") = viewModelScope.launch {
+        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags))
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo)
         }
     }
 
-    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long) = viewModelScope.launch {
-        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date))
+    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "") = viewModelScope.launch {
+        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags))
         if (expense.source != "Manual" && categoryId != -1L) {
             mappingRepo.saveMapping(description, categoryId)
         }
@@ -145,6 +191,9 @@ class ExpensesViewModel(
     }
 
     companion object {
+        fun parseTags(raw: String): List<String> =
+            raw.split(",").map { it.trim().trimStart('#') }.filter { it.isNotBlank() }
+
         fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, mappingRepo: MerchantMappingRepository, appContext: Context, prefs: PreferencesManager) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

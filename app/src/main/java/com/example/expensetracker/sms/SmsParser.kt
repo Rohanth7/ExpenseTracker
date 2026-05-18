@@ -19,7 +19,8 @@ object SmsParser {
     )
 
     private val CREDIT_KEYWORDS = listOf(
-        "credited", "received", "deposited", "refund", "cashback"
+        "credited", "received", "deposited", "refund", "cashback",
+        "paid to your", "sent to your", "to your account", "to your a/c", "to your ac"
     )
 
     private val KNOWN_SENDERS = listOf(

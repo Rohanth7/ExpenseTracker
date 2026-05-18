@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -39,10 +41,14 @@ fun CategorizeScreen(
     var loaded by remember { mutableStateOf(false) }
     var selectedCategoryId by remember { mutableStateOf(-1L) }
     var amountText by remember { mutableStateOf("") }
+    var tags by remember { mutableStateOf("") }
 
     LaunchedEffect(expenseId) {
         expense = viewModel.getExpense(expenseId)
-        expense?.let { amountText = "%.2f".format(it.amount) }
+        expense?.let { 
+            amountText = "%.2f".format(it.amount)
+            tags = it.tags
+        }
         loaded = true
     }
 
@@ -108,7 +114,18 @@ fun CategorizeScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            OutlinedTextField(
+                value = tags,
+                onValueChange = { tags = it },
+                label = { Text("Tags (e.g. #vacation)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             Text("Select Category", style = MaterialTheme.typography.titleSmall)
+
+            val parents = remember(categories) { categories.filter { it.parentId == null } }
+            val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
@@ -116,12 +133,34 @@ fun CategorizeScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                items(categories) { cat ->
-                    CategoryTile(
-                        category = cat,
-                        selected = cat.id == selectedCategoryId,
-                        onClick = { selectedCategoryId = cat.id }
-                    )
+                parents.forEach { parent ->
+                    val children = childrenMap[parent.id]
+                    if (children.isNullOrEmpty()) {
+                        item {
+                            CategoryTile(
+                                category = parent,
+                                selected = parent.id == selectedCategoryId,
+                                onClick = { selectedCategoryId = parent.id }
+                            )
+                        }
+                    } else {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = "${parent.emoji} ${parent.name}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = parseColor(parent.colorHex),
+                                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                            )
+                        }
+                        items(children) { child ->
+                            CategoryTile(
+                                category = child,
+                                selected = child.id == selectedCategoryId,
+                                onClick = { selectedCategoryId = child.id }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -146,7 +185,7 @@ fun CategorizeScreen(
                     onClick = {
                         if (selectedCategoryId == -1L) return@Button
                         val amount = amountText.toDoubleOrNull() ?: exp.amount
-                        viewModel.assignCategory(exp, selectedCategoryId, amount, onDone)
+                        viewModel.assignCategory(exp, selectedCategoryId, amount, tags.trim(), onDone)
                     },
                     enabled = selectedCategoryId != -1L,
                     modifier = Modifier.weight(1f)

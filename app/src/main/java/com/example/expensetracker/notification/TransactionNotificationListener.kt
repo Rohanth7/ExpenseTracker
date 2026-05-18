@@ -43,9 +43,9 @@ class TransactionNotificationListener : NotificationListenerService() {
 
             val categories = db.categoryDao().getAll().first()
             val now = System.currentTimeMillis()
-            // Cross-source: bank SMS + UPI notification for same transaction (3-min window)
-            // Description might be slightly different between SMS and Notification, but usually contains merchant
-            if (db.expenseDao().getRecentByAmountAndDescriptionFromDifferentSource(transaction.amount, transaction.description, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
+            // Cross-source: bank SMS + UPI notification arrive within seconds for the same transaction.
+            // Descriptions differ between sources, so match on amount only within 3 minutes.
+            if (db.expenseDao().getRecentByAmountFromDifferentSource(transaction.amount, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
             
             // Same-source: UPI app notification fired twice (30-sec window)
             if (db.expenseDao().getRecentByAmountAndContentFromSameSource(transaction.amount, "UPI", body, now - 30 * 1000L) > 0) return@launch

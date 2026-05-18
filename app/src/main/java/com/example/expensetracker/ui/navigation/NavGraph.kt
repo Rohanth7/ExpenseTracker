@@ -29,11 +29,14 @@ import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.RecurringManager
+import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
+import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.data.repository.RecurringTemplateRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
+import com.example.expensetracker.notification.BillReminderHelper
 import com.example.expensetracker.ui.screens.categories.CategoriesScreen
 import com.example.expensetracker.ui.screens.categories.CategoriesViewModel
 import com.example.expensetracker.ui.screens.categorize.CategorizeScreen
@@ -47,18 +50,18 @@ import com.example.expensetracker.ui.screens.settings.SettingsViewModel
 import com.example.expensetracker.ui.screens.statistics.StatisticsScreen
 import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
 
-sealed class Screen(val route: String, val label: String) {
+sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
-    object Expenses : Screen("expenses?start={start}&end={end}", "Expenses") {
-        fun route(start: Long? = null, end: Long? = null): String {
+    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}") {
+        fun createRoute(start: Long? = null, end: Long? = null): String {
             return if (start != null && end != null) "expenses?start=$start&end=$end" else "expenses"
         }
     }
     object Categories : Screen("categories", "Categories")
     object Statistics : Screen("statistics", "Stats")
     object Settings : Screen("settings", "Settings")
-    object Categorize : Screen("categorize/{expenseId}", "Categorize") {
-        fun route(expenseId: Long) = "categorize/$expenseId"
+    object Categorize : Screen("categorize", "Categorize", "categorize/{expenseId}") {
+        fun createRoute(expenseId: Long) = "categorize/$expenseId"
     }
 }
 
@@ -73,19 +76,22 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
     val recurringRepo = remember { RecurringTemplateRepository(db.recurringTemplateDao()) }
     val mappingRepo = remember { MerchantMappingRepository(db.merchantMappingDao()) }
     val savingsRepo = remember { SavingsGoalRepository(db.savingsGoalDao()) }
+    val billRepo = remember { BillRepository(db.billDao()) }
+    val loanRepo = remember { LoanRepository(db.loanDao()) }
     val prefs = remember { PreferencesManager(context) }
     val backupManager = remember { BackupManager(context.applicationContext) }
 
     val navController = rememberNavController()
 
-    // Apply recurring expenses if it's a new month
+    // Apply recurring expenses if it's a new month; schedule bill reminders
     LaunchedEffect(Unit) {
         RecurringManager.applyIfNeeded(context)
+        BillReminderHelper.schedule(context)
     }
 
     LaunchedEffect(initialExpenseId) {
         if (initialExpenseId != null && initialExpenseId != -1L) {
-            navController.navigate(Screen.Categorize.route(initialExpenseId))
+            navController.navigate(Screen.Categorize.createRoute(initialExpenseId))
             onExpenseNavigated()
         }
     }
@@ -94,14 +100,14 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
         bottomBar = {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDest = navBackStackEntry?.destination
-            val showBottomBar = bottomNavItems.any { it.route == currentDest?.route }
+            val showBottomBar = bottomNavItems.any { it.pattern == currentDest?.route }
             if (showBottomBar) {
                 NavigationBar(
                     containerColor = Paper,
                     tonalElevation = 0.dp
                 ) {
                     bottomNavItems.forEach { screen ->
-                        val selected = currentDest?.hierarchy?.any { it.route == screen.route } == true
+                        val selected = currentDest?.hierarchy?.any { it.route == screen.pattern } == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -140,18 +146,30 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
             startDestination = Screen.Dashboard.route,
             modifier = Modifier.padding(padding)
         ) {
-            composable(Screen.Dashboard.route) {
+            composable(Screen.Dashboard.pattern) {
                 val vm: DashboardViewModel = viewModel(
-                    factory = DashboardViewModel.factory(context.applicationContext, categoryRepo, expenseRepo, savingsRepo, prefs)
+                    factory = DashboardViewModel.factory(context.applicationContext, categoryRepo, expenseRepo, savingsRepo, billRepo, loanRepo, prefs)
                 )
                 DashboardScreen(
                     viewModel = vm,
-                    onViewPending = { navController.navigate(Screen.Expenses.route) },
-                    onViewAllSpending = { navController.navigate(Screen.Statistics.route) }
+                    onViewPending = { 
+                        navController.navigate(Screen.Expenses.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onViewAllSpending = { 
+                        navController.navigate(Screen.Statistics.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
                 )
             }
             composable(
-                route = Screen.Expenses.route,
+                route = Screen.Expenses.pattern,
                 arguments = listOf(
                     navArgument("start") { type = NavType.LongType; defaultValue = -1L },
                     navArgument("end") { type = NavType.LongType; defaultValue = -1L }
@@ -174,23 +192,23 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
 
                 ExpensesScreen(
                     viewModel = vm,
-                    onCategorize = { id -> navController.navigate(Screen.Categorize.route(id)) }
+                    onCategorize = { id -> navController.navigate(Screen.Categorize.createRoute(id)) }
                 )
             }
-            composable(Screen.Categories.route) {
+            composable(Screen.Categories.pattern) {
                 val vm: CategoriesViewModel = viewModel(
-                    factory = CategoriesViewModel.factory(categoryRepo)
+                    factory = CategoriesViewModel.factory(categoryRepo, expenseRepo)
                 )
                 CategoriesScreen(viewModel = vm)
             }
-            composable(Screen.Statistics.route) {
+            composable(Screen.Statistics.pattern) {
                 val vm: StatisticsViewModel = viewModel(
                     factory = StatisticsViewModel.factory(expenseRepo, categoryRepo)
                 )
                 StatisticsScreen(
                     viewModel = vm,
                     onMonthClick = { start, end ->
-                        navController.navigate(Screen.Expenses.route(start, end)) {
+                        navController.navigate(Screen.Expenses.createRoute(start, end)) {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
@@ -198,13 +216,13 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                     }
                 )
             }
-            composable(Screen.Settings.route) {
+            composable(Screen.Settings.pattern) {
                 val vm: SettingsViewModel = viewModel(
-                    factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, mappingRepo, backupManager, prefs)
+                    factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, backupManager, prefs)
                 )
                 SettingsScreen(viewModel = vm)
             }
-            composable(Screen.Categorize.route) { backStackEntry ->
+            composable(Screen.Categorize.pattern) { backStackEntry ->
                 val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull() ?: return@composable
                 val vm: CategorizeViewModel = viewModel(
                     factory = CategorizeViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)

@@ -29,9 +29,9 @@ class CategorizeViewModel(
 
     suspend fun getExpense(id: Long): Expense? = expenseRepo.getById(id)
 
-    fun assignCategory(expense: Expense, categoryId: Long, amount: Double, onDone: () -> Unit) =
+    fun assignCategory(expense: Expense, categoryId: Long, amount: Double, tags: String, onDone: () -> Unit) =
         viewModelScope.launch {
-            expenseRepo.update(expense.copy(categoryId = categoryId, amount = amount))
+            expenseRepo.update(expense.copy(categoryId = categoryId, amount = amount, tags = tags))
             if (expense.source != "Manual") {
                 mappingRepo.saveMapping(expense.description, categoryId)
             }

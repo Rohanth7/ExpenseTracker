@@ -15,5 +15,6 @@ data class Expense(
     val categoryId: Long = -1L,
     val date: Long = System.currentTimeMillis(),
     val source: String = "Manual",
-    val rawSms: String? = null
+    val rawSms: String? = null,
+    val tags: String = ""
 )

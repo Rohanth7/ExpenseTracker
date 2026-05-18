@@ -39,7 +39,7 @@ object NotificationHelper {
             putExtra(EXTRA_EXPENSE_ID, expenseId)
         }
         val pendingIntent = PendingIntent.getActivity(
-            context, expenseId.toInt(), intent,
+            context, (expenseId and 0x7FFFFFFF).toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -60,13 +60,13 @@ object NotificationHelper {
                 putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, category.id)
             }
             val actionPendingIntent = PendingIntent.getBroadcast(
-                context, (expenseId * 100 + category.id).toInt(), actionIntent,
+                context, ((expenseId * 100 + category.id) and 0x7FFFFFFF).toInt(), actionIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             builder.addAction(0, category.name, actionPendingIntent)
         }
 
         context.getSystemService(NotificationManager::class.java)
-            .notify(expenseId.toInt(), builder.build())
+            .notify((expenseId and 0x7FFFFFFF).toInt(), builder.build())
     }
 }

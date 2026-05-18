@@ -42,6 +42,9 @@ class ExpenseRepository(private val dao: ExpenseDao, private val context: Contex
     suspend fun getSpentForCategory(categoryId: Long, start: Long, end: Long): Double =
         dao.getSpentForCategory(categoryId, start, end)
 
+    suspend fun getSpentForCategories(categoryIds: List<Long>, start: Long, end: Long): Double =
+        if (categoryIds.isEmpty()) 0.0 else dao.getSpentForCategories(categoryIds, start, end)
+
     suspend fun deleteAll() {
         dao.deleteAll()
         WidgetUpdateHelper.update(context)

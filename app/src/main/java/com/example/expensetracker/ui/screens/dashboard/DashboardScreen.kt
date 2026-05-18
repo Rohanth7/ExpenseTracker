@@ -29,6 +29,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.ui.screens.dashboard.UpcomingBill
 import com.example.expensetracker.ui.components.PieChart
 import com.example.expensetracker.ui.components.PieSlice
 import com.example.expensetracker.ui.theme.*
@@ -641,6 +642,61 @@ fun DashboardScreen(
             }
         }
 
+        // ── Upcoming Bills ──────────────────────────────────────
+        if (state.upcomingBills.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                DsSectionLabel(title = "Upcoming Bills", modifier = Modifier.padding(horizontal = 16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Paper)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    state.upcomingBills.forEachIndexed { index, upcoming ->
+                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+                        UpcomingBillRow(upcoming)
+                    }
+                }
+            }
+        }
+
+        // ── EMI Commitments ─────────────────────────────────────
+        if (state.activeLoans.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                DsSectionLabel(title = "EMI Commitments", modifier = Modifier.padding(horizontal = 16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Paper)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Total monthly EMI",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Muted
+                        )
+                        MoneyDisplay(state.totalMonthlyEmi, size = 20, color = Coral)
+                    }
+                    state.activeLoans.forEachIndexed { index, loanStatus ->
+                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+                        LoanStatusRow(loanStatus)
+                    }
+                }
+            }
+        }
+
         // ── Empty state ─────────────────────────────────────────
         if (state.categorySummaries.isEmpty() && state.pendingCount == 0) {
             item {
@@ -924,6 +980,100 @@ private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
+}
+
+@Composable
+private fun UpcomingBillRow(upcoming: UpcomingBill) {
+    val dueText = when (upcoming.daysUntilDue) {
+        -1 -> "Yesterday"
+        0 -> "Today"
+        1 -> "Tomorrow"
+        else -> "In ${upcoming.daysUntilDue} days"
+    }
+    val isOverdue = upcoming.daysUntilDue < 0
+    val isDueToday = upcoming.daysUntilDue == 0
+    val accentColor = when {
+        isOverdue -> Coral
+        isDueToday -> Amber
+        else -> Muted
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(accentColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "${upcoming.bill.dueDayOfMonth}",
+                fontFamily = FontFamily.Serif,
+                fontStyle = FontStyle.Italic,
+                fontSize = 16.sp,
+                color = accentColor,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(upcoming.bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+            Text(dueText, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = accentColor)
+        }
+        MoneyDisplay(upcoming.bill.amount, size = 18, color = if (isOverdue) Coral else Ink)
+    }
+}
+
+@Composable
+private fun LoanStatusRow(loanStatus: LoanStatus) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(loanStatus.loan.emoji, fontSize = 18.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(loanStatus.loan.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
+                Text(
+                    "${loanStatus.paidMonths}/${loanStatus.loan.tenureMonths} months paid",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = Muted
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                MoneyDisplay(loanStatus.loan.monthlyEmi, size = 16, color = Ink)
+                Text(
+                    "${loanStatus.remainingMonths} mo left",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = Coral
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(RoundedCornerShape(100.dp))
+                .background(HairlineSoft)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(loanStatus.progressFraction)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(Jade)
+            )
+        }
+    }
 }
 
 private fun fmtINR(n: Double): String {

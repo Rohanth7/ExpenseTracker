@@ -12,6 +12,7 @@ class CategoryRepository(private val dao: CategoryDao, private val expenseDao: E
     suspend fun insertAll(categories: List<Category>) = dao.insertAll(categories)
     suspend fun update(category: Category) = dao.update(category)
     suspend fun getById(id: Long): Category? = dao.getById(id)
+    suspend fun getAll(): List<Category> = dao.getAllOnce()
 
     // Reset expenses to pending before deleting so they don't silently orphan
     suspend fun delete(category: Category) {
