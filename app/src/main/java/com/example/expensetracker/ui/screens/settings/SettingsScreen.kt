@@ -68,6 +68,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     var showAddBill by remember { mutableStateOf(false) }
     var showAddLoan by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showMockDataDialog by remember { mutableStateOf(false) }
     var templateToDelete by remember { mutableStateOf<RecurringTemplate?>(null) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
     var loanToDelete by remember { mutableStateOf<Loan?>(null) }
@@ -377,6 +378,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     )
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                     SettingRow(
+                        icon = { Icon(Icons.Default.Science, null, tint = Jade, modifier = Modifier.size(17.dp)) },
+                        title = "Load mock data",
+                        subtitle = "Fill app with 3 months of sample expenses for testing",
+                        onClick = { showMockDataDialog = true }
+                    )
+                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    SettingRow(
                         icon = { Icon(Icons.Default.Delete, null, tint = Coral, modifier = Modifier.size(17.dp)) },
                         title = "Reset everything",
                         subtitle = "Delete all expenses, categories & templates",
@@ -680,6 +688,25 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { templateToDelete = null }) { Text("Cancel", color = Muted) }
+            }
+        )
+    }
+
+    if (showMockDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showMockDataDialog = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            textContentColor = Muted,
+            title = { Text("Load mock data?") },
+            text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, and savings goals.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.loadMockData(); showMockDataDialog = false }) {
+                    Text("Load", color = Jade)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMockDataDialog = false }) { Text("Cancel", color = Muted) }
             }
         )
     }

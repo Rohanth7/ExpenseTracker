@@ -10,4 +10,5 @@ class LoanRepository(private val dao: LoanDao) {
     suspend fun insert(loan: Loan): Long = dao.insert(loan)
     suspend fun update(loan: Loan) = dao.update(loan)
     suspend fun delete(loan: Loan) = dao.delete(loan)
+    suspend fun deleteAll() = dao.deleteAll()
 }

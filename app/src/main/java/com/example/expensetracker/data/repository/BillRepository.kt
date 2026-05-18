@@ -9,4 +9,5 @@ class BillRepository(private val dao: BillDao) {
     suspend fun insert(bill: Bill) = dao.insert(bill)
     suspend fun update(bill: Bill) = dao.update(bill)
     suspend fun delete(bill: Bill) = dao.delete(bill)
+    suspend fun deleteAll() = dao.deleteAll()
 }

@@ -17,4 +17,7 @@ interface BillDao {
 
     @Delete
     suspend fun delete(bill: Bill)
+
+    @Query("DELETE FROM bills")
+    suspend fun deleteAll()
 }

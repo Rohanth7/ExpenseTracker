@@ -17,4 +17,7 @@ interface LoanDao {
 
     @Delete
     suspend fun delete(loan: Loan)
+
+    @Query("DELETE FROM loans")
+    suspend fun deleteAll()
 }
