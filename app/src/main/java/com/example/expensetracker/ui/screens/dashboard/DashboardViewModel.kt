@@ -120,7 +120,8 @@ class DashboardViewModel(
         val daysInMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
         val upcomingBills = if (offset == 0) {
             bills.filter { it.isEnabled && !it.autoLog }.mapNotNull { bill ->
-                val diff = bill.dueDayOfMonth - today
+                val effectiveDueDay = bill.dueDayOfMonth.coerceAtMost(daysInMonth)
+                val diff = effectiveDueDay - today
                 val daysLeft = if (diff < -3) diff + daysInMonth else diff
                 if (daysLeft in -1..6) UpcomingBill(bill, daysLeft) else null
             }.sortedBy { it.daysUntilDue }

@@ -44,6 +44,7 @@ import java.util.Locale
 private sealed class SettingsPage {
     object Bills : SettingsPage()
     object Loans : SettingsPage()
+    object CategoryBudgets : SettingsPage()
     object Cloud : SettingsPage()
     object Preferences : SettingsPage()
     object Data : SettingsPage()
@@ -115,10 +116,14 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         when (currentPage) {
             null -> SettingsMainMenu(
-                bills = bills, loans = loans,
+                bills = bills, loans = loans, categories = categories,
                 driveConnected = driveConnected, driveAccountEmail = driveAccountEmail,
                 modifier = Modifier.padding(padding),
                 onNavigate = { currentPage = it }
+            )
+            SettingsPage.CategoryBudgets -> CategoryBudgetsSubPage(
+                categories = categories, viewModel = viewModel,
+                modifier = Modifier.padding(padding), onBack = { currentPage = null }
             )
             SettingsPage.Bills -> BillsSubPage(
                 bills = bills, categories = categories, viewModel = viewModel,
@@ -182,6 +187,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 private fun SettingsMainMenu(
     bills: List<Bill>,
     loans: List<Loan>,
+    categories: List<Category>,
     driveConnected: Boolean,
     driveAccountEmail: String,
     modifier: Modifier = Modifier,
@@ -206,6 +212,14 @@ private fun SettingsMainMenu(
                 MenuRow(icon = Icons.Default.AccountBalance, iconBg = Canvas, iconTint = Ink, title = "Loans & EMIs",
                     subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
                     onClick = { onNavigate(SettingsPage.Loans) })
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                val budgetedCount = categories.count { it.monthlyLimit > 0 && it.parentId == null }
+                MenuRow(
+                    icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
+                    title = "Category Budgets",
+                    subtitle = if (budgetedCount == 0) "No limits set" else "$budgetedCount ${if (budgetedCount != 1) "categories" else "category"} with limits",
+                    onClick = { onNavigate(SettingsPage.CategoryBudgets) }
+                )
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -248,6 +262,139 @@ private fun SettingsMainMenu(
 }
 
 // ── Sub-pages ───────────────────────────────────────────────────────────────
+
+@Composable
+private fun CategoryBudgetsSubPage(
+    categories: List<Category>,
+    viewModel: SettingsViewModel,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit
+) {
+    var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+    val parentCategories = categories.filter { it.parentId == null }
+
+    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
+        item { SubPageHeader("Category Budgets", onBack); Spacer(Modifier.height(8.dp)) }
+        item {
+            SectionLabel("MONTHLY LIMITS")
+            Text(
+                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit.",
+                fontSize = 11.5.sp, color = Muted, lineHeight = 16.sp,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+        if (parentCategories.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No categories yet.\nAdd expenses to create categories first.",
+                        fontSize = 12.sp, color = Muted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        } else {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    parentCategories.forEachIndexed { i, cat ->
+                        if (i > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                        CategoryLimitRow(category = cat, onClick = { categoryToEdit = cat })
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(40.dp)) }
+    }
+
+    categoryToEdit?.let { cat ->
+        CategoryLimitDialog(
+            category = cat,
+            onDismiss = { categoryToEdit = null },
+            onConfirm = { limit ->
+                viewModel.updateCategoryLimit(cat, limit)
+                categoryToEdit = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun CategoryLimitRow(category: Category, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
+                .background(parseColor(category.colorHex).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(category.emoji, fontSize = 16.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(category.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+            Text(
+                if (category.monthlyLimit > 0) "₹${fmtINR(category.monthlyLimit)} / month" else "No limit",
+                fontSize = 11.sp,
+                color = if (category.monthlyLimit > 0) Jade else Muted
+            )
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun CategoryLimitDialog(
+    category: Category,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var limitText by remember {
+        mutableStateOf(if (category.monthlyLimit > 0) category.monthlyLimit.toLong().toString() else "")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper,
+        title = { Text("${category.emoji} ${category.name}", color = Ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = limitText,
+                    onValueChange = { limitText = it },
+                    label = { Text("Monthly limit (₹)") },
+                    placeholder = { Text("e.g. 5000", color = Muted) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Jade,
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink
+                    )
+                )
+                if (category.monthlyLimit > 0) {
+                    Text("Set to 0 or leave blank to remove the limit.", fontSize = 11.sp, color = Muted)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val amt = limitText.trim().toDoubleOrNull() ?: 0.0
+                onConfirm(amt)
+            }) { Text("Save", color = Jade) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
+}
 
 @Composable
 private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewModel: SettingsViewModel, modifier: Modifier = Modifier, onBack: () -> Unit) {

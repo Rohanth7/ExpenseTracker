@@ -506,7 +506,7 @@ fun DashboardScreen(
                 val goal = state.savingsGoals[i]
                 SavingsGoalCard(
                     goal = goal,
-                    onAddSurplus = { viewModel.addAmountToGoal(goal, state.monthlySurplus) },
+                    onAdd = { goalToUpdate = goal },
                     onDelete = { viewModel.deleteSavingsGoal(goal) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
@@ -611,12 +611,24 @@ fun DashboardScreen(
             }
         )
     }
+
+    goalToUpdate?.let { goal ->
+        DepositDialog(
+            goalName = goal.name,
+            surplus = state.monthlySurplus,
+            onDismiss = { goalToUpdate = null },
+            onConfirm = { amount ->
+                viewModel.addAmountToGoal(goal, amount)
+                goalToUpdate = null
+            }
+        )
+    }
 }
 
 @Composable
 private fun SavingsGoalCard(
     goal: SavingsGoal,
-    onAddSurplus: () -> Unit,
+    onAdd: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -644,7 +656,7 @@ private fun SavingsGoalCard(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onAddSurplus, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = onAdd, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Default.Add, null, tint = Jade, modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
@@ -715,6 +727,55 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
                     onConfirm(name.trim(), amt)
                 }
             }) { Text("Create", color = Jade) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
+}
+
+@Composable
+private fun DepositDialog(
+    goalName: String,
+    surplus: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var amount by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper,
+        title = { Text("Add to \"$goalName\"", color = Ink) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text("Amount (₹)") },
+                    placeholder = if (surplus > 0) ({ Text("e.g. ₹${fmtINR(surplus)}", color = Muted) }) else null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Jade,
+                        focusedTextColor = Ink,
+                        unfocusedTextColor = Ink
+                    )
+                )
+                if (surplus > 0) {
+                    Text(
+                        "Monthly surplus: ₹${fmtINR(surplus)}",
+                        fontSize = 11.sp,
+                        color = Muted,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val amt = amount.toDoubleOrNull()
+                if (amt != null && amt > 0) onConfirm(amt)
+            }) { Text("Add", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

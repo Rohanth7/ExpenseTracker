@@ -33,7 +33,7 @@ object RecurringManager {
                     date = firstOfMonth
                 )
             )
-            prefs.edit().putBoolean(key, true).apply()
+            prefs.edit().putBoolean(key, true).commit()
         }
     }
 }

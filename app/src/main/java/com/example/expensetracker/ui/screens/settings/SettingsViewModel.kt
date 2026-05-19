@@ -293,6 +293,10 @@ class SettingsViewModel(
 
     // ── Recurring templates ─────────────────────────────────────
 
+    fun updateCategoryLimit(category: Category, limit: Double) = viewModelScope.launch {
+        categoryRepo.update(category.copy(monthlyLimit = limit.coerceAtLeast(0.0)))
+    }
+
     fun addTemplate(name: String, amount: Double, categoryId: Long) = viewModelScope.launch {
         recurringRepo.insert(RecurringTemplate(name = name, amount = amount, categoryId = categoryId))
     }

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Splash screen icon: ₹ symbol sized to ~35% of the 240dp splash area,
+    matching the proportional appearance of the home screen adaptive icon.
+    Viewport 240×240; symbol spans x=78–162, y=78–162 (84dp = 35% of 240dp).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="240dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <!-- Top horizontal bar -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7DC9A5"
+        android:strokeWidth="13"
+        android:strokeLineCap="round"
+        android:pathData="M78,78 L162,78" />
+
+    <!-- Second horizontal bar (slightly shorter) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7DC9A5"
+        android:strokeWidth="13"
+        android:strokeLineCap="round"
+        android:pathData="M78,104 L146,104" />
+
+    <!-- Left vertical stroke -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7DC9A5"
+        android:strokeWidth="13"
+        android:strokeLineCap="round"
+        android:pathData="M78,78 L78,162" />
+
+    <!-- Diagonal stroke from mid-left to bottom-right -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#7DC9A5"
+        android:strokeWidth="13"
+        android:strokeLineCap="round"
+        android:pathData="M78,113 L162,162" />
+
+</vector>
