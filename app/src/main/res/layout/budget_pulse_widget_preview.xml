@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget_shell"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Budget Pulse"
+        android:textColor="#F2EBD9"
+        android:textSize="18sp"
+        android:textStyle="italic"
+        android:fontFamily="serif" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Monthly spending overview"
+        android:textColor="#A09B8E"
+        android:textSize="12sp"
+        android:fontFamily="monospace" />
+
+</LinearLayout>

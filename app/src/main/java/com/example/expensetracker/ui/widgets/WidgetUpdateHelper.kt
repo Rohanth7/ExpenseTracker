@@ -1,10 +1,10 @@
 package com.example.expensetracker.ui.widgets
 
 import android.content.Context
-import androidx.glance.appwidget.updateAll
+import com.example.expensetracker.widget.BudgetPulseWidgetReceiver
 
 object WidgetUpdateHelper {
-    suspend fun update(context: Context) {
-        ExpenseWidget().updateAll(context)
+    fun update(context: Context) {
+        BudgetPulseWidgetReceiver.requestUpdate(context)
     }
 }

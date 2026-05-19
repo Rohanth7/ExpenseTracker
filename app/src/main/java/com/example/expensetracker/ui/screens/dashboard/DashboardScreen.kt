@@ -400,56 +400,6 @@ fun DashboardScreen(
             }
         }
 
-        // ── Smart Insight ───────────────────────────────────────
-        state.smartInsight?.let { insight ->
-            item {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Paper)
-                        .padding(16.dp, 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(JadeSoft),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(insight.emoji, fontSize = 22.sp)
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "INSIGHT",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.5.sp,
-                            letterSpacing = 1.4.sp,
-                            color = Muted
-                        )
-                        Text(
-                            insight.label,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Ink,
-                            modifier = Modifier.padding(top = 1.dp)
-                        )
-                        Text(
-                            insight.detail,
-                            fontSize = 11.sp,
-                            color = InkSoft,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-                }
-            }
-        }
-
         // ── Against budgets ─────────────────────────────────────
         val budgeted = state.categorySummaries.filter { it.category.monthlyLimit > 0 }
         if (budgeted.isNotEmpty()) {
@@ -522,24 +472,6 @@ fun DashboardScreen(
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // ── 6-month trend ───────────────────────────────────────
-        if (state.monthlyTrends.any { it.total > 0 }) {
-            item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(title = "6-month trend", modifier = Modifier.padding(horizontal = 16.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(18.dp, 20.dp, 18.dp, 16.dp)
-                ) {
-                    TrendBars(state.monthlyTrends)
                 }
             }
         }
@@ -786,69 +718,6 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
-}
-
-@Composable
-private fun TrendBars(trends: List<MonthlyTrend>) {
-    val maxValue = trends.maxOf { it.total }.coerceAtLeast(1.0)
-    val lastIdx = trends.size - 1
-
-    Row(
-        modifier = Modifier.fillMaxWidth().height(120.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        trends.forEachIndexed { i, trend ->
-            val fraction = (trend.total / maxValue).toFloat().coerceIn(0f, 1f)
-            val isHighlight = i == lastIdx
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                if (isHighlight && trend.total > 0) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(100.dp))
-                            .background(AmberSoft)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            fmtINR(trend.total),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.5.sp,
-                            color = Ink,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-                val barHeight = ((100 * fraction).dp).coerceAtLeast(if (trend.total > 0) 2.dp else 0.dp)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(barHeight)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            when {
-                                trend.total == 0.0 -> Ink.copy(alpha = 0.05f)
-                                isHighlight -> Ink
-                                else -> Ink.copy(alpha = 0.20f)
-                            }
-                        )
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    trend.label.uppercase(),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = if (isHighlight) Ink else Muted,
-                    fontWeight = if (isHighlight) FontWeight.SemiBold else FontWeight.Normal,
-                    letterSpacing = 0.4.sp
-                )
-            }
-        }
-    }
 }
 
 @Composable

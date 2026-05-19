@@ -21,7 +21,7 @@ import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 
-@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class], version = 11, exportSchema = false)
+@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class], version = 12, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
@@ -44,6 +44,18 @@ abstract class AppDatabase : RoomDatabase() {
                     "categoryId INTEGER NOT NULL DEFAULT -1, " +
                     "enabled INTEGER NOT NULL DEFAULT 1)"
                 )
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // No schema changes between v2 and v3 in original release
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // No schema changes between v3 and v4 in original release
             }
         }
 
@@ -117,11 +129,19 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE bills ADD COLUMN autoLog INTEGER NOT NULL DEFAULT 0")
-                // Migrate recurring templates into bills (autoLog=1, dueDayOfMonth=1, reminderDays=0)
                 database.execSQL(
                     "INSERT INTO bills (name, amount, dueDayOfMonth, reminderDays, categoryId, isEnabled, autoLog) " +
                     "SELECT name, amount, 1, 0, categoryId, enabled, 1 FROM recurring_templates"
                 )
+            }
+        }
+
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // UPI is the right default: covers existing "Manual", "SMS", "UPI" source entries
+                database.execSQL("ALTER TABLE expenses ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT 'UPI'")
+                // Existing "Manual" entries with no payment info — leave as UPI (most common in India)
+                // Existing "SMS"/"UPI" entries — already UPI, default is correct
             }
         }
 
@@ -132,7 +152,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "expense_tracker.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration()
                 .build().also { INSTANCE = it }
             }

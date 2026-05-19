@@ -39,18 +39,20 @@ class SmsReceiver : BroadcastReceiver() {
                 val categories = db.categoryDao().getAll().first()
 
                 transactions.forEach { (transaction, body, _) ->
-                    if (isDuplicate(db, transaction.amount, transaction.description, body)) return@forEach
-                    
+                    val isCc = SmsParser.isCreditCardSms(body)
+                    val source = if (isCc) "CC-SMS" else "SMS"
+                    if (isDuplicate(db, transaction.amount, transaction.description, body, source)) return@forEach
+
                     // Smart auto-categorization with fuzzy matching
                     val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)
                     val finalCategoryId = mappedCategoryId ?: -1L
-                    
                     val expense = Expense(
                         amount = transaction.amount,
                         description = transaction.description,
                         categoryId = finalCategoryId,
-                        source = "SMS",
-                        rawSms = body
+                        source = source,
+                        rawSms = body,
+                        paymentMethod = SmsParser.detectPaymentMethod(body)
                     )
                     val id = db.expenseDao().insert(expense)
                     NotificationHelper.showCategorizationNotification(
@@ -64,13 +66,13 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun isDuplicate(db: AppDatabase, amount: Double, description: String, body: String): Boolean {
+    private suspend fun isDuplicate(db: AppDatabase, amount: Double, description: String, body: String, source: String): Boolean {
         val now = System.currentTimeMillis()
         // Cross-source: UPI notification + bank SMS arrive within seconds for the same transaction.
-        // Descriptions differ between sources, so match on amount only within 3 minutes.
-        if (db.expenseDao().getRecentByAmountFromDifferentSource(amount, "SMS", now - 3 * 60 * 1000L) > 0) return true
-        // Same-source: SMS broadcast fired twice or identical message received (30-sec window)
-        if (db.expenseDao().getRecentByAmountAndContentFromSameSource(amount, "SMS", body, now - 30 * 1000L) > 0) return true
+        // Use the actual source so CC-SMS is excluded, not "SMS".
+        if (db.expenseDao().getRecentByAmountFromDifferentSource(amount, source, now - 3 * 60 * 1000L) > 0) return true
+        // Same-source: SMS broadcast fired twice or identical message received (30-sec window).
+        if (db.expenseDao().getRecentByAmountAndContentFromSameSource(amount, source, body, now - 30 * 1000L) > 0) return true
         return false
     }
 }

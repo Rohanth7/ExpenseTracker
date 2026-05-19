@@ -62,11 +62,14 @@ class SettingsViewModel(
         loanRepo.insert(Loan(name = name, emoji = emoji, totalAmount = totalAmount, monthlyEmi = monthlyEmi, tenureMonths = tenureMonths, startDate = startDate, dueDayOfMonth = dueDayOfMonth))
     }
 
+    fun updateLoan(loan: Loan) = viewModelScope.launch { loanRepo.update(loan) }
     fun deleteLoan(loan: Loan) = viewModelScope.launch { loanRepo.delete(loan) }
 
     fun addBill(name: String, amount: Double, dueDayOfMonth: Int, reminderDays: Int, categoryId: Long, autoLog: Boolean = false) = viewModelScope.launch {
         billRepo.insert(Bill(name = name, amount = amount, dueDayOfMonth = dueDayOfMonth, reminderDays = reminderDays, categoryId = categoryId, autoLog = autoLog))
     }
+
+    fun updateBill(bill: Bill) = viewModelScope.launch { billRepo.update(bill) }
 
     fun toggleBill(bill: Bill) = viewModelScope.launch {
         billRepo.update(bill.copy(isEnabled = !bill.isEnabled))
@@ -100,7 +103,11 @@ class SettingsViewModel(
 
     private val _widgetEnabled = MutableStateFlow(prefs.widgetEnabled)
     val widgetEnabled: StateFlow<Boolean> = _widgetEnabled.asStateFlow()
-    fun setWidgetEnabled(enabled: Boolean) { prefs.widgetEnabled = enabled; _widgetEnabled.value = enabled }
+    fun setWidgetEnabled(enabled: Boolean) {
+        prefs.widgetEnabled = enabled
+        _widgetEnabled.value = enabled
+        com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
+    }
 
     private val _autoBackupEnabled = MutableStateFlow(prefs.autoBackupEnabled)
     val autoBackupEnabled: StateFlow<Boolean> = _autoBackupEnabled.asStateFlow()
@@ -198,58 +205,58 @@ class SettingsViewModel(
 
         // May 2026 (current month)
         val mayExpenses = listOf(
-            Expense(amount = 22000.0, description = "Rent May",              categoryId = rentId,      date = d(2026, 5, 1),  source = "Manual"),
-            Expense(amount = 450.0,  description = "Swiggy Biryani",         categoryId = foodId,      date = d(2026, 5, 3),  source = "SMS"),
-            Expense(amount = 85.0,   description = "Ola Auto",               categoryId = transportId, date = d(2026, 5, 5),  source = "SMS"),
-            Expense(amount = 320.0,  description = "Zomato Pizza",           categoryId = foodId,      date = d(2026, 5, 7),  source = "SMS"),
-            Expense(amount = 200.0,  description = "Metro Card Recharge",    categoryId = transportId, date = d(2026, 5, 8),  source = "Manual"),
-            Expense(amount = 799.0,  description = "Amazon T-Shirt",         categoryId = shoppingId,  date = d(2026, 5, 9),  source = "SMS"),
-            Expense(amount = 499.0,  description = "Netflix Subscription",   categoryId = entertainId, date = d(2026, 5, 10), source = "Manual"),
-            Expense(amount = 340.0,  description = "Apollo Pharmacy",        categoryId = healthId,    date = d(2026, 5, 11), source = "Manual"),
-            Expense(amount = 1850.0, description = "Electricity Bill",       categoryId = utilitiesId, date = d(2026, 5, 12), source = "Manual"),
-            Expense(amount = 280.0,  description = "Domino's Pizza",         categoryId = foodId,      date = d(2026, 5, 13), source = "SMS"),
-            Expense(amount = 320.0,  description = "Uber Cab",               categoryId = transportId, date = d(2026, 5, 14), source = "SMS"),
-            Expense(amount = 2100.0, description = "BigBazaar Grocery",      categoryId = shoppingId,  date = d(2026, 5, 15), source = "Manual"),
-            Expense(amount = 450.0,  description = "BookMyShow",             categoryId = entertainId, date = d(2026, 5, 16), source = "SMS"),
-            Expense(amount = 60.0,   description = "Rapido Bike",            categoryId = transportId, date = d(2026, 5, 17), source = "SMS"),
-            Expense(amount = 120.0,  description = "Chai Point",             categoryId = foodId,      date = d(2026, 5, 17), source = "Manual"),
+            Expense(amount = 22000.0, description = "Rent May",              categoryId = rentId,      date = d(2026, 5, 1),  source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 450.0,  description = "Swiggy Biryani",         categoryId = foodId,      date = d(2026, 5, 3),  source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 85.0,   description = "Ola Auto",               categoryId = transportId, date = d(2026, 5, 5),  source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 320.0,  description = "Zomato Pizza",           categoryId = foodId,      date = d(2026, 5, 7),  source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 200.0,  description = "Metro Card Recharge",    categoryId = transportId, date = d(2026, 5, 8),  source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 799.0,  description = "Amazon T-Shirt",         categoryId = shoppingId,  date = d(2026, 5, 9),  source = "CC-SMS",     paymentMethod = "Credit Card"),
+            Expense(amount = 499.0,  description = "Netflix Subscription",   categoryId = entertainId, date = d(2026, 5, 10), source = "Manual",     paymentMethod = "Credit Card"),
+            Expense(amount = 340.0,  description = "Apollo Pharmacy",        categoryId = healthId,    date = d(2026, 5, 11), source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 1850.0, description = "Electricity Bill",       categoryId = utilitiesId, date = d(2026, 5, 12), source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 280.0,  description = "Domino's Pizza",         categoryId = foodId,      date = d(2026, 5, 13), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 320.0,  description = "Uber Cab",               categoryId = transportId, date = d(2026, 5, 14), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 2100.0, description = "BigBazaar Grocery",      categoryId = shoppingId,  date = d(2026, 5, 15), source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 450.0,  description = "BookMyShow",             categoryId = entertainId, date = d(2026, 5, 16), source = "CC-SMS",     paymentMethod = "Credit Card"),
+            Expense(amount = 60.0,   description = "Rapido Bike",            categoryId = transportId, date = d(2026, 5, 17), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 120.0,  description = "Chai Point",             categoryId = foodId,      date = d(2026, 5, 17), source = "Manual",     paymentMethod = "Cash"),
             // Pending (uncategorized) — triggers the red banner
-            Expense(amount = 1500.0, description = "PhonePe UPI",            categoryId = -1L,         date = d(2026, 5, 18), source = "SMS"),
-            Expense(amount = 230.0,  description = "paytm@upi",              categoryId = -1L,         date = d(2026, 5, 18), source = "SMS"),
-            Expense(amount = 89.0,   description = "merchant@ybl",           categoryId = -1L,         date = d(2026, 5, 18), source = "SMS")
+            Expense(amount = 1500.0, description = "PhonePe UPI",            categoryId = -1L,         date = d(2026, 5, 18), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 230.0,  description = "paytm@upi",              categoryId = -1L,         date = d(2026, 5, 18), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 89.0,   description = "merchant@ybl",           categoryId = -1L,         date = d(2026, 5, 18), source = "SMS",        paymentMethod = "UPI")
         )
 
         // April 2026 (last month)
         val aprExpenses = listOf(
-            Expense(amount = 22000.0, description = "Rent April",            categoryId = rentId,      date = d(2026, 4, 1),  source = "Manual"),
-            Expense(amount = 380.0,  description = "Swiggy Order",           categoryId = foodId,      date = d(2026, 4, 2),  source = "SMS"),
-            Expense(amount = 500.0,  description = "BMTC Monthly Pass",      categoryId = transportId, date = d(2026, 4, 3),  source = "Manual"),
-            Expense(amount = 1499.0, description = "Flipkart Shoes",         categoryId = shoppingId,  date = d(2026, 4, 5),  source = "SMS"),
-            Expense(amount = 1500.0, description = "Cult.fit Gym",           categoryId = entertainId, date = d(2026, 4, 7),  source = "Manual"),
-            Expense(amount = 800.0,  description = "Dentist Clinic",         categoryId = healthId,    date = d(2026, 4, 8),  source = "Manual"),
-            Expense(amount = 350.0,  description = "Water Bill",             categoryId = utilitiesId, date = d(2026, 4, 10), source = "Manual"),
-            Expense(amount = 260.0,  description = "McDonald's",             categoryId = foodId,      date = d(2026, 4, 12), source = "SMS"),
-            Expense(amount = 180.0,  description = "Ola Cab",                categoryId = transportId, date = d(2026, 4, 14), source = "SMS"),
-            Expense(amount = 650.0,  description = "Amazon Books",           categoryId = shoppingId,  date = d(2026, 4, 16), source = "SMS"),
-            Expense(amount = 420.0,  description = "Zomato Burger",          categoryId = foodId,      date = d(2026, 4, 19), source = "SMS"),
-            Expense(amount = 360.0,  description = "INOX Movie",             categoryId = entertainId, date = d(2026, 4, 21), source = "Manual"),
-            Expense(amount = 280.0,  description = "MedPlus Pharmacy",       categoryId = healthId,    date = d(2026, 4, 23), source = "Manual"),
-            Expense(amount = 999.0,  description = "Airtel Internet Bill",   categoryId = utilitiesId, date = d(2026, 4, 25), source = "Manual"),
-            Expense(amount = 540.0,  description = "Myntra Kurta",           categoryId = shoppingId,  date = d(2026, 4, 27), source = "SMS")
+            Expense(amount = 22000.0, description = "Rent April",            categoryId = rentId,      date = d(2026, 4, 1),  source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 380.0,  description = "Swiggy Order",           categoryId = foodId,      date = d(2026, 4, 2),  source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 500.0,  description = "BMTC Monthly Pass",      categoryId = transportId, date = d(2026, 4, 3),  source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 1499.0, description = "Flipkart Shoes",         categoryId = shoppingId,  date = d(2026, 4, 5),  source = "CC-SMS",     paymentMethod = "Credit Card"),
+            Expense(amount = 1500.0, description = "Cult.fit Gym",           categoryId = entertainId, date = d(2026, 4, 7),  source = "Manual",     paymentMethod = "Credit Card"),
+            Expense(amount = 800.0,  description = "Dentist Clinic",         categoryId = healthId,    date = d(2026, 4, 8),  source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 350.0,  description = "Water Bill",             categoryId = utilitiesId, date = d(2026, 4, 10), source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 260.0,  description = "McDonald's",             categoryId = foodId,      date = d(2026, 4, 12), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 180.0,  description = "Ola Cab",                categoryId = transportId, date = d(2026, 4, 14), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 650.0,  description = "Amazon Books",           categoryId = shoppingId,  date = d(2026, 4, 16), source = "CC-SMS",     paymentMethod = "Credit Card"),
+            Expense(amount = 420.0,  description = "Zomato Burger",          categoryId = foodId,      date = d(2026, 4, 19), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 360.0,  description = "INOX Movie",             categoryId = entertainId, date = d(2026, 4, 21), source = "Manual",     paymentMethod = "Credit Card"),
+            Expense(amount = 280.0,  description = "MedPlus Pharmacy",       categoryId = healthId,    date = d(2026, 4, 23), source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 999.0,  description = "Airtel Internet Bill",   categoryId = utilitiesId, date = d(2026, 4, 25), source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 540.0,  description = "Myntra Kurta",           categoryId = shoppingId,  date = d(2026, 4, 27), source = "CC-SMS",     paymentMethod = "Credit Card")
         )
 
         // March 2026 (two months ago)
         val marExpenses = listOf(
-            Expense(amount = 22000.0, description = "Rent March",            categoryId = rentId,      date = d(2026, 3, 1),  source = "Manual"),
-            Expense(amount = 3200.0, description = "DMart Grocery",          categoryId = shoppingId,  date = d(2026, 3, 5),  source = "Manual"),
-            Expense(amount = 480.0,  description = "Swiggy Dinner",          categoryId = foodId,      date = d(2026, 3, 8),  source = "SMS"),
-            Expense(amount = 420.0,  description = "Uber Ride",              categoryId = transportId, date = d(2026, 3, 10), source = "SMS"),
-            Expense(amount = 1650.0, description = "BESCOM Electricity",     categoryId = utilitiesId, date = d(2026, 3, 12), source = "Manual"),
-            Expense(amount = 760.0,  description = "BBQ Nation Dinner",      categoryId = foodId,      date = d(2026, 3, 15), source = "Manual"),
-            Expense(amount = 540.0,  description = "PVR Cinemas",            categoryId = entertainId, date = d(2026, 3, 18), source = "Manual"),
-            Expense(amount = 390.0,  description = "Medanta Pharmacy",       categoryId = healthId,    date = d(2026, 3, 20), source = "Manual"),
-            Expense(amount = 1890.0, description = "Myntra Sale Haul",       categoryId = shoppingId,  date = d(2026, 3, 24), source = "SMS"),
-            Expense(amount = 250.0,  description = "Rapido Auto",            categoryId = transportId, date = d(2026, 3, 28), source = "SMS")
+            Expense(amount = 22000.0, description = "Rent March",            categoryId = rentId,      date = d(2026, 3, 1),  source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 3200.0, description = "DMart Grocery",          categoryId = shoppingId,  date = d(2026, 3, 5),  source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 480.0,  description = "Swiggy Dinner",          categoryId = foodId,      date = d(2026, 3, 8),  source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 420.0,  description = "Uber Ride",              categoryId = transportId, date = d(2026, 3, 10), source = "SMS",        paymentMethod = "UPI"),
+            Expense(amount = 1650.0, description = "BESCOM Electricity",     categoryId = utilitiesId, date = d(2026, 3, 12), source = "Manual",     paymentMethod = "UPI"),
+            Expense(amount = 760.0,  description = "BBQ Nation Dinner",      categoryId = foodId,      date = d(2026, 3, 15), source = "Manual",     paymentMethod = "Credit Card"),
+            Expense(amount = 540.0,  description = "PVR Cinemas",            categoryId = entertainId, date = d(2026, 3, 18), source = "Manual",     paymentMethod = "Credit Card"),
+            Expense(amount = 390.0,  description = "Medanta Pharmacy",       categoryId = healthId,    date = d(2026, 3, 20), source = "Manual",     paymentMethod = "Cash"),
+            Expense(amount = 1890.0, description = "Myntra Sale Haul",       categoryId = shoppingId,  date = d(2026, 3, 24), source = "CC-SMS",     paymentMethod = "Credit Card"),
+            Expense(amount = 250.0,  description = "Rapido Auto",            categoryId = transportId, date = d(2026, 3, 28), source = "SMS",        paymentMethod = "UPI")
         )
 
         (mayExpenses + aprExpenses + marExpenses).forEach { expenseRepo.insert(it) }
@@ -276,6 +283,11 @@ class SettingsViewModel(
         expenseRepo.deleteAll()
         categoryRepo.deleteAll()
         recurringRepo.deleteAll()
+        billRepo.deleteAll()
+        loanRepo.deleteAll()
+        savingsGoalRepo.deleteAll()
+        prefs.monthlyIncome = 0.0
+        _monthlyIncome.value = 0.0
         snackbarMessage = "All data deleted"
     }
 

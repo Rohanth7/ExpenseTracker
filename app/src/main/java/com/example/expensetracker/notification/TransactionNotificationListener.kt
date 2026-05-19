@@ -59,7 +59,8 @@ class TransactionNotificationListener : NotificationListenerService() {
                 description = transaction.description,
                 categoryId = finalCategoryId,
                 source = "UPI",
-                rawSms = body
+                rawSms = body,
+                paymentMethod = "UPI"
             )
             val id = db.expenseDao().insert(expense)
             NotificationHelper.showCategorizationNotification(

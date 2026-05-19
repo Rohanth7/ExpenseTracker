@@ -1,7 +1,10 @@
 package com.example.expensetracker.ui.widgets
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.widget.RemoteViews
 import androidx.compose.ui.graphics.Color
+import com.example.expensetracker.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -22,25 +25,22 @@ import java.util.*
 
 class ExpenseWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        provideContent {
-            val db = AppDatabase.getInstance(context)
-            val prefs = PreferencesManager(context)
-            
-            val cal = Calendar.getInstance()
-            val start = cal.apply {
-                set(Calendar.DAY_OF_MONTH, 1)
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-            val end = Calendar.getInstance().apply {
-                set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-                set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
-            }.timeInMillis
+        val db = AppDatabase.getInstance(context)
+        val prefs = PreferencesManager(context)
 
-            val totalSpentState = androidx.compose.runtime.produceState(initialValue = 0.0) {
-                value = db.expenseDao().getTotalSpentInRange(start, end)
-            }
-            
-            WidgetContent(totalSpentState.value, prefs.monthlyIncome, prefs.widgetEnabled, prefs.privacyMode)
+        val cal = Calendar.getInstance()
+        val start = (cal.clone() as Calendar).apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val end = (cal.clone() as Calendar).apply {
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
+        }.timeInMillis
+
+        val spent = db.expenseDao().getTotalSpentInRange(start, end)
+        provideContent {
+            WidgetContent(spent, prefs.monthlyIncome, prefs.widgetEnabled, prefs.privacyMode)
         }
     }
 
@@ -128,4 +128,10 @@ class ExpenseWidget : GlanceAppWidget() {
 
 class ExpenseWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = ExpenseWidget()
+
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        val placeholder = RemoteViews(context.packageName, R.layout.widget_initial_layout)
+        appWidgetIds.forEach { id -> appWidgetManager.updateAppWidget(id, placeholder) }
+        super.onUpdate(context, appWidgetManager, appWidgetIds)
+    }
 }

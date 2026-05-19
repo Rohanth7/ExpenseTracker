@@ -349,8 +349,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
         AddExpenseDialog(
             categories = categories,
             onDismiss = { showAddDialog = false },
-            onConfirm = { amount, description, categoryId, date, tags ->
-                viewModel.addExpense(amount, description, categoryId, date, tags)
+            onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
+                viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
                 showAddDialog = false
             }
         )
@@ -361,8 +361,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
             expense = expense,
             categories = categories,
             onDismiss = { editingExpense = null },
-            onConfirm = { amount, description, categoryId, date, tags ->
-                viewModel.updateExpense(expense, amount, description, categoryId, date, tags)
+            onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
+                viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
             }
         )
@@ -791,7 +791,7 @@ private fun categoryDisplayText(category: Category?, allCategories: List<Categor
 private fun AddExpenseDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long, String) -> Unit
+    onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -800,6 +800,7 @@ private fun AddExpenseDialog(
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
+    var selectedPaymentMethod by remember { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AlertDialog(
@@ -839,6 +840,16 @@ private fun AddExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("UPI", "Credit Card", "Cash").forEach { method ->
+                        FilterChip(
+                            selected = selectedPaymentMethod == method,
+                            onClick = { selectedPaymentMethod = method },
+                            label = { Text(method, fontSize = 12.sp) }
+                        )
+                    }
+                }
                 if (categories.isNotEmpty()) {
                     val parents = remember(categories) { categories.filter { it.parentId == null } }
                     val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
@@ -887,7 +898,7 @@ private fun AddExpenseDialog(
                     if (selectedCategoryId == -1L && categories.isNotEmpty()) {
                         selectedCategoryId = categories.first().id
                     }
-                    onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim())
+                    onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim(), selectedPaymentMethod)
                 }
             ) { Text("Add", color = if (categories.isNotEmpty()) Jade else Muted) }
         },
@@ -901,7 +912,7 @@ private fun EditExpenseDialog(
     expense: Expense,
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long, String) -> Unit
+    onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("%.2f".format(expense.amount)) }
     var description by remember { mutableStateOf(expense.description) }
@@ -910,6 +921,7 @@ private fun EditExpenseDialog(
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(expense.date)) }
+    var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AlertDialog(
@@ -942,6 +954,16 @@ private fun EditExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("UPI", "Credit Card", "Cash").forEach { method ->
+                        FilterChip(
+                            selected = selectedPaymentMethod == method,
+                            onClick = { selectedPaymentMethod = method },
+                            label = { Text(method, fontSize = 12.sp) }
+                        )
+                    }
+                }
                 val editParents = remember(categories) { categories.filter { it.parentId == null } }
                 val editChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -983,7 +1005,7 @@ private fun EditExpenseDialog(
             TextButton(onClick = {
                 val amt = amount.toDoubleOrNull()
                 if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
-                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim())
+                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim(), selectedPaymentMethod)
             }) { Text("Save", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }

@@ -10,18 +10,34 @@ import kotlinx.coroutines.flow.*
 import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class ViewMode { MONTHLY, ANNUAL }
 
 data class MonthStat(val label: String, val total: Double, val start: Long, val end: Long)
-data class CategoryYearlyStat(val category: Category, val total: Double)
+data class SubcategoryRow(val category: Category, val amount: Double)
+data class CategoryYearlyStat(val category: Category, val total: Double, val subcategories: List<SubcategoryRow> = emptyList())
 data class CategoryTrend(val label: String, val amount: Double)
 data class SubcategoryBreakdown(val category: Category, val amount: Double, val fraction: Float)
 
 data class PaymentSplit(
+    val upiAmount: Double = 0.0,
+    val creditCardAmount: Double = 0.0,
+    val cashAmount: Double = 0.0
+) {
+    val total get() = upiAmount + creditCardAmount + cashAmount
+    fun fraction(amount: Double) = if (total > 0) (amount / total).toFloat().coerceIn(0f, 1f) else 0f
+}
+
+data class MonthlyInsight(val emoji: String, val label: String, val detail: String)
+
+data class DetectionSplit(
     val autoAmount: Double = 0.0,
+    val autoCount: Int = 0,
     val manualAmount: Double = 0.0,
-    val recurringAmount: Double = 0.0
+    val manualCount: Int = 0,
+    val recurringAmount: Double = 0.0,
+    val recurringCount: Int = 0
 ) {
     val total get() = autoAmount + manualAmount + recurringAmount
     fun fraction(amount: Double) = if (total > 0) (amount / total).toFloat().coerceIn(0f, 1f) else 0f
@@ -51,6 +67,7 @@ data class StatisticsUiState(
     val selectedCategoryTrend: List<CategoryTrend>? = null,
     val selectedCategory: Category? = null,
     val paymentSplit: PaymentSplit = PaymentSplit(),
+    val detectionSplit: DetectionSplit = DetectionSplit(),
     val subcategoryBreakdown: List<SubcategoryBreakdown>? = null,
     val autoTrackStats: AutoTrackStats = AutoTrackStats(),
     // Monthly view
@@ -59,6 +76,8 @@ data class StatisticsUiState(
     val monthCategories: List<CategoryYearlyStat> = emptyList(),
     val monthVsLastPct: Int? = null,
     val monthPaymentSplit: PaymentSplit = PaymentSplit(),
+    val monthDetectionSplit: DetectionSplit = DetectionSplit(),
+    val monthInsight: MonthlyInsight? = null,
     val canGoForwardMonth: Boolean = false,
     val monthStart: Long = 0L,
     val monthEnd: Long = 0L
@@ -120,9 +139,13 @@ class StatisticsViewModel(
 
         val parentCategories = categories.filter { it.parentId == null }
         val topCategories = parentCategories.map { parent ->
-            val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
+            val children = categories.filter { it.parentId == parent.id }
+            val childIds = children.map { it.id }.toSet()
             val total = yearExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
-            CategoryYearlyStat(parent, total)
+            val subcats = children.map { child ->
+                SubcategoryRow(child, yearExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
+            }.filter { it.amount > 0 }.sortedByDescending { it.amount }
+            CategoryYearlyStat(parent, total, subcats)
         }.filter { it.total > 0 }.sortedByDescending { it.total }
 
         // Category trend for last 6 months
@@ -176,9 +199,17 @@ class StatisticsViewModel(
 
         fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
         val split = PaymentSplit(
+            upiAmount = yearExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
+            creditCardAmount = yearExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
+            cashAmount = yearExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
+        )
+        val detectionSplit = DetectionSplit(
             autoAmount = yearExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
+            autoCount = yearExpenses.count { isAutoSource(it.source) },
             manualAmount = yearExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
-            recurringAmount = yearExpenses.filter { it.source == "Recurring" }.sumOf { it.amount }
+            manualCount = yearExpenses.count { it.source == "Manual" },
+            recurringAmount = yearExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
+            recurringCount = yearExpenses.count { it.source == "Recurring" }
         )
 
         val todayStartMs = Calendar.getInstance().apply {
@@ -247,15 +278,29 @@ class StatisticsViewModel(
         val mVsLastPct = if (prevTotal > 0) ((mTotal - prevTotal) / prevTotal * 100).toInt() else null
         val mLabel = "${MONTHS[mMonth]} $mYear"
         val mCategories = parentCategories.map { parent ->
-            val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
+            val children = categories.filter { it.parentId == parent.id }
+            val childIds = children.map { it.id }.toSet()
             val total = monthExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
-            CategoryYearlyStat(parent, total)
+            val subcats = children.map { child ->
+                SubcategoryRow(child, monthExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
+            }.filter { it.amount > 0 }.sortedByDescending { it.amount }
+            CategoryYearlyStat(parent, total, subcats)
         }.filter { it.total > 0 }.sortedByDescending { it.total }
         val mPaymentSplit = PaymentSplit(
-            autoAmount = monthExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
-            manualAmount = monthExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
-            recurringAmount = monthExpenses.filter { it.source == "Recurring" }.sumOf { it.amount }
+            upiAmount = monthExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
+            creditCardAmount = monthExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
+            cashAmount = monthExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
         )
+        val mDetectionSplit = DetectionSplit(
+            autoAmount = monthExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
+            autoCount = monthExpenses.count { isAutoSource(it.source) },
+            manualAmount = monthExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
+            manualCount = monthExpenses.count { it.source == "Manual" },
+            recurringAmount = monthExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
+            recurringCount = monthExpenses.count { it.source == "Recurring" }
+        )
+
+        val mInsight = buildMonthlyInsight(monthExpenses, prevTotal, categories, mYear, mMonth, monthOffset == 0)
 
         StatisticsUiState(
             yearLabel = year.toString(),
@@ -270,6 +315,7 @@ class StatisticsViewModel(
             selectedCategoryTrend = trend,
             selectedCategory = selectedCategory,
             paymentSplit = split,
+            detectionSplit = detectionSplit,
             subcategoryBreakdown = subcategoryBreakdown,
             autoTrackStats = autoStats,
             monthLabel = mLabel,
@@ -277,6 +323,8 @@ class StatisticsViewModel(
             monthCategories = mCategories,
             monthVsLastPct = mVsLastPct,
             monthPaymentSplit = mPaymentSplit,
+            monthDetectionSplit = mDetectionSplit,
+            monthInsight = mInsight,
             canGoForwardMonth = monthOffset < 0,
             monthStart = mStart,
             monthEnd = mEnd
@@ -287,6 +335,91 @@ class StatisticsViewModel(
     fun goToNextYear() { if (_yearOffset.value < 0) _yearOffset.value++ }
 
     fun selectCategory(id: Long?) { _selectedCategoryId.value = id }
+
+    private fun buildMonthlyInsight(
+        monthExpenses: List<com.example.expensetracker.data.db.entity.Expense>,
+        prevTotal: Double,
+        categories: List<Category>,
+        mYear: Int,
+        mMonth: Int,
+        isCurrentMonth: Boolean
+    ): MonthlyInsight? {
+        if (monthExpenses.isEmpty()) return null
+        val total = monthExpenses.sumOf { it.amount }
+        val numFmt = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }
+        fun fmt(v: Double) = numFmt.format(v)
+
+        val lastDayOfMonth = Calendar.getInstance().apply { set(mYear, mMonth, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val effectiveDay = if (isCurrentMonth) Calendar.getInstance().get(Calendar.DAY_OF_MONTH) else lastDayOfMonth
+        // Previous month's day count for accurate pace calculation
+        val prevCal = Calendar.getInstance().apply { set(mYear, mMonth, 1); add(Calendar.MONTH, -1) }
+        val prevLastDay = prevCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+        val pool = mutableListOf<MonthlyInsight>()
+
+        // vs previous month
+        if (prevTotal > 0) {
+            val pct = if (isCurrentMonth) {
+                val prevPaced = prevTotal / prevLastDay * effectiveDay
+                if (prevPaced > 0) ((total - prevPaced) / prevPaced * 100).roundToInt() else null
+            } else {
+                ((total - prevTotal) / prevTotal * 100).roundToInt()
+            }
+            if (pct != null) when {
+                pct > 20 -> pool.add(MonthlyInsight("📈", "${pct}% up on last month", "₹${fmt(kotlin.math.abs(total - prevTotal))} more than ${if (isCurrentMonth) "at this point last month" else "last month"}"))
+                pct < -15 -> pool.add(MonthlyInsight("📉", "${-pct}% under last month", "₹${fmt(kotlin.math.abs(total - prevTotal))} less than last month — great job!"))
+            }
+        }
+
+        // Most-visited merchant (≥ 2 times)
+        val topMerchant = monthExpenses.groupBy { it.description.trim().lowercase() }
+            .entries.filter { it.value.size >= 2 }.maxByOrNull { it.value.size }
+        if (topMerchant != null) {
+            val name = monthExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
+            pool.add(MonthlyInsight("🛒", "$name · ${topMerchant.value.size}×", "₹${fmt(topMerchant.value.sumOf { it.amount })} across ${topMerchant.value.size} transactions"))
+        }
+
+        // No-spend days
+        val daysWithSpend = monthExpenses.map { Calendar.getInstance().apply { timeInMillis = it.date }.get(Calendar.DAY_OF_MONTH) }.toSet()
+        val noSpendDays = (1..effectiveDay).count { it !in daysWithSpend }
+        if (noSpendDays >= 3) pool.add(MonthlyInsight("✨", "$noSpendDays no-spend days", "You went $noSpendDays day${if (noSpendDays != 1) "s" else ""} without spending this month"))
+
+        // Weekend vs weekday daily spend
+        var wkendTotal = 0.0; var wkdayTotal = 0.0
+        monthExpenses.forEach { exp ->
+            val dow = Calendar.getInstance().apply { timeInMillis = exp.date }.get(Calendar.DAY_OF_WEEK)
+            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendTotal += exp.amount else wkdayTotal += exp.amount
+        }
+        var wkendDays = 0; var wkdayDays = 0
+        for (d in 1..effectiveDay) {
+            val dow = Calendar.getInstance().apply { set(mYear, mMonth, d) }.get(Calendar.DAY_OF_WEEK)
+            if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendDays++ else wkdayDays++
+        }
+        val wkendPerDay = if (wkendDays > 0) wkendTotal / wkendDays else 0.0
+        val wkdayPerDay = if (wkdayDays > 0) wkdayTotal / wkdayDays else 0.0
+        if (wkdayPerDay > 50 && wkendPerDay > 0 && wkendPerDay / wkdayPerDay >= 1.5) {
+            val ratio = "%.1f".format(wkendPerDay / wkdayPerDay)
+            pool.add(MonthlyInsight("🎉", "${ratio}× more on weekends", "₹${fmt(wkendPerDay)}/day on weekends vs ₹${fmt(wkdayPerDay)}/day on weekdays"))
+        }
+
+        // Top category dominance (> 38%)
+        val parentCats = categories.filter { it.parentId == null }
+        val topCat = parentCats.map { parent ->
+            val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
+            val catTotal = monthExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
+            parent to catTotal
+        }.filter { it.second > 0 }.maxByOrNull { it.second }
+        if (topCat != null && (topCat.second / total * 100) > 38) {
+            val pct = (topCat.second / total * 100).roundToInt()
+            pool.add(MonthlyInsight(topCat.first.emoji, "${topCat.first.name} takes the most", "$pct% of this month — ₹${fmt(topCat.second)}"))
+        }
+
+        // Biggest expense (fallback)
+        val biggest = monthExpenses.maxByOrNull { it.amount }
+        if (biggest != null) pool.add(MonthlyInsight("💸", "Biggest expense", "${biggest.description} · ₹${fmt(biggest.amount)}"))
+
+        return pool.firstOrNull()
+    }
 
     companion object {
         fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository) =

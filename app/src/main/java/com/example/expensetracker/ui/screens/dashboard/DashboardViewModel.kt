@@ -28,8 +28,6 @@ data class CategorySummary(
     val percentage: Float
 )
 
-data class MonthlyTrend(val label: String, val total: Double)
-
 data class SmartInsight(val emoji: String, val label: String, val detail: String)
 
 enum class NotifType { CAPTURE, BUDGET, BILL }
@@ -58,7 +56,6 @@ data class DashboardUiState(
     val pendingCount: Int = 0,
     val monthLabel: String = "",
     val canGoForward: Boolean = false,
-    val monthlyTrends: List<MonthlyTrend> = emptyList(),
     val prevMonthDailyPace: Double = 0.0,
     val savingsGoals: List<SavingsGoal> = emptyList(),
     val safeToSpendToday: Double = 0.0,
@@ -103,14 +100,6 @@ class DashboardViewModel(
             val spent = categorizedExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
             CategorySummary(parent, spent, if (categorizedTotal > 0) (spent / categorizedTotal * 100).toFloat() else 0f)
         }.filter { it.spent > 0.0 }.sortedByDescending { it.spent }
-
-        val trends = (5 downTo 0).map { i ->
-            val (s, e) = monthRangeForOffset(-i)
-            MonthlyTrend(
-                label = monthLabelShort(-i),
-                total = expenses.filter { it.date in s..e }.sumOf { it.amount }
-            )
-        }
 
         val (prevStart, prevEnd) = monthRangeForOffset(offset - 1)
         val prevTotal = expenses.filter { it.date in prevStart..prevEnd }.sumOf { it.amount }
@@ -172,7 +161,6 @@ class DashboardViewModel(
             pendingCount = allMonthExpenses.count { it.categoryId == -1L },
             monthLabel = monthLabelFull(offset),
             canGoForward = offset < 0,
-            monthlyTrends = trends,
             prevMonthDailyPace = if (prevDays > 0) prevTotal / prevDays else 0.0,
             savingsGoals = goals,
             safeToSpendToday = safeToSpendToday,
@@ -388,11 +376,6 @@ class DashboardViewModel(
     private fun monthLabelFull(offset: Int): String {
         val cal = Calendar.getInstance().also { it.add(Calendar.MONTH, offset) }
         return "${MONTHS[cal.get(Calendar.MONTH)]} ${cal.get(Calendar.YEAR)}"
-    }
-
-    private fun monthLabelShort(offset: Int): String {
-        val cal = Calendar.getInstance().also { it.add(Calendar.MONTH, offset) }
-        return MONTHS[cal.get(Calendar.MONTH)]
     }
 
     companion object {

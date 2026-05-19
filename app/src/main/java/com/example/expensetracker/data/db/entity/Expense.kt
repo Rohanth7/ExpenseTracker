@@ -16,5 +16,6 @@ data class Expense(
     val date: Long = System.currentTimeMillis(),
     val source: String = "Manual",
     val rawSms: String? = null,
-    val tags: String = ""
+    val tags: String = "",
+    val paymentMethod: String = "UPI"
 )

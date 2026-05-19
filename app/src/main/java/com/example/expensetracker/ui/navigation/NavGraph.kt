@@ -229,7 +229,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
             composable(Screen.Categorize.pattern) { backStackEntry ->
                 val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull() ?: return@composable
                 val vm: CategorizeViewModel = viewModel(
-                    factory = CategorizeViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)
+                    factory = CategorizeViewModel.factory(expenseRepo, categoryRepo, mappingRepo, savingsRepo, loanRepo, context.applicationContext, prefs)
                 )
                 CategorizeScreen(
                     expenseId = expenseId,

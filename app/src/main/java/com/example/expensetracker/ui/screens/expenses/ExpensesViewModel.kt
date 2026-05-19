@@ -169,15 +169,15 @@ class ExpensesViewModel(
         _selectedIds.value = emptySet()
     }
 
-    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "") = viewModelScope.launch {
-        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags))
+    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") = viewModelScope.launch {
+        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
         }
     }
 
-    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "") = viewModelScope.launch {
-        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags))
+    fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = expense.paymentMethod) = viewModelScope.launch {
+        expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
         if (expense.source != "Manual" && categoryId != -1L) {
             mappingRepo.saveMapping(description, categoryId)
         }
