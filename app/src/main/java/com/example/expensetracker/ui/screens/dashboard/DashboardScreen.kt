@@ -476,6 +476,22 @@ fun DashboardScreen(
             }
         }
 
+        // ── Cash Flow Forecast ──────────────────────────────────
+        if (!state.canGoForward && state.monthlyIncome > 0 &&
+            (state.monthlyBillsTotal > 0 || state.totalMonthlyEmi > 0)) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                DsSectionLabel(title = "Cash Flow Forecast", modifier = Modifier.padding(horizontal = 16.dp))
+                CashFlowForecastCard(
+                    income = state.monthlyIncome,
+                    totalSpent = state.totalSpent,
+                    monthlyBillsTotal = state.monthlyBillsTotal,
+                    totalMonthlyEmi = state.totalMonthlyEmi,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
+
         // ── Savings Goals ───────────────────────────────────────
         item {
             Spacer(Modifier.height(4.dp))
@@ -779,6 +795,116 @@ private fun DepositDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
+}
+
+@Composable
+private fun CashFlowForecastCard(
+    income: Double,
+    totalSpent: Double,
+    monthlyBillsTotal: Double,
+    totalMonthlyEmi: Double,
+    modifier: Modifier = Modifier
+) {
+    val freeAmount = income - totalSpent - monthlyBillsTotal - totalMonthlyEmi
+    val isOver = freeAmount < 0
+
+    // Bar fractions — each clamped so the cumulative total never exceeds 1.0
+    val spentFrac  = (totalSpent / income).coerceIn(0.0, 1.0).toFloat()
+    val afterSpent = (1f - spentFrac).coerceAtLeast(0f)
+    val billsFrac  = (monthlyBillsTotal / income).toFloat().coerceIn(0f, afterSpent)
+    val afterBills = (afterSpent - billsFrac).coerceAtLeast(0f)
+    val emiFrac    = (totalMonthlyEmi / income).toFloat().coerceIn(0f, afterBills)
+    val freeFrac   = (1f - spentFrac - billsFrac - emiFrac).coerceAtLeast(0f)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Paper)
+            .padding(18.dp)
+    ) {
+        Text(
+            "₹${fmtINR(income)} monthly income",
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            color = Muted
+        )
+        Spacer(Modifier.height(10.dp))
+
+        // Stacked bar — segments use weight() so widths are proportional without BoxWithConstraints
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(100.dp))
+                .background(HairlineSoft)
+        ) {
+            Row(Modifier.fillMaxSize()) {
+                if (spentFrac > 0f)  Box(Modifier.fillMaxHeight().weight(spentFrac).background(Coral))
+                if (billsFrac > 0f)  Box(Modifier.fillMaxHeight().weight(billsFrac).background(Amber))
+                if (emiFrac > 0f)    Box(Modifier.fillMaxHeight().weight(emiFrac).background(Muted))
+                if (freeFrac > 0f)   Box(Modifier.fillMaxHeight().weight(freeFrac).background(Jade))
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        ForecastRow(dotColor = Coral, label = "Spent so far", amount = totalSpent)
+        if (monthlyBillsTotal > 0) {
+            Spacer(Modifier.height(8.dp))
+            ForecastRow(dotColor = Amber, label = "Bills due", amount = monthlyBillsTotal)
+        }
+        if (totalMonthlyEmi > 0) {
+            Spacer(Modifier.height(8.dp))
+            ForecastRow(dotColor = Muted, label = "EMI commitments", amount = totalMonthlyEmi)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (isOver) "Over-committed" else "Free to spend",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (isOver) Coral else Ink
+            )
+            Text(
+                if (isOver) "–₹${fmtINR(-freeAmount)}" else "₹${fmtINR(freeAmount)}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = if (isOver) Coral else Jade
+            )
+        }
+    }
+}
+
+@Composable
+private fun ForecastRow(dotColor: Color, label: String, amount: Double) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
+            Text(label, fontSize = 12.sp, color = Muted)
+        }
+        Text(
+            "₹${fmtINR(amount)}",
+            fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace,
+            color = Ink
+        )
+    }
 }
 
 @Composable

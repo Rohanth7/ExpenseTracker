@@ -63,6 +63,7 @@ data class DashboardUiState(
     val upcomingBills: List<UpcomingBill> = emptyList(),
     val activeLoans: List<LoanStatus> = emptyList(),
     val totalMonthlyEmi: Double = 0.0,
+    val monthlyBillsTotal: Double = 0.0,
     val smartInsight: SmartInsight? = null,
     val notifItems: List<NotifItem> = emptyList()
 )
@@ -145,6 +146,9 @@ class DashboardViewModel(
             )
         }.sortedBy { it.loan.name }
         val totalMonthlyEmi = activeLoans.sumOf { it.loan.monthlyEmi }
+        val monthlyBillsTotal = if (offset == 0)
+            bills.filter { it.isEnabled && !it.autoLog }.sumOf { it.amount }
+        else 0.0
 
         val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         val insightPool = if (offset != 0 || total == 0.0 || dayOfMonth < 3) emptyList()
@@ -169,6 +173,7 @@ class DashboardViewModel(
             upcomingBills = upcomingBills,
             activeLoans = activeLoans,
             totalMonthlyEmi = totalMonthlyEmi,
+            monthlyBillsTotal = monthlyBillsTotal,
             smartInsight = smartInsight,
             notifItems = notifItems
         )
