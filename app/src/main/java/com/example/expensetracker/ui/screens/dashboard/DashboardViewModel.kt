@@ -155,9 +155,7 @@ class DashboardViewModel(
             activeLoans.filter { it.loan.startDate <= end && it.loan.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }
                 .sumOf { it.loan.monthlyEmi }
         else 0.0
-        val billsStillDue = if (offset == 0)
-            bills.filter { it.isEnabled && !it.autoLog && it.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }.sumOf { it.amount }
-        else 0.0
+        val billsStillDue = if (offset == 0) CashFlow.billsStillDue(bills, today, daysInMonth) else 0.0
 
         val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         val insightPool = if (offset != 0 || total == 0.0 || dayOfMonth < 3) emptyList()
@@ -182,7 +180,7 @@ class DashboardViewModel(
             upcomingBills = upcomingBills,
             activeLoans = activeLoans,
             totalMonthlyEmi = totalMonthlyEmi,
-            hasCommitments = activeLoans.isNotEmpty() || bills.any { it.isEnabled && !it.autoLog },
+            hasCommitments = activeLoans.isNotEmpty() || bills.any { it.isEnabled },
             billsStillDue = billsStillDue,
             emiStillDue = emiStillDue,
             smartInsight = smartInsight,

@@ -11,7 +11,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class TransactionNotificationListener : NotificationListenerService() {
@@ -40,7 +39,6 @@ class TransactionNotificationListener : NotificationListenerService() {
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
             // With no categories yet the expense is still saved, as pending (categoryId -1).
-            val categories = db.categoryDao().getAll().first()
             val now = System.currentTimeMillis()
             // Cross-source: bank SMS + UPI notification arrive within seconds for the same transaction.
             // Descriptions differ between sources, so match on amount only within 3 minutes.
@@ -63,7 +61,8 @@ class TransactionNotificationListener : NotificationListenerService() {
             )
             val id = db.expenseDao().insert(expense)
             NotificationHelper.showCategorizationNotification(
-                applicationContext, id, transaction.amount, transaction.description, categories
+                applicationContext, id, transaction.amount, transaction.description,
+                QuickCategories.forNewExpense(db, mappedCategoryId)
             )
             WidgetUpdateHelper.update(applicationContext)
         }

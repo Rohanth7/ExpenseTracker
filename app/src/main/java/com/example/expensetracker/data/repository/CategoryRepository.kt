@@ -14,11 +14,17 @@ class CategoryRepository(private val dao: CategoryDao, private val expenseDao: E
     suspend fun getById(id: Long): Category? = dao.getById(id)
     suspend fun getAll(): List<Category> = dao.getAllOnce()
 
-    // Reset expenses to pending before deleting so they don't silently orphan
+    // Expenses go back to pending, bills become uncategorized and learned merchants are forgotten,
+    // so nothing keeps pointing at the deleted category.
     suspend fun delete(category: Category) {
         expenseDao.resetCategoryForExpenses(category.id)
+        dao.clearBillCategory(category.id)
+        dao.deleteMerchantMappingsFor(category.id)
         dao.delete(category)
     }
 
-    suspend fun deleteAll() = dao.deleteAll()
+    suspend fun deleteAll() {
+        dao.deleteAllMerchantMappings()
+        dao.deleteAll()
+    }
 }

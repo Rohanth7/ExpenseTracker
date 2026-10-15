@@ -32,4 +32,16 @@ interface CategoryDao {
 
     @Query("DELETE FROM categories")
     suspend fun deleteAll()
+
+    // Other tables point at categories by id without a foreign key, so deleting a category has to
+    // clean them up itself. Learned merchants would otherwise file new payments under a category
+    // that no longer exists, where they disappear from every list.
+    @Query("DELETE FROM merchant_mappings WHERE categoryId = :categoryId")
+    suspend fun deleteMerchantMappingsFor(categoryId: Long)
+
+    @Query("UPDATE bills SET categoryId = -1 WHERE categoryId = :categoryId")
+    suspend fun clearBillCategory(categoryId: Long)
+
+    @Query("DELETE FROM merchant_mappings")
+    suspend fun deleteAllMerchantMappings()
 }
