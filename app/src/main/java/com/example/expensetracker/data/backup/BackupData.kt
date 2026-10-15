@@ -56,7 +56,9 @@ object BackupCodec {
     const val CURRENT_VERSION = 2
     private val gson = Gson()
 
-    fun toJson(data: BackupData): String = gson.toJson(data)
+    /** Captured SMS/notification text never goes into a backup; parsed amount and payee do. */
+    fun toJson(data: BackupData): String =
+        gson.toJson(data.copy(expenses = data.expenses?.map { it.copy(rawSms = null) }))
 
     /**
      * Parses and checks a backup before anything on the phone is touched. Gson ignores Kotlin
