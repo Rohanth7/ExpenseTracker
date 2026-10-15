@@ -477,16 +477,15 @@ fun DashboardScreen(
         }
 
         // ── Cash Flow Forecast ──────────────────────────────────
-        if (!state.canGoForward && state.monthlyIncome > 0 &&
-            (state.monthlyBillsTotal > 0 || state.totalMonthlyEmi > 0)) {
+        if (!state.canGoForward && state.monthlyIncome > 0 && state.hasCommitments) {
             item {
                 Spacer(Modifier.height(4.dp))
                 DsSectionLabel(title = "Cash Flow Forecast", modifier = Modifier.padding(horizontal = 16.dp))
                 CashFlowForecastCard(
                     income = state.monthlyIncome,
                     totalSpent = state.totalSpent,
-                    monthlyBillsTotal = state.monthlyBillsTotal,
-                    totalMonthlyEmi = state.totalMonthlyEmi,
+                    billsStillDue = state.billsStillDue,
+                    emiStillDue = state.emiStillDue,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -801,19 +800,19 @@ private fun DepositDialog(
 private fun CashFlowForecastCard(
     income: Double,
     totalSpent: Double,
-    monthlyBillsTotal: Double,
-    totalMonthlyEmi: Double,
+    billsStillDue: Double,
+    emiStillDue: Double,
     modifier: Modifier = Modifier
 ) {
-    val freeAmount = income - totalSpent - monthlyBillsTotal - totalMonthlyEmi
+    val freeAmount = income - totalSpent - billsStillDue - emiStillDue
     val isOver = freeAmount < 0
 
     // Bar fractions — each clamped so the cumulative total never exceeds 1.0
     val spentFrac  = (totalSpent / income).coerceIn(0.0, 1.0).toFloat()
     val afterSpent = (1f - spentFrac).coerceAtLeast(0f)
-    val billsFrac  = (monthlyBillsTotal / income).toFloat().coerceIn(0f, afterSpent)
+    val billsFrac  = (billsStillDue / income).toFloat().coerceIn(0f, afterSpent)
     val afterBills = (afterSpent - billsFrac).coerceAtLeast(0f)
-    val emiFrac    = (totalMonthlyEmi / income).toFloat().coerceIn(0f, afterBills)
+    val emiFrac    = (emiStillDue / income).toFloat().coerceIn(0f, afterBills)
     val freeFrac   = (1f - spentFrac - billsFrac - emiFrac).coerceAtLeast(0f)
 
     Column(
@@ -849,13 +848,13 @@ private fun CashFlowForecastCard(
         Spacer(Modifier.height(16.dp))
 
         ForecastRow(dotColor = Coral, label = "Spent so far", amount = totalSpent)
-        if (monthlyBillsTotal > 0) {
+        if (billsStillDue > 0) {
             Spacer(Modifier.height(8.dp))
-            ForecastRow(dotColor = Amber, label = "Bills due", amount = monthlyBillsTotal)
+            ForecastRow(dotColor = Amber, label = "Bills still due", amount = billsStillDue)
         }
-        if (totalMonthlyEmi > 0) {
+        if (emiStillDue > 0) {
             Spacer(Modifier.height(8.dp))
-            ForecastRow(dotColor = Muted, label = "EMI commitments", amount = totalMonthlyEmi)
+            ForecastRow(dotColor = Muted, label = "EMI still due", amount = emiStillDue)
         }
 
         Spacer(Modifier.height(12.dp))

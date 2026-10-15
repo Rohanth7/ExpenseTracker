@@ -58,7 +58,8 @@ object BudgetAlertHelper {
         val spent = expenseRepo.getSpentForCategories(relatedIds, start, end)
 
         val pct = spent / budgetCategory.monthlyLimit
-        val monthKey = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}_${budgetCategory.id}"
+        // Limit is part of the key so editing the limit re-arms this month's alerts
+        val monthKey = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}_${budgetCategory.id}_${budgetCategory.monthlyLimit}"
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
         val warningRatio = alertThreshold / 100.0

@@ -63,7 +63,10 @@ data class DashboardUiState(
     val upcomingBills: List<UpcomingBill> = emptyList(),
     val activeLoans: List<LoanStatus> = emptyList(),
     val totalMonthlyEmi: Double = 0.0,
-    val monthlyBillsTotal: Double = 0.0,
+    // Cash Flow Forecast: only bills/EMIs still due this month (earlier ones are already in totalSpent)
+    val hasCommitments: Boolean = false,
+    val billsStillDue: Double = 0.0,
+    val emiStillDue: Double = 0.0,
     val smartInsight: SmartInsight? = null,
     val notifItems: List<NotifItem> = emptyList()
 )
@@ -146,8 +149,14 @@ class DashboardViewModel(
             )
         }.sortedBy { it.loan.name }
         val totalMonthlyEmi = activeLoans.sumOf { it.loan.monthlyEmi }
-        val monthlyBillsTotal = if (offset == 0)
-            bills.filter { it.isEnabled && !it.autoLog }.sumOf { it.amount }
+        // Forecast counts only EMIs/bills not yet due — earlier ones are assumed paid and already in `total`.
+        // Loans starting after this month (startDate > end) have no EMI due yet.
+        val emiStillDue = if (offset == 0)
+            activeLoans.filter { it.loan.startDate <= end && it.loan.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }
+                .sumOf { it.loan.monthlyEmi }
+        else 0.0
+        val billsStillDue = if (offset == 0)
+            bills.filter { it.isEnabled && !it.autoLog && it.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }.sumOf { it.amount }
         else 0.0
 
         val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
@@ -173,7 +182,9 @@ class DashboardViewModel(
             upcomingBills = upcomingBills,
             activeLoans = activeLoans,
             totalMonthlyEmi = totalMonthlyEmi,
-            monthlyBillsTotal = monthlyBillsTotal,
+            hasCommitments = activeLoans.isNotEmpty() || bills.any { it.isEnabled && !it.autoLog },
+            billsStillDue = billsStillDue,
+            emiStillDue = emiStillDue,
             smartInsight = smartInsight,
             notifItems = notifItems
         )

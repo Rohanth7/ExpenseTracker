@@ -24,16 +24,20 @@ object RecurringManager {
             val key = "bill_applied_${currentMonth}_${bill.id}"
             if (prefs.getBoolean(key, false)) return@forEach
 
-            db.expenseDao().insert(
-                Expense(
-                    amount = bill.amount,
-                    description = bill.name,
-                    categoryId = bill.categoryId,
-                    source = "Recurring",
-                    date = firstOfMonth
+            // The pref flag and the insert aren't atomic, so a crash between them leaves the flag
+            // unset. Check the DB too so the next launch doesn't log the bill a second time.
+            if (db.expenseDao().countRecurring(bill.name, bill.amount, firstOfMonth) == 0) {
+                db.expenseDao().insert(
+                    Expense(
+                        amount = bill.amount,
+                        description = bill.name,
+                        categoryId = bill.categoryId,
+                        source = "Recurring",
+                        date = firstOfMonth
+                    )
                 )
-            )
-            prefs.edit().putBoolean(key, true).commit()
+            }
+            prefs.edit().putBoolean(key, true).apply()
         }
     }
 }
