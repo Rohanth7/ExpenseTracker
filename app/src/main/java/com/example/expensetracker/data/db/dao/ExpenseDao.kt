@@ -21,6 +21,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getById(id: Long): Expense?
 
+    @Query("SELECT COUNT(*) FROM expenses")
+    suspend fun count(): Int
+
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 
@@ -47,9 +50,6 @@ interface ExpenseDao {
 
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE categoryId IN (:categoryIds) AND date BETWEEN :start AND :end")
     suspend fun getSpentForCategories(categoryIds: List<Long>, start: Long, end: Long): Double
-
-    @Query("SELECT COUNT(*) FROM expenses")
-    suspend fun count(): Int
 
     @Query("DELETE FROM expenses")
     suspend fun deleteAll()
