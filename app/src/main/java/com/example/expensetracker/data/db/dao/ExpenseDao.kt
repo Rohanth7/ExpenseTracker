@@ -36,6 +36,9 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND rawSms = :rawSms AND date >= :since")
     suspend fun getRecentByAmountAndContentFromSameSource(amount: Double, source: String, rawSms: String, since: Long): Int
 
+    @Query("SELECT COUNT(*) FROM expenses WHERE source = 'Recurring' AND description = :description AND amount = :amount AND date = :date")
+    suspend fun countRecurring(description: String, amount: Double, date: Long): Int
+
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE date BETWEEN :start AND :end")
     suspend fun getTotalSpentInRange(start: Long, end: Long): Double
 

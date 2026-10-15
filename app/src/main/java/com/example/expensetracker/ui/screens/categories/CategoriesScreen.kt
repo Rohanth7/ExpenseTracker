@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -615,8 +617,9 @@ private fun CategoryDialog(
     var selectedEmoji by remember { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
     var selectedColor by remember { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
     var limitText by remember {
-        mutableStateOf(if ((initial?.monthlyLimit ?: 0.0) > 0) "%.0f".format(initial?.monthlyLimit) else "")
+        mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }
+    val parsedLimit = parseLimitInput(limitText)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -683,6 +686,8 @@ private fun CategoryDialog(
                     label = { Text("Monthly limit ₹ (optional)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
+                    isError = parsedLimit == null,
+                    supportingText = if (parsedLimit == null) {{ Text("Enter a valid amount") }} else null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -698,8 +703,8 @@ private fun CategoryDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isBlank()) return@TextButton
-                onConfirm(name.trim(), selectedEmoji, selectedColor, limitText.toDoubleOrNull() ?: 0.0)
+                if (name.isBlank() || parsedLimit == null) return@TextButton
+                onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit)
             }) { Text("Save", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }

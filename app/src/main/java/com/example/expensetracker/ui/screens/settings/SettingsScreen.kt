@@ -37,7 +37,9 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -358,8 +360,9 @@ private fun CategoryLimitDialog(
     onConfirm: (Double) -> Unit
 ) {
     var limitText by remember {
-        mutableStateOf(if (category.monthlyLimit > 0) category.monthlyLimit.toLong().toString() else "")
+        mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
+    val parsedLimit = parseLimitInput(limitText)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -372,8 +375,10 @@ private fun CategoryLimitDialog(
                     onValueChange = { limitText = it },
                     label = { Text("Monthly limit (₹)") },
                     placeholder = { Text("e.g. 5000", color = Muted) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
+                    isError = parsedLimit == null,
+                    supportingText = if (parsedLimit == null) {{ Text("Enter a valid amount") }} else null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -387,10 +392,10 @@ private fun CategoryLimitDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val amt = limitText.trim().toDoubleOrNull() ?: 0.0
-                onConfirm(amt)
-            }) { Text("Save", color = Jade) }
+            TextButton(
+                onClick = { parsedLimit?.let(onConfirm) },
+                enabled = parsedLimit != null
+            ) { Text("Save", color = if (parsedLimit != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
