@@ -173,6 +173,7 @@ class SettingsViewModel(
     private var retryAfterAuth: (() -> Unit)? = null
 
     fun clearSnackbar() { snackbarMessage = null }
+    fun showMessage(message: String) { snackbarMessage = message }
 
     fun exportTo(uri: Uri) = viewModelScope.launch {
         val data = backupManager.snapshot()

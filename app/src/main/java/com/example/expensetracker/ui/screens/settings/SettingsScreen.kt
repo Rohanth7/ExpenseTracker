@@ -43,6 +43,9 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import androidx.fragment.app.FragmentActivity
+import com.example.expensetracker.security.AppLock
+import com.example.expensetracker.ui.util.BiometricUtil
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
@@ -187,7 +190,20 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 onSetBudgetThreshold = { viewModel.setBudgetAlertThreshold(it) },
                 onSetWeekStart = { viewModel.setWeekStartsOnMonday(it) },
                 onSetPrivacyMode = { viewModel.setPrivacyMode(it) },
-                onSetBiometricLock = { viewModel.setBiometricLockEnabled(it) },
+                onSetBiometricLock = { enable ->
+                    when {
+                        !enable -> viewModel.setBiometricLockEnabled(false)
+                        !BiometricUtil.canAuthenticate(context) ->
+                            viewModel.showMessage("Set up a screen lock (PIN, pattern or fingerprint) on your phone first")
+                        // Ask once before turning it on, so nobody locks themselves out with a
+                        // method that doesn't work.
+                        activity is FragmentActivity -> BiometricUtil.showBiometricPrompt(
+                            activity, title = "Turn on app lock", subtitle = "Confirm it's you",
+                            onSuccess = { AppLock.state.unlock(); viewModel.setBiometricLockEnabled(true) },
+                            onError = { msg -> msg?.let { viewModel.showMessage(it) } }
+                        )
+                    }
+                },
                 onSetWidget = { viewModel.setWidgetEnabled(it) }
             )
             SettingsPage.Data -> DataSubPage(
@@ -709,7 +725,7 @@ private fun PreferencesSubPage(
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
                 ToggleRow("Privacy mode", "Hides screen in app switcher", privacyMode, onSetPrivacyMode)
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                ToggleRow("Biometric Lock", "Require fingerprint or PIN", biometricLockEnabled, onSetBiometricLock)
+                ToggleRow("App Lock", "Ask for fingerprint, face or screen lock to open MyMoney", biometricLockEnabled, onSetBiometricLock)
             }
             Spacer(Modifier.height(40.dp))
         }
