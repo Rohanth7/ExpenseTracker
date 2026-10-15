@@ -1,7 +1,8 @@
 package com.example.expensetracker.notification
 
 import com.example.expensetracker.sms.ParsedTransaction
-import java.util.regex.Pattern
+import com.example.expensetracker.sms.MerchantExtractor
+import com.example.expensetracker.sms.TextRules
 
 object NotificationParser {
 
@@ -12,7 +13,6 @@ object NotificationParser {
         "in.org.npci.upiapp",                       // BHIM
         "in.amazon.mShop.android.shopping",         // Amazon Pay
         "com.dreamplug.androidapp",                 // CRED
-        "com.whatsapp",                             // WhatsApp Pay
         "com.mobikwik_new",                         // MobiKwik
         "com.freecharge.android"                    // Freecharge
     )
@@ -25,11 +25,6 @@ object NotificationParser {
         "com.kotak.mahindra.kotak",
         "com.rbl.bank",
         "com.yesbank"
-    )
-
-    private val AMOUNT_PATTERNS = listOf(
-        Pattern.compile("""(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""", Pattern.CASE_INSENSITIVE),
-        Pattern.compile("""([\d,]+(?:\.\d{1,2})?)\s*(?:Rs\.?|INR|₹)""", Pattern.CASE_INSENSITIVE)
     )
 
     private val DEBIT_KEYWORDS = listOf(
@@ -50,39 +45,34 @@ object NotificationParser {
         "payment due", "payment reminder", "upcoming payment", "upcoming bill",
         "reminder", "pay now", "pay before", "last date", "due amount",
         "promo", "discount", "win", "won",
-        "expiring", "expires soon"
+        "expiring", "expires soon",
+        // Not a completed payment
+        "will be debited", "will be deducted", "scheduled", "failed", "declined", "unsuccessful",
+        "pending", "processing", "requested", "request", "collect request", "approve",
+        "otp", "verification code", "mandate", "autopay set up", "autopay setup"
     )
 
+    // WhatsApp is deliberately not monitored: chat messages like "I paid ₹500" were logged as
+    // expenses, and reading personal chats is a privacy problem.
     fun isMonitored(packageName: String) = packageName in UPI_PACKAGES || packageName in BANK_PACKAGES
 
     fun parse(title: String, body: String, packageName: String): ParsedTransaction? {
         val fullText = "$title $body"
-        val lowerText = fullText.lowercase()
 
         // Reject bill reminders, offers, and promotions
-        if (EXCLUDE_KEYWORDS.any { lowerText.contains(it) }) return null
+        if (TextRules.containsAnyWord(fullText, EXCLUDE_KEYWORDS)) return null
 
         // Must have a confirmed debit keyword — amount alone is not enough
-        val isDebit = DEBIT_KEYWORDS.any { lowerText.contains(it) }
+        val isDebit = TextRules.containsAnyWord(fullText, DEBIT_KEYWORDS)
         if (!isDebit) return null
 
         // Skip credits
-        val isCredit = CREDIT_KEYWORDS.any { lowerText.contains(it) }
+        val isCredit = TextRules.containsAnyWord(fullText, CREDIT_KEYWORDS)
         if (isCredit) return null
 
-        val amount = extractAmount(fullText) ?: return null
+        val amount = TextRules.extractAmount(fullText, TextRules.AMOUNT_PATTERNS) ?: return null
         val description = extractDescription(title, body, packageName)
         return ParsedTransaction(amount, description)
-    }
-
-    private fun extractAmount(text: String): Double? {
-        for (pattern in AMOUNT_PATTERNS) {
-            val matcher = pattern.matcher(text)
-            if (matcher.find()) {
-                return matcher.group(1)?.replace(",", "")?.toDoubleOrNull()
-            }
-        }
-        return null
     }
 
     private fun extractDescription(title: String, body: String, packageName: String): String {
@@ -96,16 +86,8 @@ object NotificationParser {
             else -> title.ifBlank { "UPI" }
         }
 
-        // Try to extract merchant name from body
-        val merchantPattern = Pattern.compile(
-            """(?:paid to|sent to|to|at|merchant[:\s]+)([\w\s.\-@]{2,30})""",
-            Pattern.CASE_INSENSITIVE
-        )
-        val matcher = merchantPattern.matcher(body)
-        if (matcher.find()) {
-            val merchant = matcher.group(1)?.trim()?.take(30)
-            if (!merchant.isNullOrBlank()) return "$appName → $merchant"
-        }
+        val merchant = MerchantExtractor.extract(body) ?: MerchantExtractor.extract(title)
+        if (merchant != null) return "$appName → $merchant"
 
         return if (body.isNotBlank()) "$appName: ${body.take(50)}" else appName
     }

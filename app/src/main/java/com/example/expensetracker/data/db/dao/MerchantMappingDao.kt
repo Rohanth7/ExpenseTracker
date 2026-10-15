@@ -14,6 +14,9 @@ interface MerchantMappingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(mapping: MerchantMapping)
 
+    @Query("DELETE FROM merchant_mappings WHERE merchantName IN (:names)")
+    suspend fun deleteByNames(names: List<String>)
+
     @Query("DELETE FROM merchant_mappings")
     suspend fun deleteAll()
 }
