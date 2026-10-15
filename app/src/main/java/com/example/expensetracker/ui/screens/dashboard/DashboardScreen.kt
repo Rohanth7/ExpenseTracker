@@ -34,6 +34,8 @@ import com.example.expensetracker.ui.components.PieChart
 import com.example.expensetracker.ui.components.PieSlice
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.screens.subscriptions.formatRupees
+import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
 import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
@@ -44,7 +46,8 @@ fun DashboardScreen(
     viewModel: DashboardViewModel,
     onViewPending: () -> Unit,
     onViewAllSpending: () -> Unit,
-    onEnableTracking: () -> Unit = {}
+    onEnableTracking: () -> Unit = {},
+    onViewSubscriptions: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -536,6 +539,43 @@ fun DashboardScreen(
                         if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
                         UpcomingBillRow(upcoming)
                     }
+                }
+            }
+        }
+
+        // ── Subscriptions ───────────────────────────────────────
+        if (state.subscriptions.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                DsSectionLabel(
+                    title = "Subscriptions", modifier = Modifier.padding(horizontal = 16.dp),
+                    action = "See all", onActionClick = onViewSubscriptions
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Paper)
+                        .clickable(onClick = onViewSubscriptions)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    state.subscriptions.take(3).forEachIndexed { index, s ->
+                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(s.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1)
+                                Text("${s.cadence.label} · next around ${formatShortDate(s.nextExpected)}", fontSize = 11.5.sp, color = Muted)
+                            }
+                            Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+                    Text(
+                        "${formatRupees(state.subscriptions.sumOf { it.yearlyCost })} a year across ${state.subscriptions.size} " +
+                            if (state.subscriptions.size == 1) "subscription" else "subscriptions",
+                        fontSize = 12.sp, color = Muted, modifier = Modifier.padding(vertical = 12.dp)
+                    )
                 }
             }
         }

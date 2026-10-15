@@ -1,5 +1,8 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.data.subscriptions.Subscription
+import com.example.expensetracker.data.subscriptions.SubscriptionDetector
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -68,7 +71,9 @@ data class DashboardUiState(
     val billsStillDue: Double = 0.0,
     val emiStillDue: Double = 0.0,
     val smartInsight: SmartInsight? = null,
-    val notifItems: List<NotifItem> = emptyList()
+    val notifItems: List<NotifItem> = emptyList(),
+    /** Current month only; most expensive per year first. */
+    val subscriptions: List<Subscription> = emptyList()
 )
 
 class DashboardViewModel(
@@ -88,8 +93,9 @@ class DashboardViewModel(
         combine(categoryRepo.allCategories, expenseRepo.allExpenses, _income, _monthOffset) { cats, exps, inc, off ->
             Quad(cats, exps, inc, off)
         },
-        combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) }
-    ) { quad, (goals, bills, loans) ->
+        combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
+        DismissedSubscriptions.flow(context)
+    ) { quad, (goals, bills, loans), dismissedSubscriptions ->
         val (categories, expenses, income, offset) = quad
         val (start, end) = monthRangeForOffset(offset)
         val allMonthExpenses = expenses.filter { it.date in start..end }
@@ -184,7 +190,10 @@ class DashboardViewModel(
             billsStillDue = billsStillDue,
             emiStillDue = emiStillDue,
             smartInsight = smartInsight,
-            notifItems = notifItems
+            notifItems = notifItems,
+            subscriptions = if (offset == 0)
+                SubscriptionDetector.detect(expenses, System.currentTimeMillis(), dismissedSubscriptions, bills.map { it.name })
+            else emptyList()
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
