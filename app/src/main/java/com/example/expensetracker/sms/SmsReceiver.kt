@@ -34,8 +34,7 @@ class SmsReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getInstance(context)
-                if (db.categoryDao().getCount() == 0) return@launch // Avoid adding without category
-
+                // With no categories yet the expense is still saved, as pending (categoryId -1).
                 val categories = db.categoryDao().getAll().first()
 
                 transactions.forEach { (transaction, body, _) ->

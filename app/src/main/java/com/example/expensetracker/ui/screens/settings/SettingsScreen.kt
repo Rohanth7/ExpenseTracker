@@ -32,6 +32,12 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import androidx.core.app.ActivityCompat
+import com.example.expensetracker.ui.util.NotificationAccessUtil
+import com.example.expensetracker.ui.util.SmsPermissionUtil
+import com.example.expensetracker.ui.util.TrackingStatus
+import com.example.expensetracker.ui.util.rememberTrackingStatus
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
@@ -91,6 +97,16 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportTo(it) }
     }
+    val tracking = rememberTrackingStatus()
+    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        tracking.refresh()
+        // Android stops showing the prompt after repeated denials; send the user to App info instead.
+        if (!granted && activity != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECEIVE_SMS)) {
+            SmsPermissionUtil.openSettings(context)
+        }
+    }
+
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { viewModel.requestImport(it) }
     }
@@ -120,6 +136,9 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             null -> SettingsMainMenu(
                 bills = bills, loans = loans, categories = categories,
                 driveConnected = driveConnected, driveAccountEmail = driveAccountEmail,
+                tracking = tracking.status,
+                onFixSms = { smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS) },
+                onFixNotifications = { NotificationAccessUtil.openSettings(context) },
                 modifier = Modifier.padding(padding),
                 onNavigate = { currentPage = it }
             )
@@ -192,6 +211,9 @@ private fun SettingsMainMenu(
     categories: List<Category>,
     driveConnected: Boolean,
     driveAccountEmail: String,
+    tracking: TrackingStatus,
+    onFixSms: () -> Unit,
+    onFixNotifications: () -> Unit,
     modifier: Modifier = Modifier,
     onNavigate: (SettingsPage) -> Unit
 ) {
@@ -203,6 +225,25 @@ private fun SettingsMainMenu(
             Text("SYSTEM", fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
             Text("Settings", fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
             Spacer(Modifier.height(24.dp))
+        }
+        item {
+            SectionLabel("AUTO-TRACKING")
+            MenuCard {
+                MenuRow(icon = Icons.Default.Sms,
+                    iconBg = if (tracking.sms) JadeSoft else CoralSoft,
+                    iconTint = if (tracking.sms) JadeInk else Coral,
+                    title = "Bank SMS",
+                    subtitle = if (tracking.sms) "On · payments are logged from bank texts" else "Off · tap to allow SMS access",
+                    onClick = { if (!tracking.sms) onFixSms() })
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                MenuRow(icon = Icons.Default.NotificationsActive,
+                    iconBg = if (tracking.notifications) JadeSoft else CoralSoft,
+                    iconTint = if (tracking.notifications) JadeInk else Coral,
+                    title = "Payment app notifications",
+                    subtitle = if (tracking.notifications) "On · GPay, PhonePe, Paytm and bank apps" else "Off · tap to turn on notification access",
+                    onClick = onFixNotifications)
+            }
+            Spacer(Modifier.height(20.dp))
         }
         item {
             SectionLabel("TRACKING")

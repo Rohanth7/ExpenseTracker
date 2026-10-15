@@ -33,7 +33,6 @@ import com.example.expensetracker.ui.screens.dashboard.UpcomingBill
 import com.example.expensetracker.ui.components.PieChart
 import com.example.expensetracker.ui.components.PieSlice
 import com.example.expensetracker.ui.theme.*
-import com.example.expensetracker.ui.util.SmsPermissionUtil
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.util.Calendar
@@ -44,7 +43,8 @@ import kotlin.math.roundToInt
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onViewPending: () -> Unit,
-    onViewAllSpending: () -> Unit
+    onViewAllSpending: () -> Unit,
+    onEnableTracking: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -52,18 +52,8 @@ fun DashboardScreen(
     var showAddGoalDialog by remember { mutableStateOf(false) }
     var showNotifCenter by remember { mutableStateOf(false) }
     var goalToUpdate by remember { mutableStateOf<SavingsGoal?>(null) }
-    val smsPermissionGranted = remember { mutableStateOf(SmsPermissionUtil.isGranted(context)) }
-
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                smsPermissionGranted.value = SmsPermissionUtil.isGranted(context)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // Re-read on every resume so the banner disappears after the user turns tracking on.
+    val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
 
     val spentFraction = if (state.monthlyIncome > 0)
         (state.totalSpent / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat() else 0f
@@ -73,7 +63,8 @@ fun DashboardScreen(
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // ── Permission Warning ──────────────────────────────────
-        if (!smsPermissionGranted.value) {
+        // Only when neither source is on: someone using just one of them shouldn't be nagged.
+        if (!tracking.status.sms && !tracking.status.notifications) {
             item {
                 Row(
                     modifier = Modifier
@@ -82,7 +73,7 @@ fun DashboardScreen(
                         .padding(top = 12.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(CoralSoft.copy(alpha = 0.5f))
-                        .clickable { SmsPermissionUtil.openSettings(context) }
+                        .clickable(onClick = onEnableTracking)
                         .padding(16.dp, 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -90,13 +81,13 @@ fun DashboardScreen(
                     Icon(Icons.Default.Info, null, tint = Coral, modifier = Modifier.size(20.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "SMS Tracking Disabled",
+                            "Auto-tracking is off",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Ink
                         )
                         Text(
-                            "Grant permission to auto-track expenses.",
+                            "Payments won't be logged automatically. Tap to turn it on.",
                             fontSize = 11.sp,
                             color = InkSoft
                         )

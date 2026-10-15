@@ -169,6 +169,13 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                             launchSingleTop = true
                             restoreState = true
                         }
+                    },
+                    // The Auto-tracking card is the first thing in Settings.
+                    onEnableTracking = {
+                        navController.navigate(Screen.Settings.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

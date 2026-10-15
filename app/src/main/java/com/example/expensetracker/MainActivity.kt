@@ -1,18 +1,24 @@
 package com.example.expensetracker
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.content.ContextCompat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
+import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.defaults.DefaultCategories
+import com.example.expensetracker.ui.screens.onboarding.OnboardingScreen
+import com.example.expensetracker.ui.theme.Canvas
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.notification.NotificationHelper
@@ -25,19 +31,23 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* permissions handled silently; SMS receiver only works if granted */ }
-
     private var pendingExpenseId by mutableStateOf<Long?>(null)
     private var isUnlocked by mutableStateOf(false)
+    // null while checking whether this is a new install
+    private var showOnboarding by mutableStateOf<Boolean?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        requestMissingPermissions()
 
         val prefs = PreferencesManager(this)
+        if (prefs.onboardingCompleted) {
+            showOnboarding = false
+        } else {
+            lifecycleScope.launch {
+                showOnboarding = withContext(Dispatchers.IO) { needsOnboarding(prefs) }
+            }
+        }
         
         // Handle Auto-Backup Schedule
         if (prefs.autoBackupEnabled) {
@@ -63,10 +73,14 @@ class MainActivity : FragmentActivity() {
         setContent {
             ExpenseTrackerTheme {
                 if (isUnlocked) {
-                    AppNavGraph(
-                        initialExpenseId = pendingExpenseId,
-                        onExpenseNavigated = { pendingExpenseId = null }
-                    )
+                    when (showOnboarding) {
+                        null -> Box(Modifier.fillMaxSize().background(Canvas))
+                        true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
+                        false -> AppNavGraph(
+                            initialExpenseId = pendingExpenseId,
+                            onExpenseNavigated = { pendingExpenseId = null }
+                        )
+                    }
                 }
             }
         }
@@ -79,17 +93,28 @@ class MainActivity : FragmentActivity() {
             .takeIf { it != -1L }
     }
 
-    private fun requestMissingPermissions() {
-        val needed = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
-            != PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.RECEIVE_SMS
+    /**
+     * A new install gets first-run setup. An existing install that already has data (upgrading
+     * from a version without onboarding) skips it, but still gets the starter categories if it
+     * has none, so auto-captured payments can be sorted.
+     */
+    private suspend fun needsOnboarding(prefs: PreferencesManager): Boolean {
+        val db = AppDatabase.getInstance(applicationContext)
+        val hasData = db.categoryDao().getCount() > 0 || db.expenseDao().count() > 0
+        if (!hasData) return true
+        DefaultCategories.seedIfEmpty(db)
+        prefs.onboardingCompleted = true
+        return false
+    }
+
+    private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?) {
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
+                if (monthlyIncome != null) prefs.monthlyIncome = monthlyIncome
+                prefs.onboardingCompleted = true
+            }
+            showOnboarding = false
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED) {
-            needed += Manifest.permission.POST_NOTIFICATIONS
-        }
-        if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
     }
 }
