@@ -8,7 +8,16 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import android.content.Intent
+import android.util.Log
+import com.example.expensetracker.data.backup.BackupCodec
 import com.example.expensetracker.data.backup.BackupData
+import com.example.expensetracker.data.backup.DriveBackupClient
+import com.example.expensetracker.data.backup.ParseResult
+import com.example.expensetracker.ui.util.isDebugBuild
+import com.google.android.gms.auth.UserRecoverableAuthException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Bill
@@ -148,40 +157,106 @@ class SettingsViewModel(
     var snackbarMessage by mutableStateOf<String?>(null)
         private set
 
-    var pendingImportUri by mutableStateOf<Uri?>(null)
+    /** A backup that has been read and checked, waiting for the user to confirm the restore. */
+    data class PendingRestore(val data: BackupData, val fromDrive: Boolean)
+
+    var pendingRestore by mutableStateOf<PendingRestore?>(null)
         private set
 
+    /** True while talking to Drive, so the buttons can show progress and not be tapped twice. */
+    var driveBusy by mutableStateOf(false)
+        private set
+
+    /** Set when Google needs the user to grant Drive access again; the screen launches it. */
+    var driveAuthIntent by mutableStateOf<Intent?>(null)
+        private set
+    private var retryAfterAuth: (() -> Unit)? = null
+
     fun clearSnackbar() { snackbarMessage = null }
-    fun requestImport(uri: Uri) { pendingImportUri = uri }
-    fun cancelImport() { pendingImportUri = null }
 
     fun exportTo(uri: Uri) = viewModelScope.launch {
-        val cats = categoryRepo.allCategories.first()
-        val exps = expenseRepo.allExpenses.first()
-        val templates = recurringRepo.allTemplates.first()
-        val ok = backupManager.exportToUri(uri, BackupData(categories = cats, expenses = exps, recurringTemplates = templates))
-        snackbarMessage = if (ok) "Backup exported (${exps.size} expenses)" else "Export failed"
+        val data = backupManager.snapshot()
+        val ok = backupManager.exportToUri(uri, data)
+        snackbarMessage = if (ok) "Backup saved (${data.expenses.orEmpty().size} expenses)" else "Couldn't save the backup"
     }
 
-    fun confirmImport() = viewModelScope.launch {
-        val uri = pendingImportUri ?: return@launch
-        pendingImportUri = null
-        val data = backupManager.importFromUri(uri) ?: run {
-            snackbarMessage = "Import failed — invalid or corrupted file"
-            return@launch
+    /** Reads and checks the file first; nothing is deleted unless the user then confirms. */
+    fun requestImport(uri: Uri) = viewModelScope.launch {
+        when (val result = backupManager.readFromUri(uri)) {
+            is ParseResult.Ok -> pendingRestore = PendingRestore(result.data, fromDrive = false)
+            is ParseResult.Invalid -> snackbarMessage = result.reason
         }
-        expenseRepo.deleteAll()
-        categoryRepo.deleteAll()
-        recurringRepo.deleteAll()
-        data.categories.forEach { categoryRepo.insert(it) }
-        data.expenses.forEach { expenseRepo.insert(it) }
-        val templates = data.recurringTemplates ?: emptyList()
-        templates.forEach { recurringRepo.insert(it) }
-        snackbarMessage = "Restored ${data.expenses.size} expenses, ${data.categories.size} categories" +
-            if (templates.isNotEmpty()) ", ${templates.size} recurring" else ""
+    }
+
+    fun cancelRestore() { pendingRestore = null }
+
+    fun confirmRestore() = viewModelScope.launch {
+        val pending = pendingRestore ?: return@launch
+        pendingRestore = null
+        val data = pending.data
+        runCatching { backupManager.restore(data) }
+            .onSuccess {
+                data.settings?.monthlyIncome?.let { _monthlyIncome.value = it }
+                data.settings?.budgetAlertsEnabled?.let { _budgetAlertsEnabled.value = it }
+                data.settings?.budgetAlertThreshold?.let { _budgetAlertThreshold.value = it }
+                data.settings?.weekStartsOnMonday?.let { _weekStartsOnMonday.value = it }
+                snackbarMessage = "Restored ${data.expenses.orEmpty().size} expenses and ${data.categories.orEmpty().size} categories"
+            }
+            .onFailure { snackbarMessage = "Restore failed. Your data hasn't been changed." }
+    }
+
+    fun backUpToDriveNow() = withDrive(::backUpToDriveNow) { drive, token ->
+        drive.upload(token, BackupCodec.toJson(backupManager.snapshot()))
+        snackbarMessage = "Backed up to Google Drive"
+    }
+
+    fun restoreFromDrive() = withDrive(::restoreFromDrive) { drive, token ->
+        val remote = drive.find(token)
+        if (remote == null) {
+            snackbarMessage = "There's no backup in your Google Drive yet"
+            return@withDrive
+        }
+        when (val result = BackupCodec.parse(drive.download(token, remote.id))) {
+            is ParseResult.Ok -> pendingRestore = PendingRestore(result.data, fromDrive = true)
+            is ParseResult.Invalid -> snackbarMessage = result.reason
+        }
+    }
+
+    /** Called by the screen after the Google consent screen closes. */
+    fun onDriveAuthResult(granted: Boolean) {
+        driveAuthIntent = null
+        val retry = retryAfterAuth
+        retryAfterAuth = null
+        if (granted) retry?.invoke() else snackbarMessage = "Google Drive access wasn't granted"
+    }
+
+    private fun withDrive(retry: () -> Unit, block: suspend (DriveBackupClient, String) -> Unit) {
+        if (driveBusy) return
+        viewModelScope.launch {
+            driveBusy = true
+            try {
+                val drive = DriveBackupClient(appContext)
+                val token = withContext(Dispatchers.IO) { drive.token() }
+                if (token == null) {
+                    snackbarMessage = "Connect Google Drive first"
+                } else {
+                    withContext(Dispatchers.IO) { block(drive, token) }
+                }
+            } catch (e: UserRecoverableAuthException) {
+                retryAfterAuth = { retry() }
+                driveAuthIntent = e.intent
+            } catch (e: Exception) {
+                Log.w("SettingsViewModel", "Drive request failed", e)
+                snackbarMessage = "Couldn't reach Google Drive. Check your connection and try again."
+            } finally {
+                driveBusy = false
+            }
+        }
     }
 
     fun loadMockData() = viewModelScope.launch {
+        // Developer tool: it deletes everything first, so it only exists in debug builds.
+        if (!isDebugBuild(appContext)) return@launch
         // Clear everything first
         expenseRepo.deleteAll()
         categoryRepo.deleteAll()

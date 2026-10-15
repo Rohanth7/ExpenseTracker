@@ -2,28 +2,29 @@ package com.example.expensetracker.data.backup
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.expensetracker.data.backup.worker.AutoBackupWorker
-import com.example.expensetracker.data.db.entity.Category
-import com.example.expensetracker.data.db.entity.Expense
-import com.example.expensetracker.data.db.entity.RecurringTemplate
-import com.google.gson.Gson
+import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
-data class BackupData(
-    val version: Int = 1,
-    val exportedAt: Long = System.currentTimeMillis(),
-    val categories: List<Category>,
-    val expenses: List<Expense>,
-    val recurringTemplates: List<RecurringTemplate>? = null
-)
-
-class BackupManager(private val context: Context) {
-    private val gson = Gson()
+/** [database] and [preferences] can be swapped out in tests; the app uses the real ones. */
+class BackupManager(
+    private val context: Context,
+    private val database: (() -> AppDatabase)? = null,
+    private val preferences: (() -> PreferencesManager)? = null
+) {
+    private val db get() = database?.invoke() ?: AppDatabase.getInstance(context)
+    private val prefs get() = preferences?.invoke() ?: PreferencesManager(context)
 
     fun scheduleAutoBackup() {
         val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(24, TimeUnit.HOURS)
@@ -42,20 +43,75 @@ class BackupManager(private val context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork("daily_backup")
     }
 
+    /** Runs the Drive backup once, now. */
+    fun backUpNow() {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "backup_now", ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<AutoBackupWorker>().build()
+        )
+    }
+
+    /** Everything a restore needs. (Not in a transaction: Room's Flow reads can deadlock inside one.) */
+    suspend fun snapshot(): BackupData = withContext(Dispatchers.IO) {
+        val db = db
+        val p = prefs
+        run {
+            BackupData(
+                categories = db.categoryDao().getAllOnce(),
+                expenses = db.expenseDao().getAll().first(),
+                recurringTemplates = db.recurringTemplateDao().getAll().first(),
+                bills = db.billDao().getAll().first(),
+                loans = db.loanDao().getAll().first(),
+                savingsGoals = db.savingsGoalDao().getAll().first(),
+                merchantMappings = db.merchantMappingDao().getAllMappings(),
+                settings = BackupSettings(
+                    monthlyIncome = p.monthlyIncome,
+                    budgetAlertsEnabled = p.budgetAlertsEnabled,
+                    budgetAlertThreshold = p.budgetAlertThreshold,
+                    weekStartsOnMonday = p.weekStartsOnMonday
+                )
+            )
+        }
+    }
+
+    /**
+     * Replaces the phone's data with [data] in a single transaction: if anything fails, nothing
+     * changes. Sections missing from the backup (older files) are left as they are. IDs are kept,
+     * so expenses still point at the right categories.
+     */
+    suspend fun restore(data: BackupData) = withContext(Dispatchers.IO) {
+        val db = db
+        db.withTransaction {
+            data.categories?.let { list -> db.categoryDao().deleteAll(); db.categoryDao().insertAll(list) }
+            data.expenses?.let { list -> db.expenseDao().deleteAll(); list.forEach { db.expenseDao().insert(it) } }
+            data.recurringTemplates?.let { list -> db.recurringTemplateDao().deleteAll(); db.recurringTemplateDao().insertAll(list) }
+            data.bills?.let { list -> db.billDao().deleteAll(); list.forEach { db.billDao().insert(it) } }
+            data.loans?.let { list -> db.loanDao().deleteAll(); list.forEach { db.loanDao().insert(it) } }
+            data.savingsGoals?.let { list -> db.savingsGoalDao().deleteAll(); list.forEach { db.savingsGoalDao().insert(it) } }
+            data.merchantMappings?.let { list -> db.merchantMappingDao().deleteAll(); list.forEach { db.merchantMappingDao().insert(it) } }
+        }
+        // Settings are applied only after the database commit succeeded.
+        data.settings?.let { s ->
+            val p = prefs
+            s.monthlyIncome?.let { p.monthlyIncome = it }
+            s.budgetAlertsEnabled?.let { p.budgetAlertsEnabled = it }
+            s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
+            s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
+        }
+        if (database == null) WidgetUpdateHelper.update(context)
+    }
+
     suspend fun exportToUri(uri: Uri, data: BackupData): Boolean = withContext(Dispatchers.IO) {
         runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { stream ->
-                stream.write(gson.toJson(data).toByteArray())
-            }
+            val stream = context.contentResolver.openOutputStream(uri) ?: error("Can't open file")
+            stream.use { it.write(BackupCodec.toJson(data).toByteArray()) }
         }.isSuccess
     }
 
-    suspend fun importFromUri(uri: Uri): BackupData? = withContext(Dispatchers.IO) {
-        runCatching {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                val data = gson.fromJson(stream.bufferedReader().readText(), BackupData::class.java)
-                if (data?.categories == null || data.expenses == null) null else data
-            }
-        }.getOrNull()
+    suspend fun readFromUri(uri: Uri): ParseResult = withContext(Dispatchers.IO) {
+        val text = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        }.getOrNull() ?: return@withContext ParseResult.Invalid("Couldn't read the file.")
+        BackupCodec.parse(text)
     }
 }
