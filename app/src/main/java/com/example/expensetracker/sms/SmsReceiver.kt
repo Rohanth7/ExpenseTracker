@@ -19,11 +19,23 @@ class SmsReceiver : BroadcastReceiver() {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        val transactions = messages.mapNotNull { msg ->
-            val sender = msg.originatingAddress ?: return@mapNotNull null
-            val body = msg.messageBody ?: return@mapNotNull null
-            if (!SmsParser.isTransactionSms(sender, body)) return@mapNotNull null
-            val transaction = SmsParser.parse(sender, body) ?: return@mapNotNull null
+        // A long SMS arrives as several parts in one broadcast; join them per sender so the
+        // parser (and the user's rules) see the whole message, not just the first 160 characters.
+        val joined = messages
+            .filter { it.originatingAddress != null && it.messageBody != null }
+            .groupBy { it.originatingAddress!! }
+            .mapValues { (_, parts) -> parts.joinToString("") { it.messageBody!! } }
+        val rules = ParsingRuleStore.get(context).rules.value
+        val transactions = joined.mapNotNull { (sender, body) ->
+            // The user's own rules come first: they know their bank's messages best.
+            val transaction = when (val custom = CustomRules.match(rules, body)) {
+                RuleMatch.Ignore -> return@mapNotNull null
+                is RuleMatch.Payment -> ParsedTransaction(custom.amount, custom.payee ?: MerchantExtractor.fallbackDescription(sender))
+                null -> {
+                    if (!SmsParser.isTransactionSms(sender, body)) return@mapNotNull null
+                    SmsParser.parse(sender, body) ?: return@mapNotNull null
+                }
+            }
             Triple(transaction, body, sender)
         }
 

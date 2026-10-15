@@ -49,6 +49,9 @@ import com.example.expensetracker.ui.screens.settings.SettingsScreen
 import com.example.expensetracker.ui.screens.settings.SettingsViewModel
 import com.example.expensetracker.ui.screens.statistics.StatisticsScreen
 import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
+import com.example.expensetracker.ui.screens.rules.MessageRulesScreen
+import com.example.expensetracker.ui.screens.rules.MessageRulesViewModel
+import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
@@ -62,6 +65,10 @@ sealed class Screen(val route: String, val label: String, val pattern: String = 
     object Settings : Screen("settings", "Settings")
     object Categorize : Screen("categorize", "Categorize", "categorize/{expenseId}") {
         fun createRoute(expenseId: Long) = "categorize/$expenseId"
+    }
+    object MessageRules : Screen("message_rules", "Message rules")
+    object TeachMessage : Screen("teach_message", "Teach a message", "teach_message?expenseId={expenseId}") {
+        fun createRoute(expenseId: Long? = null) = if (expenseId == null) "teach_message" else "teach_message?expenseId=$expenseId"
     }
 }
 
@@ -231,7 +238,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                 val vm: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, backupManager, prefs)
                 )
-                SettingsScreen(viewModel = vm)
+                SettingsScreen(viewModel = vm, onOpenMessageRules = { navController.navigate(Screen.MessageRules.route) })
             }
             composable(Screen.Categorize.pattern) { backStackEntry ->
                 val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull() ?: return@composable
@@ -242,7 +249,23 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                     expenseId = expenseId,
                     viewModel = vm,
                     onDone = { navController.popBackStack() },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onTeach = { id -> navController.navigate(Screen.TeachMessage.createRoute(id)) }
+                )
+            }
+            composable(Screen.MessageRules.route) {
+                val vm: MessageRulesViewModel = viewModel(factory = MessageRulesViewModel.factory(context.applicationContext, expenseRepo))
+                MessageRulesScreen(vm, onTeach = { navController.navigate(Screen.TeachMessage.createRoute()) }, onBack = { navController.popBackStack() })
+            }
+            composable(
+                Screen.TeachMessage.pattern,
+                arguments = listOf(navArgument("expenseId") { type = NavType.StringType; nullable = true; defaultValue = null })
+            ) { entry ->
+                // A fresh view model per screen, so one teaching session doesn't carry into the next.
+                val vm: MessageRulesViewModel = viewModel(viewModelStoreOwner = entry, factory = MessageRulesViewModel.factory(context.applicationContext, expenseRepo))
+                TeachMessageScreen(
+                    vm, expenseId = entry.arguments?.getString("expenseId")?.toLongOrNull(),
+                    onDone = { navController.popBackStack() }, onBack = { navController.popBackStack() }
                 )
             }
         }

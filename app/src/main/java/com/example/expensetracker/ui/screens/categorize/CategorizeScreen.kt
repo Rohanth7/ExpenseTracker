@@ -42,7 +42,8 @@ fun CategorizeScreen(
     expenseId: Long,
     viewModel: CategorizeViewModel,
     onDone: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onTeach: (Long) -> Unit = {}
 ) {
     val categories by viewModel.categories.collectAsState()
     val savingsGoals by viewModel.savingsGoals.collectAsState()
@@ -123,6 +124,12 @@ fun CategorizeScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                         )
+                        // Rules apply to bank SMS; the message text is kept for 7 days.
+                        if (exp.source == "SMS" || exp.source == "CC-SMS") {
+                            TextButton(onClick = { onTeach(exp.id) }, contentPadding = PaddingValues(0.dp)) {
+                                Text("Read wrong? Teach MyMoney", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
             }

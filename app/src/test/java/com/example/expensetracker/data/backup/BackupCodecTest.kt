@@ -31,7 +31,9 @@ class BackupCodecTest {
             loans = listOf(Loan(id = 2, name = "Car", totalAmount = 500000.0, monthlyEmi = 12000.0, tenureMonths = 48, startDate = 1L)),
             savingsGoals = listOf(SavingsGoal(id = 4, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0)),
             merchantMappings = listOf(MerchantMapping("Swiggy", 1)),
-            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true)
+            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true),
+            parsingRules = listOf(com.example.expensetracker.sms.ParsingRule("r1", com.example.expensetracker.sms.ParsingRule.Kind.PAYMENT,
+                "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L))
         )
         assertEquals(data, ok(BackupCodec.toJson(data)))
         assertTrue(data.missingSections.isEmpty())
@@ -59,7 +61,7 @@ class BackupCodecTest {
         val data = ok(v1)
         assertEquals(1, data.version)
         assertEquals(null, data.bills)
-        assertEquals(listOf("bills", "loans", "savings goals", "learned categories"), data.missingSections)
+        assertEquals(listOf("bills", "loans", "savings goals", "learned categories", "message rules"), data.missingSections)
     }
 
     @Test fun `backup from a newer app version is refused`() {
@@ -81,5 +83,10 @@ class BackupCodecTest {
         assertTrue(invalid("""{"version":2,"categories":[{"id":1}],"expenses":[]}""").contains("category 1"))
         assertTrue(invalid("""{"version":2,"categories":[],"expenses":[],"bills":[{"id":1,"amount":10.0}]}""").contains("bill 1"))
         assertTrue(invalid("""{"version":2,"categories":[],"expenses":[null]}""").contains("expense 1"))
+    }
+
+    @Test fun `a damaged message rule is caught before restoring`() {
+        assertTrue(invalid("""{"version":2,"categories":[],"expenses":[],"parsingRules":[{"id":"x","kind":"PAYMENT","pattern":"(","label":"x"}]}""").contains("message rule 1"))
+        assertTrue(invalid("""{"version":2,"categories":[],"expenses":[],"parsingRules":[{"id":"x","label":"x"}]}""").contains("message rule 1"))
     }
 }

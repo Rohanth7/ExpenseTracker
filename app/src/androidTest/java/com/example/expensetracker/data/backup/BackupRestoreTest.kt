@@ -12,6 +12,8 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.sms.ParsingRule
+import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -36,13 +38,19 @@ class BackupRestoreTest {
         source = memoryDb(); target = memoryDb()
         context.deleteSharedPreferences("backup_test_source")
         context.deleteSharedPreferences("backup_test_target")
+        context.deleteSharedPreferences("backup_test_rules_source")
+        context.deleteSharedPreferences("backup_test_rules_target")
         sourcePrefs = PreferencesManager(context, "backup_test_source")
         targetPrefs = PreferencesManager(context, "backup_test_target")
     }
 
     @After fun tearDown() { source.close(); target.close() }
 
-    private fun manager(db: AppDatabase, prefs: PreferencesManager) = BackupManager(context, { db }, { prefs })
+    private fun rulesFor(prefs: PreferencesManager) =
+        if (prefs === sourcePrefs) sourceRules else targetRules
+    private val sourceRules by lazy { ParsingRuleStore(context, "backup_test_rules_source") }
+    private val targetRules by lazy { ParsingRuleStore(context, "backup_test_rules_target") }
+    private fun manager(db: AppDatabase, prefs: PreferencesManager) = BackupManager(context, { db }, { prefs }, { rulesFor(prefs) })
 
     private suspend fun seedSource() {
         source.categoryDao().insertAll(listOf(Category(id = 10, name = "Food"), Category(id = 11, name = "Rent")))
@@ -54,6 +62,7 @@ class BackupRestoreTest {
         source.merchantMappingDao().insert(MerchantMapping("Swiggy", 10))
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
+        sourceRules.add(ParsingRule("r1", ParsingRule.Kind.IGNORE, "^Promo\\s+\\d+$", label = "Promo #", createdAt = 1L))
     }
 
     private suspend fun seedTargetWithOtherData() {
@@ -76,6 +85,7 @@ class BackupRestoreTest {
         assertEquals(source.merchantMappingDao().getAllMappings(), target.merchantMappingDao().getAllMappings())
         assertEquals(75000.0, targetPrefs.monthlyIncome, 0.0)
         assertEquals(85, targetPrefs.budgetAlertThreshold)
+        assertEquals(sourceRules.rules.value, targetRules.rules.value)
         // Old data is gone, not merged
         assertTrue(target.expenseDao().getAll().first().none { it.description == "Old expense" })
     }

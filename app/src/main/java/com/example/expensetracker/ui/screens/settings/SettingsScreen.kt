@@ -66,7 +66,8 @@ private fun fmtINR(amount: Double): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel) {
+fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit = {}) {
+    val ruleCount = com.example.expensetracker.sms.ParsingRuleStore.get(LocalContext.current).rules.collectAsState().value.size
     val categories by viewModel.categories.collectAsState()
     val bills by viewModel.bills.collectAsState()
     val loans by viewModel.loans.collectAsState()
@@ -150,6 +151,8 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 tracking = tracking.status,
                 onFixSms = { smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS) },
                 onFixNotifications = { NotificationAccessUtil.openSettings(context) },
+                ruleCount = ruleCount,
+                onOpenMessageRules = onOpenMessageRules,
                 modifier = Modifier.padding(padding),
                 onNavigate = { currentPage = it }
             )
@@ -270,6 +273,8 @@ private fun SettingsMainMenu(
     tracking: TrackingStatus,
     onFixSms: () -> Unit,
     onFixNotifications: () -> Unit,
+    ruleCount: Int,
+    onOpenMessageRules: () -> Unit,
     modifier: Modifier = Modifier,
     onNavigate: (SettingsPage) -> Unit
 ) {
@@ -298,6 +303,11 @@ private fun SettingsMainMenu(
                     title = "Payment app notifications",
                     subtitle = if (tracking.notifications) "On · GPay, PhonePe, Paytm and bank apps" else "Off · tap to turn on notification access",
                     onClick = onFixNotifications)
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                MenuRow(icon = Icons.Default.Rule, iconBg = Canvas, iconTint = Ink,
+                    title = "Message rules",
+                    subtitle = if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
+                    onClick = onOpenMessageRules)
             }
             Spacer(Modifier.height(20.dp))
         }
