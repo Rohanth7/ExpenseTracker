@@ -25,6 +25,11 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean("week_starts_monday", true)
         set(value) = prefs.edit().putBoolean("week_starts_monday", value).apply()
 
+    /** Set once the first-run setup has been finished or skipped for an existing install. */
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean("onboarding_completed", false)
+        set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
     var biometricLockEnabled: Boolean
         get() = prefs.getBoolean("biometric_lock_enabled", false)
         set(value) = prefs.edit().putBoolean("biometric_lock_enabled", value).apply()

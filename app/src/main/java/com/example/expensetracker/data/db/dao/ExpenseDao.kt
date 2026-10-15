@@ -21,6 +21,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getById(id: Long): Expense?
 
+    @Query("SELECT COUNT(*) FROM expenses")
+    suspend fun count(): Int
+
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 

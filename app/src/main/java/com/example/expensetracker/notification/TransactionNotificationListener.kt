@@ -39,8 +39,7 @@ class TransactionNotificationListener : NotificationListenerService() {
 
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
-            if (db.categoryDao().getCount() == 0) return@launch // Avoid adding without category
-
+            // With no categories yet the expense is still saved, as pending (categoryId -1).
             val categories = db.categoryDao().getAll().first()
             val now = System.currentTimeMillis()
             // Cross-source: bank SMS + UPI notification arrive within seconds for the same transaction.

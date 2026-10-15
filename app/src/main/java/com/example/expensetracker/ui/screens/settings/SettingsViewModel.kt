@@ -288,6 +288,8 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         prefs.monthlyIncome = 0.0
         _monthlyIncome.value = 0.0
+        // Show first-run setup again on next launch, which recreates the starter categories.
+        prefs.onboardingCompleted = false
         snackbarMessage = "All data deleted"
     }
 
