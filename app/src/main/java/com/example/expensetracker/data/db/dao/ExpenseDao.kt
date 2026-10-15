@@ -48,6 +48,9 @@ interface ExpenseDao {
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE categoryId IN (:categoryIds) AND date BETWEEN :start AND :end")
     suspend fun getSpentForCategories(categoryIds: List<Long>, start: Long, end: Long): Double
 
+    @Query("SELECT rawSms FROM expenses WHERE description = :description AND rawSms IS NOT NULL")
+    suspend fun getCapturedTextForDescription(description: String): List<String>
+
     @Query("DELETE FROM expenses")
     suspend fun deleteAll()
 

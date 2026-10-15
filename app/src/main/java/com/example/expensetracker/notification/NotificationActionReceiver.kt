@@ -35,7 +35,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     db.expenseDao().update(expense.copy(categoryId = categoryId))
                     
                     // Smart learning: update mapping
-                    if (expense.source != "Manual") {
+                    if (expense.source != "Manual" &&
+                        com.example.expensetracker.data.mapping.MerchantRules.isLearnable(expense.description)) {
                         db.merchantMappingDao().insert(
                             com.example.expensetracker.data.db.entity.MerchantMapping(expense.description, categoryId)
                         )
