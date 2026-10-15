@@ -39,8 +39,13 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND rawSms = :rawSms AND date >= :since")
     suspend fun getRecentByAmountAndContentFromSameSource(amount: Double, source: String, rawSms: String, since: Long): Int
 
-    @Query("SELECT COUNT(*) FROM expenses WHERE source = 'Recurring' AND description = :description AND amount = :amount AND date = :date")
-    suspend fun countRecurring(description: String, amount: Double, date: Long): Int
+    // Whole month, not one exact date: bills used to be dated the 1st and are now dated their due
+    // day, so an exact-date check would log this month's bill a second time after upgrading.
+    @Query("SELECT COUNT(*) FROM expenses WHERE source = 'Recurring' AND description = :description AND amount = :amount AND date BETWEEN :monthStart AND :monthEnd")
+    suspend fun countRecurringInMonth(description: String, amount: Double, monthStart: Long, monthEnd: Long): Int
+
+    @Query("SELECT categoryId, COUNT(*) AS uses FROM expenses WHERE categoryId != -1 AND date >= :since GROUP BY categoryId")
+    suspend fun categoryUsageSince(since: Long): List<CategoryUsage>
 
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE date BETWEEN :start AND :end")
     suspend fun getTotalSpentInRange(start: Long, end: Long): Double
@@ -72,3 +77,5 @@ interface ExpenseDao {
     @Delete
     suspend fun delete(expense: Expense)
 }
+
+data class CategoryUsage(val categoryId: Long, val uses: Int)

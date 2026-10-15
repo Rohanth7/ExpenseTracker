@@ -47,13 +47,15 @@ object NotificationHelper {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("New expense: ₹${"%.2f".format(amount)}")
             .setContentText(description)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$description\nTap to choose another category"))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
-            .addAction(android.R.drawable.ic_menu_add, "Categorize", pendingIntent)
 
-        // Add top 3 categories as quick actions
-        categories.take(3).forEach { category ->
+        // Android shows at most three buttons, so they're all categories (a separate "Categorize"
+        // button used to take one slot and hide the third category). Tapping the notification
+        // opens the full category picker.
+        categories.take(QuickCategories.MAX_BUTTONS).forEach { category ->
             val actionIntent = Intent(context, NotificationActionReceiver::class.java).apply {
                 action = NotificationActionReceiver.ACTION_CATEGORIZE
                 putExtra(NotificationActionReceiver.EXTRA_EXPENSE_ID, expenseId)

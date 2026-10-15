@@ -45,9 +45,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val prefs = PreferencesManager(context)
                     if (prefs.budgetAlertsEnabled) {
                         BudgetAlertHelper.checkAndNotify(
-                            context, categoryId, 
+                            context, categoryId,
                             com.example.expensetracker.data.repository.CategoryRepository(db.categoryDao(), db.expenseDao()),
-                            com.example.expensetracker.data.repository.ExpenseRepository(db.expenseDao(), context.applicationContext)
+                            com.example.expensetracker.data.repository.ExpenseRepository(db.expenseDao(), context.applicationContext),
+                            prefs.budgetAlertThreshold
                         )
                     }
                     WidgetUpdateHelper.update(context)
@@ -55,7 +56,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 
                 // Cancel the notification
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                notificationManager.cancel(expenseId.toInt())
+                notificationManager.cancel((expenseId and 0x7FFFFFFF).toInt())
                 
             } finally {
                 pendingResult.finish()
