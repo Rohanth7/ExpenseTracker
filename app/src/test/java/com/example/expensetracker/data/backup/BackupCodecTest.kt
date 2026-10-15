@@ -37,6 +37,20 @@ class BackupCodecTest {
         assertTrue(data.missingSections.isEmpty())
     }
 
+    @Test fun `backups never contain the captured SMS or notification text`() {
+        val sms = "ICICI Bank Acct XX123 debited for Rs 349.00; BIGBASKET credited. Avl Bal Rs 18,204.55"
+        val data = BackupData(
+            exportedAt = 1L, categories = emptyList(), recurringTemplates = emptyList(),
+            expenses = listOf(Expense(id = 1, amount = 349.0, description = "BIGBASKET", source = "SMS", rawSms = sms))
+        )
+        val json = BackupCodec.toJson(data)
+        assertTrue("raw text leaked into the backup", !json.contains("Avl Bal") && !json.contains("XX123"))
+        val restored = ok(json).expenses!!.single()
+        assertEquals(null, restored.rawSms)
+        assertEquals("BIGBASKET", restored.description)
+        assertEquals(349.0, restored.amount, 0.0)
+    }
+
     @Test fun `version 1 backups still restore, and say what they don't contain`() {
         val v1 = """{"version":1,"exportedAt":1700000000000,
             "categories":[{"id":1,"name":"Food","emoji":"🍔","colorHex":"#E53935","monthlyLimit":0.0}],
