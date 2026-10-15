@@ -43,6 +43,7 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.isDebugBuild
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
@@ -76,7 +77,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
-    val pendingImportUri = viewModel.pendingImportUri
+    val pendingRestore = viewModel.pendingRestore
     val snackbarHostState = remember { SnackbarHostState() }
 
     var currentPage by remember { mutableStateOf<SettingsPage?>(null) }
@@ -127,6 +128,13 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         }
     }
 
+    val driveAuthLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        viewModel.onDriveAuthResult(result.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(viewModel.driveAuthIntent) {
+        viewModel.driveAuthIntent?.let { driveAuthLauncher.launch(it) }
+    }
+
     LaunchedEffect(snackbarMessage) {
         snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
     }
@@ -157,8 +165,11 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             SettingsPage.Cloud -> CloudSubPage(
                 driveConnected = driveConnected, driveAccountEmail = driveAccountEmail,
                 autoBackupEnabled = autoBackupEnabled,
+                driveBusy = viewModel.driveBusy,
                 modifier = Modifier.padding(padding),
                 onBack = { currentPage = null },
+                onBackUpNow = { viewModel.backUpToDriveNow() },
+                onRestoreFromDrive = { viewModel.restoreFromDrive() },
                 onConnectDrive = { driveSignInLauncher.launch(driveSignInClient.signInIntent) },
                 onDisconnectDrive = { driveSignInClient.signOut(); viewModel.disconnectDrive() },
                 onSetAutoBackup = { viewModel.setAutoBackupEnabled(it) }
@@ -182,24 +193,53 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             SettingsPage.Data -> DataSubPage(
                 modifier = Modifier.padding(padding),
                 onBack = { currentPage = null },
-                onExport = { exportLauncher.launch("expense_backup.json") },
+                onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                showMockData = isDebugBuild(context),
                 onMockData = { viewModel.loadMockData() },
                 onReset = { viewModel.resetAll() }
             )
         }
     }
 
-    if (pendingImportUri != null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.cancelImport() },
-            containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-            title = { Text("Replace all data?") },
-            text = { Text("This will delete all your current expenses and categories, then restore from the backup file.") },
-            confirmButton = { TextButton(onClick = { viewModel.confirmImport() }) { Text("Restore", color = Jade) } },
-            dismissButton = { TextButton(onClick = { viewModel.cancelImport() }) { Text("Cancel", color = Muted) } }
+    if (pendingRestore != null) {
+        RestoreConfirmDialog(
+            pending = pendingRestore,
+            onConfirm = { viewModel.confirmRestore() },
+            onDismiss = { viewModel.cancelRestore() }
         )
     }
+}
+
+@Composable
+private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val d = pending.data
+    val date = remember(d.exportedAt) {
+        java.text.SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()).format(java.util.Date(d.exportedAt))
+    }
+    fun count(n: Int?, one: String, many: String) = n?.let { "$it ${if (it == 1) one else many}" }
+    val contents = listOfNotNull(
+        count(d.expenses?.size, "expense", "expenses"),
+        count(d.categories?.size, "category", "categories"),
+        count(d.bills?.size, "bill", "bills"),
+        count(d.loans?.size, "loan", "loans"),
+        count(d.savingsGoals?.size, "savings goal", "savings goals")
+    ).joinToString(", ")
+    val kept = d.missingSections
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text(if (pending.fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
+        text = {
+            Text(buildString {
+                append("Backup from $date: $contents.\n\n")
+                append("This replaces that data on this phone. If anything goes wrong, nothing is changed.")
+                if (kept.isNotEmpty()) append("\n\nThis is an older backup without ${kept.joinToString(", ")}, so those stay as they are.")
+            })
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Restore", color = Jade) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
 }
 
 // ── Main Menu ───────────────────────────────────────────────────────────────
@@ -541,8 +581,9 @@ private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifi
 
 @Composable
 private fun CloudSubPage(
-    driveConnected: Boolean, driveAccountEmail: String, autoBackupEnabled: Boolean,
+    driveConnected: Boolean, driveAccountEmail: String, autoBackupEnabled: Boolean, driveBusy: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
+    onBackUpNow: () -> Unit, onRestoreFromDrive: () -> Unit,
     onConnectDrive: () -> Unit, onDisconnectDrive: () -> Unit, onSetAutoBackup: (Boolean) -> Unit
 ) {
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -563,7 +604,15 @@ private fun CloudSubPage(
                     }
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    ToggleRow("Automatic Cloud Backup", "Weekly sync to your Drive App Data folder", autoBackupEnabled, onSetAutoBackup)
+                    ToggleRow("Automatic Cloud Backup", "Daily backup to a private app folder in your Drive", autoBackupEnabled, onSetAutoBackup)
+                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
+                        title = "Back up now", subtitle = if (driveBusy) "Working…" else "Save everything to Drive",
+                        onClick = { if (!driveBusy) onBackUpNow() })
+                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
+                        title = "Restore from Drive", subtitle = if (driveBusy) "Working…" else "Replace this phone's data with your Drive backup",
+                        onClick = { if (!driveBusy) onRestoreFromDrive() })
                 } else {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Canvas), contentAlignment = Alignment.Center) {
@@ -575,7 +624,7 @@ private fun CloudSubPage(
                         }
                     }
                     Spacer(Modifier.height(14.dp))
-                    Text("Connect your Google account to automatically sync encrypted backups to your private Drive App Data folder.",
+                    Text("Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
                         fontSize = 11.sp, color = Muted, lineHeight = 16.sp)
                     Spacer(Modifier.height(14.dp))
                     Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Jade).clickable(onClick = onConnectDrive).padding(vertical = 12.dp),
@@ -670,7 +719,7 @@ private fun PreferencesSubPage(
 @Composable
 private fun DataSubPage(
     modifier: Modifier = Modifier, onBack: () -> Unit,
-    onExport: () -> Unit, onImport: () -> Unit, onMockData: () -> Unit, onReset: () -> Unit
+    onExport: () -> Unit, onImport: () -> Unit, showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
 ) {
     var showMockDataDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
@@ -681,7 +730,7 @@ private fun DataSubPage(
             SectionLabel("BACKUP")
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
                 SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export backup", subtitle = "Save expenses + categories as JSON", onClick = onExport)
+                    title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
@@ -689,14 +738,17 @@ private fun DataSubPage(
             Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("DEVELOPER")
+            SectionLabel(if (showMockData) "DEVELOPER" else "DANGER ZONE")
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Jade, modifier = Modifier.size(17.dp)) },
-                    title = "Load mock data", subtitle = "Fill app with 3 months of sample expenses for testing",
-                    onClick = { showMockDataDialog = true })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                // Debug builds only: it deletes all real data before loading samples.
+                if (showMockData) {
+                    SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Jade, modifier = Modifier.size(17.dp)) },
+                        title = "Load mock data", subtitle = "Fill app with 3 months of sample expenses for testing",
+                        onClick = { showMockDataDialog = true })
+                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                }
                 SettingRow(icon = { Icon(Icons.Default.Delete, null, tint = Coral, modifier = Modifier.size(17.dp)) },
-                    title = "Reset everything", subtitle = "Delete all expenses, categories & templates",
+                    title = "Reset everything", subtitle = "Delete all data on this phone",
                     danger = true, onClick = { showResetDialog = true })
             }
             Spacer(Modifier.height(40.dp))
@@ -713,7 +765,7 @@ private fun DataSubPage(
     if (showResetDialog) {
         AlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
-            text = { Text("This will permanently delete all expenses, categories, and recurring templates. This cannot be undone.") },
+            text = { Text("This permanently deletes all expenses, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
             confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
             dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel", color = Muted) } })
     }
