@@ -48,6 +48,8 @@ import com.example.expensetracker.ui.screens.expenses.ExpensesViewModel
 import com.example.expensetracker.ui.screens.settings.SettingsScreen
 import com.example.expensetracker.ui.screens.settings.SettingsViewModel
 import com.example.expensetracker.ui.screens.statistics.StatisticsScreen
+import com.example.expensetracker.ui.screens.subscriptions.SubscriptionsScreen
+import com.example.expensetracker.ui.screens.subscriptions.SubscriptionsViewModel
 import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
@@ -60,6 +62,7 @@ sealed class Screen(val route: String, val label: String, val pattern: String = 
     object Categories : Screen("categories", "Categories")
     object Statistics : Screen("statistics", "Stats")
     object Settings : Screen("settings", "Settings")
+    object Subscriptions : Screen("subscriptions", "Subscriptions")
     object Categorize : Screen("categorize", "Categorize", "categorize/{expenseId}") {
         fun createRoute(expenseId: Long) = "categorize/$expenseId"
     }
@@ -170,6 +173,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                             restoreState = true
                         }
                     },
+                    onViewSubscriptions = { navController.navigate(Screen.Subscriptions.route) },
                     // The Auto-tracking card is the first thing in Settings.
                     onEnableTracking = {
                         navController.navigate(Screen.Settings.route) {
@@ -232,6 +236,12 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                     factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, backupManager, prefs)
                 )
                 SettingsScreen(viewModel = vm)
+            }
+            composable(Screen.Subscriptions.route) {
+                val vm: SubscriptionsViewModel = viewModel(
+                    factory = SubscriptionsViewModel.factory(context.applicationContext, expenseRepo, categoryRepo, billRepo)
+                )
+                SubscriptionsScreen(viewModel = vm, onBack = { navController.popBackStack() })
             }
             composable(Screen.Categorize.pattern) { backStackEntry ->
                 val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull() ?: return@composable
