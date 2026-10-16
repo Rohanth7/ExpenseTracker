@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.sms.ParsingRuleStore
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -21,10 +22,12 @@ import java.util.concurrent.TimeUnit
 class BackupManager(
     private val context: Context,
     private val database: (() -> AppDatabase)? = null,
-    private val preferences: (() -> PreferencesManager)? = null
+    private val preferences: (() -> PreferencesManager)? = null,
+    private val ruleStore: (() -> ParsingRuleStore)? = null
 ) {
     private val db get() = database?.invoke() ?: AppDatabase.getInstance(context)
     private val prefs get() = preferences?.invoke() ?: PreferencesManager(context)
+    private val rules get() = ruleStore?.invoke() ?: ParsingRuleStore.get(context)
 
     fun scheduleAutoBackup() {
         val request = PeriodicWorkRequestBuilder<AutoBackupWorker>(24, TimeUnit.HOURS)
@@ -64,6 +67,7 @@ class BackupManager(
                 loans = db.loanDao().getAll().first(),
                 savingsGoals = db.savingsGoalDao().getAll().first(),
                 merchantMappings = db.merchantMappingDao().getAllMappings(),
+                parsingRules = rules.rules.value,
                 settings = BackupSettings(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
@@ -91,6 +95,7 @@ class BackupManager(
             data.merchantMappings?.let { list -> db.merchantMappingDao().deleteAll(); list.forEach { db.merchantMappingDao().insert(it) } }
         }
         // Settings are applied only after the database commit succeeded.
+        data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs
             s.monthlyIncome?.let { p.monthlyIncome = it }

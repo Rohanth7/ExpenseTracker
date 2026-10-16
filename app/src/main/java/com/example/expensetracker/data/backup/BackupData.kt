@@ -7,6 +7,7 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.sms.ParsingRule
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 
@@ -35,7 +36,8 @@ data class BackupData(
     val loans: List<Loan>? = null,
     val savingsGoals: List<SavingsGoal>? = null,
     val merchantMappings: List<MerchantMapping>? = null,
-    val settings: BackupSettings? = null
+    val settings: BackupSettings? = null,
+    val parsingRules: List<ParsingRule>? = null
 ) {
     /** Sections of the phone's data that restoring this backup will NOT touch. */
     val missingSections: List<String>
@@ -44,6 +46,7 @@ data class BackupData(
             if (loans == null) add("loans")
             if (savingsGoals == null) add("savings goals")
             if (merchantMappings == null) add("learned categories")
+            if (parsingRules == null) add("message rules")
         }
 }
 
@@ -110,6 +113,10 @@ object BackupCodec {
         }
         d.savingsGoals?.forEachIndexed { i, g ->
             if ((g as Any?) == null || (g.name as String?) == null || !(g.targetAmount as Double?).ok()) return "savings goal ${i + 1} is incomplete"
+        }
+        d.parsingRules?.forEachIndexed { i, r ->
+            if ((r as Any?) == null || (r.pattern as String?) == null || (r.kind as ParsingRule.Kind?) == null ||
+                runCatching { Regex(r.pattern) }.isFailure) return "message rule ${i + 1} is damaged"
         }
         d.merchantMappings?.forEachIndexed { i, m ->
             if ((m as Any?) == null || (m.merchantName as String?) == null) return "learned category ${i + 1} is incomplete"
