@@ -27,7 +27,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -1009,10 +1011,13 @@ private const val CHOOSE_LATER = "Choose later (pending)"
 @Composable
 private fun AmountField(amount: String, error: String, onChange: (String) -> Unit) {
     val result = if (AmountCalculator.isExpression(amount)) AmountCalculator.evaluate(amount) else null
+    // Holds the cursor, so a chip's symbol goes where the cursor is and digits typed next follow it.
+    var field by remember { mutableStateOf(TextFieldValue(amount, TextRange(amount.length))) }
+    if (field.text != amount) field = TextFieldValue(amount, TextRange(amount.length))
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedTextField(
-            value = amount,
-            onValueChange = onChange,
+            value = field,
+            onValueChange = { field = it; if (it.text != amount) onChange(it.text) },
             label = { Text("Amount (₹)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
@@ -1026,7 +1031,14 @@ private fun AmountField(amount: String, error: String, onChange: (String) -> Uni
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("+", "−", "×", "÷").forEach { op ->
-                AssistChip(onClick = { onChange(amount + op) }, label = { Text(op, fontSize = 14.sp) })
+                AssistChip(
+                    onClick = {
+                        val (text, cursor) = AmountCalculator.insertAt(field.text, field.selection.start, field.selection.end, op)
+                        field = TextFieldValue(text, TextRange(cursor))
+                        onChange(text)
+                    },
+                    label = { Text(op, fontSize = 14.sp) }
+                )
             }
         }
     }

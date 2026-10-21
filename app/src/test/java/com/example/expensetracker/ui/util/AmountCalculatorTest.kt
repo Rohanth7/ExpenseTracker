@@ -22,6 +22,12 @@ class AmountCalculatorTest {
     @Test fun `rejects invalid input`() {
         listOf("", "abc", "120+", "+", "10/0", "50-80", "1..2", "12a").forEach { assertNull("'$it'", eval(it)) }
     }
+    @Test fun `an operator chip inserts at the cursor and moves the cursor after it`() {
+        assertEquals("3×" to 2, AmountCalculator.insertAt("3", 1, 1, "×"))
+        assertEquals("12+3" to 3, AmountCalculator.insertAt("123", 2, 2, "+"))
+        assertEquals("1÷4" to 2, AmountCalculator.insertAt("1234", 1, 3, "÷"))  // replaces a selection
+    }
+    @Test fun `a cursor outside the text is clamped`() = assertEquals("5−" to 2, AmountCalculator.insertAt("5", 9, 9, "−"))
     @Test fun `knows when text is an expression`() {
         assertTrue(AmountCalculator.isExpression("120+45")); assertTrue(AmountCalculator.isExpression("3×40"))
         assertFalse(AmountCalculator.isExpression("250")); assertFalse(AmountCalculator.isExpression("1,200"))
