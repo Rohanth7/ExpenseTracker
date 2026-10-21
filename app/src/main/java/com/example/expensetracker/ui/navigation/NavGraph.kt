@@ -25,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.expensetracker.LaunchAction
 import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
@@ -57,9 +58,15 @@ import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
-    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}") {
-        fun createRoute(start: Long? = null, end: Long? = null): String {
-            return if (start != null && end != null) "expenses?start=$start&end=$end" else "expenses"
+    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}&add={add}") {
+        /** [add] opens the add-expense dialog straight away (the widget's "+"). */
+        fun createRoute(start: Long? = null, end: Long? = null, add: Boolean = false): String {
+            val openAdd = add
+            val args = buildList {
+                if (start != null && end != null) { add("start=$start"); add("end=$end") }
+                if (openAdd) add("add=true")
+            }
+            return if (args.isEmpty()) "expenses" else "expenses?" + args.joinToString("&")
         }
     }
     object Categories : Screen("categories", "Categories")
@@ -78,7 +85,7 @@ sealed class Screen(val route: String, val label: String, val pattern: String = 
 private val bottomNavItems = listOf(Screen.Dashboard, Screen.Expenses, Screen.Categories, Screen.Statistics, Screen.Settings)
 
 @Composable
-fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit = {}) {
+fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val db = remember { AppDatabase.getInstance(context) }
     val categoryRepo = remember { CategoryRepository(db.categoryDao(), db.expenseDao()) }
@@ -99,11 +106,14 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
         BillReminderHelper.schedule(context)
     }
 
-    LaunchedEffect(initialExpenseId) {
-        if (initialExpenseId != null && initialExpenseId != -1L) {
-            navController.navigate(Screen.Categorize.createRoute(initialExpenseId))
-            onExpenseNavigated()
+    LaunchedEffect(launchAction) {
+        when (launchAction) {
+            null -> return@LaunchedEffect
+            is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
+            LaunchAction.QuickAdd -> navController.navigate(Screen.Expenses.createRoute(add = true))
+            LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route)
         }
+        onLaunchHandled()
     }
 
     Scaffold(
@@ -194,11 +204,13 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                 route = Screen.Expenses.pattern,
                 arguments = listOf(
                     navArgument("start") { type = NavType.LongType; defaultValue = -1L },
-                    navArgument("end") { type = NavType.LongType; defaultValue = -1L }
+                    navArgument("end") { type = NavType.LongType; defaultValue = -1L },
+                    navArgument("add") { type = NavType.BoolType; defaultValue = false }
                 )
             ) { backStackEntry ->
                 val start = backStackEntry.arguments?.getLong("start") ?: -1L
                 val end = backStackEntry.arguments?.getLong("end") ?: -1L
+                val add = backStackEntry.arguments?.getBoolean("add") ?: false
                 
                 val vm: ExpensesViewModel = viewModel(
                     factory = ExpensesViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)
@@ -214,6 +226,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
 
                 ExpensesScreen(
                     viewModel = vm,
+                    openAddOnStart = add,
                     onCategorize = { id -> navController.navigate(Screen.Categorize.createRoute(id)) }
                 )
             }

@@ -48,7 +48,7 @@ private data class DayGroup(
 )
 
 @Composable
-fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
+fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, openAddOnStart: Boolean = false) {
     val context = LocalContext.current
     val expenses by viewModel.expenses.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -59,7 +59,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(openAddOnStart) }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }

@@ -43,7 +43,8 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
 
-    private var pendingExpenseId by mutableStateOf<Long?>(null)
+    /** A notification or widget tap waiting to be handled once the app's screens are up. */
+    private var pendingAction by mutableStateOf<LaunchAction?>(null)
     // App lock. The lock state itself is process-wide (AppLock), so a rotation doesn't ask again.
     private var locked by mutableStateOf(false)
     private var lockMessage by mutableStateOf<String?>(null)
@@ -80,8 +81,7 @@ class MainActivity : FragmentActivity() {
             WidgetUpdateHelper.update(applicationContext)
         }
 
-        pendingExpenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L)
-            ?.takeIf { it != -1L }
+        pendingAction = launchActionOf(intent)
 
         setContent {
             ExpenseTrackerTheme {
@@ -94,8 +94,8 @@ class MainActivity : FragmentActivity() {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
                             true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
                             false -> AppNavGraph(
-                                initialExpenseId = pendingExpenseId,
-                                onExpenseNavigated = { pendingExpenseId = null }
+                                launchAction = pendingAction,
+                                onLaunchHandled = { pendingAction = null }
                             )
                         }
                     }
@@ -161,9 +161,13 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingExpenseId = intent.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L)
-            .takeIf { it != -1L }
+        pendingAction = launchActionOf(intent)
     }
+
+    private fun launchActionOf(intent: Intent?): LaunchAction? = LaunchAction.from(
+        intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
+        intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L
+    )
 
     /**
      * A new install gets first-run setup. An existing install that already has data (upgrading

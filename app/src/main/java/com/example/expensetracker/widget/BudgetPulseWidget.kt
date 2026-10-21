@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
+import com.example.expensetracker.LaunchAction
 import com.example.expensetracker.MainActivity
 import com.example.expensetracker.R
 import com.example.expensetracker.data.db.AppDatabase
@@ -85,6 +86,7 @@ private fun buildDisabledViews(context: Context): RemoteViews =
         setViewVisibility(R.id.donut_image, View.INVISIBLE)
         setViewVisibility(R.id.status_pill, View.INVISIBLE)
         setViewVisibility(R.id.comparison_text, View.GONE)
+        setClicks(context)
     }
 
 private fun buildPlaceholder(context: Context): RemoteViews =
@@ -96,7 +98,33 @@ private fun buildPlaceholder(context: Context): RemoteViews =
         setTextViewText(R.id.budget_caption, "")
         setViewVisibility(R.id.status_pill, View.INVISIBLE)
         setViewVisibility(R.id.comparison_text, View.GONE)
+        setClicks(context)
     }
+
+/**
+ * A tap anywhere opens the app; the "+" opens the add-expense dialog. Set on every version of the
+ * widget (placeholder and disabled too) so it's never dead. Different request codes (0 and 1) keep
+ * the two PendingIntents from overwriting each other.
+ */
+private fun RemoteViews.setClicks(context: Context) {
+    val launchPi = PendingIntent.getActivity(
+        context, 0,
+        Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val addPi = PendingIntent.getActivity(
+        context, 1,
+        Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(LaunchAction.EXTRA_ACTION, LaunchAction.QUICK_ADD)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    setOnClickPendingIntent(R.id.widget_root, launchPi)
+    setOnClickPendingIntent(R.id.widget_add, addPi)
+}
 
 private fun buildViews(
     context: Context,
@@ -144,16 +172,8 @@ private fun buildViews(
         "$sign${abs(pct)}% vs ${data.prevMonthLabel}"
     } else null
 
-    val launchPi = PendingIntent.getActivity(
-        context, 0,
-        Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        },
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-
     return RemoteViews(context.packageName, R.layout.budget_pulse_widget_layout).apply {
-        setOnClickPendingIntent(R.id.widget_root, launchPi)
+        setClicks(context)
 
         setTextViewText(R.id.header_date,
             "${data.monthLabel} · DAY ${data.dayOfMonth} / ${data.daysInMonth}")
