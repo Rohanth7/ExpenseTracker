@@ -110,8 +110,13 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         when (launchAction) {
             null -> return@LaunchedEffect
             is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
-            LaunchAction.QuickAdd -> navController.navigate(Screen.Expenses.createRoute(add = true))
-            LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route)
+            // Back to Overview first, so repeated widget taps don't pile up copies of the screen.
+            LaunchAction.QuickAdd -> navController.navigate(Screen.Expenses.createRoute(add = true)) {
+                popUpTo(navController.graph.findStartDestination().id)
+            }
+            LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route) {
+                popUpTo(navController.graph.findStartDestination().id)
+            }
         }
         onLaunchHandled()
     }
