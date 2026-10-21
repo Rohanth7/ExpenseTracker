@@ -349,7 +349,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
     if (showAddDialog) {
         AddExpenseDialog(
             categories = categories,
-            initialCategoryId = remember(categories) { defaultCategoryId(categories, viewModel.lastManualCategoryId) },
+            lastUsedCategoryId = viewModel.lastManualCategoryId,
             onDismiss = { showAddDialog = false },
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
@@ -797,14 +797,16 @@ private fun categoryDisplayText(category: Category?, allCategories: List<Categor
 @Composable
 private fun AddExpenseDialog(
     categories: List<Category>,
-    initialCategoryId: Long,
+    lastUsedCategoryId: Long,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
-    var selectedCategoryId by remember { mutableStateOf(initialCategoryId) }
+    // null until the user picks one, so the last-used default can appear once categories load.
+    var userCategoryChoice by remember { mutableStateOf<Long?>(null) }
+    val selectedCategoryId = startingCategoryId(userCategoryChoice, categories, lastUsedCategoryId)
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
@@ -858,12 +860,12 @@ private fun AddExpenseDialog(
                             // Saving without a category files it as pending, sorted later from the list.
                             DropdownMenuItem(
                                 text = { Text(CHOOSE_LATER, color = Muted) },
-                                onClick = { selectedCategoryId = -1L; expanded = false }
+                                onClick = { userCategoryChoice = -1L; expanded = false }
                             )
                             parents.forEach { parent ->
                                 DropdownMenuItem(
                                     text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
-                                    onClick = { selectedCategoryId = parent.id; expanded = false }
+                                    onClick = { userCategoryChoice = parent.id; expanded = false }
                                 )
                                 childrenMap[parent.id]?.forEach { child ->
                                     DropdownMenuItem(
@@ -873,7 +875,7 @@ private fun AddExpenseDialog(
                                                 Text("↳ ${child.emoji} ${child.name}")
                                             }
                                         },
-                                        onClick = { selectedCategoryId = child.id; expanded = false }
+                                        onClick = { userCategoryChoice = child.id; expanded = false }
                                     )
                                 }
                             }

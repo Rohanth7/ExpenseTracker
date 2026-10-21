@@ -23,6 +23,16 @@ class ExpenseCopyTest {
         val cats = listOf(Category(id = 1, name = "Food"), Category(id = 2, name = "Travel"))
         assertEquals(2L, defaultCategoryId(cats, lastUsedId = 2))
     }
+    @Test fun `categories that load after the dialog opened still give the last-used default`() {
+        // The widget's "+" opens the dialog before categories have loaded.
+        assertEquals(-1L, startingCategoryId(userChoice = null, categories = emptyList(), lastUsedId = 1))
+        assertEquals(1L, startingCategoryId(userChoice = null, categories = listOf(Category(id = 1, name = "Food")), lastUsedId = 1))
+    }
+    @Test fun `the user's own choice wins, including choose later`() {
+        val cats = listOf(Category(id = 1, name = "Food"), Category(id = 2, name = "Travel"))
+        assertEquals(2L, startingCategoryId(userChoice = 2, categories = cats, lastUsedId = 1))
+        assertEquals(-1L, startingCategoryId(userChoice = -1, categories = cats, lastUsedId = 1))
+    }
     @Test fun `otherwise the default is pending, not the first category`() {
         val cats = listOf(Category(id = 1, name = "Food"))
         assertEquals(-1L, defaultCategoryId(cats, lastUsedId = 99)); assertEquals(-1L, defaultCategoryId(emptyList(), -1))
