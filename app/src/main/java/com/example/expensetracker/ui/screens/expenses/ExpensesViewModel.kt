@@ -171,17 +171,18 @@ class ExpensesViewModel(
 
     fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") = viewModelScope.launch {
         expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
-        if (categoryId != -1L) prefs.lastManualCategoryId = categoryId
+        if (categoryId != -1L) { prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId }
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
         }
     }
 
-    /** The add dialog's starting category (see [defaultCategoryId]). */
-    val lastManualCategoryId: Long get() = prefs.lastManualCategoryId
+    /** The add dialog's starting category (see [defaultCategoryId]). Read from prefs once, not per frame. */
+    private val _lastManualCategoryId = MutableStateFlow(prefs.lastManualCategoryId)
+    val lastManualCategoryId: StateFlow<Long> = _lastManualCategoryId.asStateFlow()
 
-    fun duplicateExpense(expense: Expense) = viewModelScope.launch {
-        val copy = expense.duplicateForNow(System.currentTimeMillis())
+    /** Saves [copy] (from [duplicateWithEdits]) as a new expense. */
+    fun duplicateExpense(copy: Expense) = viewModelScope.launch {
         expenseRepo.insert(copy)
         if (copy.categoryId != -1L && prefs.budgetAlertsEnabled)
             BudgetAlertHelper.checkAndNotify(appContext, copy.categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)

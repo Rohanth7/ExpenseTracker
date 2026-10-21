@@ -19,6 +19,14 @@ class ExpenseCopyTest {
         assertEquals(180.0, copy.amount, 0.0); assertEquals("SWIGGY", copy.description); assertEquals(3L, copy.categoryId)
         assertEquals("lunch", copy.tags); assertEquals("Credit Card", copy.paymentMethod)
     }
+    @Test fun `Duplicate copies the edit form as it is, not the saved expense`() {
+        // The user changed the amount and category in Edit, then tapped Duplicate.
+        val copy = original.duplicateWithEdits(amount = 200.0, description = "SWIGGY dinner", categoryId = 9,
+            tags = "team", paymentMethod = "Cash", now = 9_999L)
+        assertEquals(200.0, copy.amount, 0.0); assertEquals("SWIGGY dinner", copy.description); assertEquals(9L, copy.categoryId)
+        assertEquals("team", copy.tags); assertEquals("Cash", copy.paymentMethod)
+        assertEquals(0L, copy.id); assertEquals(9_999L, copy.date); assertEquals("Manual", copy.source); assertNull(copy.rawSms)
+    }
     @Test fun `last used category is the default when it still exists`() {
         val cats = listOf(Category(id = 1, name = "Food"), Category(id = 2, name = "Travel"))
         assertEquals(2L, defaultCategoryId(cats, lastUsedId = 2))

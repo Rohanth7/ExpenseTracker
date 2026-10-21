@@ -62,6 +62,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
+    val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     // Saveable: the route keeps add=true, so a plain remember would reopen the dialog after the
     // user closed it, on rotation or when Android restores the screen.
     var showAddDialog by rememberSaveable { mutableStateOf(openAddOnStart) }
@@ -352,7 +353,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
     if (showAddDialog) {
         AddExpenseDialog(
             categories = categories,
-            lastUsedCategoryId = viewModel.lastManualCategoryId,
+            lastUsedCategoryId = lastManualCategoryId,
             onDismiss = { showAddDialog = false },
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
@@ -370,8 +371,8 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
                 viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
             },
-            onDuplicate = {
-                viewModel.duplicateExpense(expense)
+            onDuplicate = { amount, description, categoryId, tags, paymentMethod ->
+                viewModel.duplicateExpense(expense.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis()))
                 editingExpense = null
                 android.widget.Toast.makeText(context, "Duplicated — dated today", android.widget.Toast.LENGTH_SHORT).show()
             }
@@ -911,9 +912,10 @@ private fun EditExpenseDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit,
-    onDuplicate: () -> Unit
+    onDuplicate: (Double, String, Long, String, String) -> Unit
 ) {
-    var amount by remember { mutableStateOf("%.2f".format(expense.amount)) }
+    // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
+    var amount by remember { mutableStateOf(AmountCalculator.forEditing(expense.amount)) }
     var description by remember { mutableStateOf(expense.description) }
     var tags by remember { mutableStateOf(expense.tags) }
     var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
@@ -1000,7 +1002,12 @@ private fun EditExpenseDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onDuplicate) { Text("Duplicate", color = Jade) }
+                // Copies the form as it is now, unsaved changes included.
+                TextButton(onClick = {
+                    val amt = AmountCalculator.evaluate(amount)
+                    if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
+                    onDuplicate(amt, description.trim(), selectedCategoryId, tags.trim(), selectedPaymentMethod)
+                }) { Text("Duplicate", color = Jade) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
             }
         }
@@ -1029,7 +1036,7 @@ private fun AmountField(amount: String, error: String, onChange: (String) -> Uni
             isError = error.isNotEmpty(),
             supportingText = when {
                 error.isNotEmpty() -> {{ Text(error) }}
-                result != null -> {{ Text("= ₹${fmtAmount(result)}", color = Muted, fontSize = 12.sp) }}
+                result != null -> {{ Text("= ₹${fmtINR(result, maxFractionDigits = 2)}", color = Muted, fontSize = 12.sp) }}
                 else -> null
             },
             modifier = Modifier.fillMaxWidth()
@@ -1048,10 +1055,6 @@ private fun AmountField(amount: String, error: String, onChange: (String) -> Uni
         }
     }
 }
-
-private fun fmtAmount(n: Double): String = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-    maximumFractionDigits = 2; minimumFractionDigits = 0
-}.format(n)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1165,9 +1168,11 @@ private fun buildTimestamp(utcMidnight: Long, referenceMillis: Long): Long {
     }.timeInMillis
 }
 
-private fun fmtINR(n: Double): String {
+private fun fmtINR(n: Double, maxFractionDigits: Int = 0): String {
     if (n.isNaN() || n.isInfinite()) return "—"
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = 0; minimumFractionDigits = 0
-    }.format(n.toLong())
+    val format = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
+        maximumFractionDigits = maxFractionDigits; minimumFractionDigits = 0
+    }
+    // Whole rupees truncate as before; with decimals (the "= ₹33.33" preview) they're kept.
+    return if (maxFractionDigits == 0) format.format(n.toLong()) else format.format(n)
 }

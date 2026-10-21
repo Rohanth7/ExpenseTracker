@@ -7,15 +7,38 @@ package com.example.expensetracker.ui.util
 object AmountCalculator {
     private const val OPERATORS = "+-*/×÷−xX"
 
+    /** ₹1 lakh crore. Anything above is a typo, and it keeps rounding clear of Long overflow. */
+    private const val MAX_AMOUNT = 1e12
+
+    /** "1,200", "1,20,000" (Indian) or "1,234,567" (Western), optionally with decimals. */
+    private val GROUPED = Regex("""^(\d{1,3}(,\d{3})+|\d{1,2}(,\d{2})*,\d{3})(\.\d+)?$""")
+
+    /** "12,50" or "99,9": a comma typed as the decimal point (comma-decimal keyboards and locales). */
+    private val DECIMAL_COMMA = Regex("""^\d+,\d{1,2}$""")
+
     /** Positive, finite result rounded to 2 decimals, or null if the text isn't a valid amount. */
     fun evaluate(text: String): Double? {
-        val s = text.replace("₹", "").replace(",", "").replace(" ", "")
+        val s = text.replace("₹", "").replace(" ", "")
             .replace('×', '*').replace('x', '*').replace('X', '*').replace('÷', '/').replace('−', '-')
         if (s.isEmpty()) return null
         val parser = Parser(s)
         val value = parser.expression() ?: return null
-        if (!parser.atEnd() || !value.isFinite() || value <= 0) return null
-        return Math.round(value * 100) / 100.0
+        if (!parser.atEnd() || !value.isFinite() || value > MAX_AMOUNT) return null
+        // Round before the zero check, so "0.004" is refused rather than saved as ₹0.
+        val rounded = Math.round(value * 100) / 100.0
+        return if (rounded > 0) rounded else null
+    }
+
+    /** The amount as the edit dialog shows it: "180.00", never "180,00" whatever the phone's language. */
+    fun forEditing(amount: Double): String =
+        java.math.BigDecimal.valueOf(amount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+
+    /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
+    private fun parseNumber(token: String): Double? = when {
+        ',' !in token -> token.toDoubleOrNull()
+        GROUPED.matches(token) -> token.replace(",", "").toDoubleOrNull()
+        DECIMAL_COMMA.matches(token) -> token.replace(',', '.').toDoubleOrNull()
+        else -> null
     }
 
     /** True when the text contains an operator, so the UI can show "= ₹165" under the field. */
@@ -58,8 +81,8 @@ object AmountCalculator {
 
         private fun number(): Double? {
             val start = i
-            while (i < s.length && (s[i].isDigit() || s[i] == '.')) i++
-            return s.substring(start, i).toDoubleOrNull()
+            while (i < s.length && (s[i].isDigit() || s[i] == '.' || s[i] == ',')) i++
+            return parseNumber(s.substring(start, i))
         }
     }
 }
