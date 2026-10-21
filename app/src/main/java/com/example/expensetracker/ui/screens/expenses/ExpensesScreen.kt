@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -89,21 +90,19 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
         containerColor = Canvas,
         floatingActionButton = {
             if (!isSelectionMode) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(58.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (categories.isEmpty()) Muted else Jade)
-                        .clickable {
-                            if (categories.isEmpty()) {
-                                android.widget.Toast.makeText(context, "Please add a category first", android.widget.Toast.LENGTH_SHORT).show()
-                            } else {
-                                showAddDialog = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center
+                        .background(Jade)
+                        .clickable { showAddDialog = true }
+                        .padding(horizontal = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add expense", tint = Deep, modifier = Modifier.size(26.dp))
+                    // The text labels the button, so the icon needs no description of its own.
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Deep, modifier = Modifier.size(26.dp))
+                    Text("Add expense", color = Deep, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -348,6 +347,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     if (showAddDialog) {
         AddExpenseDialog(
             categories = categories,
+            initialCategoryId = remember(categories) { defaultCategoryId(categories, viewModel.lastManualCategoryId) },
             onDismiss = { showAddDialog = false },
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
@@ -364,6 +364,11 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
+            },
+            onDuplicate = {
+                viewModel.duplicateExpense(expense)
+                editingExpense = null
+                android.widget.Toast.makeText(context, "Duplicated — dated today", android.widget.Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -763,10 +768,10 @@ private fun ExpenseRowItem(
             if (!isSelectionMode) {
                 Row {
                     IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -790,13 +795,14 @@ private fun categoryDisplayText(category: Category?, allCategories: List<Categor
 @Composable
 private fun AddExpenseDialog(
     categories: List<Category>,
+    initialCategoryId: Long,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
-    var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    var selectedCategoryId by remember { mutableStateOf(initialCategoryId) }
     var expanded by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
@@ -809,23 +815,7 @@ private fun AddExpenseDialog(
         title = { Text("Add Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (categories.isEmpty()) {
-                    Text(
-                        "⚠️ No categories yet. Go to the Categories tab to create one first.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Coral
-                    )
-                }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it; amountError = "" },
-                    label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = amountError.isNotEmpty(),
-                    supportingText = if (amountError.isNotEmpty()) {{ Text(amountError) }} else null,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(amount = amount, error = amountError, onChange = { amount = it; amountError = "" })
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -850,12 +840,12 @@ private fun AddExpenseDialog(
                         )
                     }
                 }
-                if (categories.isNotEmpty()) {
+                run {
                     val parents = remember(categories) { categories.filter { it.parentId == null } }
                     val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                         OutlinedTextField(
-                            value = categoryDisplayText(selectedCategory, categories),
+                            value = categoryDisplayText(selectedCategory, categories, CHOOSE_LATER),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Category") },
@@ -863,6 +853,11 @@ private fun AddExpenseDialog(
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                         )
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            // Saving without a category files it as pending, sorted later from the list.
+                            DropdownMenuItem(
+                                text = { Text(CHOOSE_LATER, color = Muted) },
+                                onClick = { selectedCategoryId = -1L; expanded = false }
+                            )
                             parents.forEach { parent ->
                                 DropdownMenuItem(
                                     text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
@@ -891,16 +886,12 @@ private fun AddExpenseDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = categories.isNotEmpty(),
                 onClick = {
-                    val amt = amount.toDoubleOrNull()
-                    if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
-                    if (selectedCategoryId == -1L && categories.isNotEmpty()) {
-                        selectedCategoryId = categories.first().id
-                    }
+                    val amt = AmountCalculator.evaluate(amount)
+                    if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
                     onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim(), selectedPaymentMethod)
                 }
-            ) { Text("Add", color = if (categories.isNotEmpty()) Jade else Muted) }
+            ) { Text("Add", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -912,7 +903,8 @@ private fun EditExpenseDialog(
     expense: Expense,
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long, String, String) -> Unit
+    onConfirm: (Double, String, Long, Long, String, String) -> Unit,
+    onDuplicate: () -> Unit
 ) {
     var amount by remember { mutableStateOf("%.2f".format(expense.amount)) }
     var description by remember { mutableStateOf(expense.description) }
@@ -930,16 +922,7 @@ private fun EditExpenseDialog(
         title = { Text("Edit Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it; amountError = "" },
-                    label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = amountError.isNotEmpty(),
-                    supportingText = if (amountError.isNotEmpty()) {{ Text(amountError) }} else null,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(amount = amount, error = amountError, onChange = { amount = it; amountError = "" })
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -1003,14 +986,55 @@ private fun EditExpenseDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = amount.toDoubleOrNull()
-                if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
+                val amt = AmountCalculator.evaluate(amount)
+                if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
                 onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim(), selectedPaymentMethod)
             }) { Text("Save", color = Jade) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDuplicate) { Text("Duplicate", color = Jade) }
+                TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
+            }
+        }
     )
 }
+
+private const val CHOOSE_LATER = "Choose later (pending)"
+
+/**
+ * The amount input for both dialogs. Accepts sums like "120+45" or "3×40" (see [AmountCalculator]);
+ * the decimal keyboard has no operator keys, so small chips add them.
+ */
+@Composable
+private fun AmountField(amount: String, error: String, onChange: (String) -> Unit) {
+    val result = if (AmountCalculator.isExpression(amount)) AmountCalculator.evaluate(amount) else null
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedTextField(
+            value = amount,
+            onValueChange = onChange,
+            label = { Text("Amount (₹)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            isError = error.isNotEmpty(),
+            supportingText = when {
+                error.isNotEmpty() -> {{ Text(error) }}
+                result != null -> {{ Text("= ₹${fmtAmount(result)}", color = Muted, fontSize = 12.sp) }}
+                else -> null
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("+", "−", "×", "÷").forEach { op ->
+                AssistChip(onClick = { onChange(amount + op) }, label = { Text(op, fontSize = 14.sp) })
+            }
+        }
+    }
+}
+
+private fun fmtAmount(n: Double): String = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
+    maximumFractionDigits = 2; minimumFractionDigits = 0
+}.format(n)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
