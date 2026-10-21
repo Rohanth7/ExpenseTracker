@@ -18,5 +18,12 @@ sealed class LaunchAction {
             action == OPEN_SUBSCRIPTIONS -> OpenSubscriptions
             else -> null
         }
+
+        /**
+         * For Activity.onCreate. A recreated activity (rotation, or Android restoring it) gets its
+         * original intent again; acting on it twice would reopen the add dialog or Categorize.
+         */
+        fun onCreate(recreated: Boolean, action: String?, expenseId: Long): LaunchAction? =
+            if (recreated) null else from(action, expenseId)
     }
 }

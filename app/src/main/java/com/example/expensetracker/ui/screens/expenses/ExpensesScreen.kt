@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +62,9 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
-    var showAddDialog by remember { mutableStateOf(openAddOnStart) }
+    // Saveable: the route keeps add=true, so a plain remember would reopen the dialog after the
+    // user closed it, on rotation or when Android restores the screen.
+    var showAddDialog by rememberSaveable { mutableStateOf(openAddOnStart) }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }

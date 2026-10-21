@@ -81,7 +81,11 @@ class MainActivity : FragmentActivity() {
             WidgetUpdateHelper.update(applicationContext)
         }
 
-        pendingAction = launchActionOf(intent)
+        pendingAction = LaunchAction.onCreate(
+            recreated = savedInstanceState != null,
+            action = intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
+            expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L
+        )
 
         setContent {
             ExpenseTrackerTheme {
