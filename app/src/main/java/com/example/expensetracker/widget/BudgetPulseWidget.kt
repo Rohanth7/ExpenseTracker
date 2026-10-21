@@ -107,24 +107,34 @@ private fun buildPlaceholder(context: Context): RemoteViews =
  * the two PendingIntents from overwriting each other.
  */
 private fun RemoteViews.setClicks(context: Context) {
-    val launchPi = PendingIntent.getActivity(
-        context, 0,
-        Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        },
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    val addPi = PendingIntent.getActivity(
-        context, 1,
-        Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            putExtra(LaunchAction.EXTRA_ACTION, LaunchAction.QUICK_ADD)
-        },
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    setOnClickPendingIntent(R.id.widget_root, launchPi)
-    setOnClickPendingIntent(R.id.widget_add, addPi)
+    setOnClickPendingIntent(R.id.widget_root, widgetOpenAppIntent(context))
+    setOnClickPendingIntent(R.id.widget_add, widgetQuickAddIntent(context))
 }
+
+// Each gets its own action. Android tells PendingIntents apart by target, action, data and request
+// code, not extras; without an action, the "+" (request code 1) was the same PendingIntent as the
+// Categorize notification for expense 1, and whichever was built last overwrote the other's extras.
+private const val ACTION_WIDGET_OPEN = "com.example.expensetracker.action.WIDGET_OPEN"
+private const val ACTION_WIDGET_QUICK_ADD = "com.example.expensetracker.action.WIDGET_QUICK_ADD"
+
+internal fun widgetOpenAppIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+    context, 0,
+    Intent(context, MainActivity::class.java).apply {
+        action = ACTION_WIDGET_OPEN
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    },
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+)
+
+internal fun widgetQuickAddIntent(context: Context): PendingIntent = PendingIntent.getActivity(
+    context, 1,
+    Intent(context, MainActivity::class.java).apply {
+        action = ACTION_WIDGET_QUICK_ADD
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        putExtra(LaunchAction.EXTRA_ACTION, LaunchAction.QUICK_ADD)
+    },
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+)
 
 private fun buildViews(
     context: Context,
