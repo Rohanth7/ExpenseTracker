@@ -84,7 +84,10 @@ class MainActivity : FragmentActivity() {
         pendingAction = LaunchAction.onCreate(
             recreated = savedInstanceState != null,
             action = intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
-            expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L
+            expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L,
+            stillPending = savedInstanceState?.takeIf { it.getBoolean(SAVED_HAS_PENDING) }?.let {
+                LaunchAction.from(it.getString(SAVED_PENDING_ACTION), it.getLong(SAVED_PENDING_EXPENSE_ID, -1L))
+            }
         )
 
         setContent {
@@ -118,6 +121,16 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    /** An action that hasn't been handled yet (still onboarding, say) must survive a rotation. */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val pending = pendingAction ?: return
+        val (action, expenseId) = pending.toExtras()
+        outState.putBoolean(SAVED_HAS_PENDING, true)
+        outState.putString(SAVED_PENDING_ACTION, action)
+        outState.putLong(SAVED_PENDING_EXPENSE_ID, expenseId)
     }
 
     override fun onStart() {
@@ -196,5 +209,11 @@ class MainActivity : FragmentActivity() {
             }
             showOnboarding = false
         }
+    }
+
+    private companion object {
+        const val SAVED_HAS_PENDING = "pending_launch"
+        const val SAVED_PENDING_ACTION = "pending_launch_action"
+        const val SAVED_PENDING_EXPENSE_ID = "pending_launch_expense_id"
     }
 }

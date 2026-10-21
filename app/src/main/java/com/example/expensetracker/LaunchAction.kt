@@ -6,6 +6,13 @@ sealed class LaunchAction {
     object QuickAdd : LaunchAction()
     object OpenSubscriptions : LaunchAction()
 
+    /** The (action, expenseId) pair [from] reads, so a pending action can go into saved state. */
+    fun toExtras(): Pair<String?, Long> = when (this) {
+        is Categorize -> null to expenseId
+        QuickAdd -> QUICK_ADD to -1L
+        OpenSubscriptions -> OPEN_SUBSCRIPTIONS to -1L
+    }
+
     companion object {
         const val EXTRA_ACTION = "launch_action"
         const val QUICK_ADD = "quick_add"
@@ -21,9 +28,11 @@ sealed class LaunchAction {
 
         /**
          * For Activity.onCreate. A recreated activity (rotation, or Android restoring it) gets its
-         * original intent again; acting on it twice would reopen the add dialog or Categorize.
+         * original intent again; acting on it twice would reopen the add dialog or Categorize. What
+         * counts then is [stillPending]: an action saved because it hadn't been handled yet (it
+         * arrived during onboarding, say), which must still run.
          */
-        fun onCreate(recreated: Boolean, action: String?, expenseId: Long): LaunchAction? =
-            if (recreated) null else from(action, expenseId)
+        fun onCreate(recreated: Boolean, action: String?, expenseId: Long, stillPending: LaunchAction? = null): LaunchAction? =
+            if (recreated) stillPending else from(action, expenseId)
     }
 }
