@@ -3,9 +3,9 @@
 Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as context when picking up work.
 
 **Repo:** https://github.com/Rohanth7/ExpenseTracker (branch `main`)
-**Last commit:** `ee2c973` — Keep captured SMS text 7 days, leave it out of backups, stop Google auto-backup (#7)
+**Last merged:** `bc0806e` — Let users teach MyMoney bank messages it reads wrong (#9), then plan/docs commits up to `7e853a5`
 **Database version:** 13 · **Backup format:** v2
-**Status:** Phase 0 (make it work for a new user) is done. Next: Phase 1 (Play Store launch), plus the deferred database-encryption PR.
+**Status:** Phase 0 is done, plus subscription detection (#8) and message rules (#9). In progress: the five features in `docs/superpowers/plans/2026-10-21-features-1-4-and-price-alerts.md` (F1 faster entry → F5 price alerts), one PR each, before Play Store launch work.
 
 `.claude/settings.local.json` is Claude Code's local config — never commit it.
 
@@ -15,14 +15,16 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **Auto-tracking** — parses bank SMS (`SmsReceiver`, `SmsParser`) and GPay/PhonePe/Paytm notifications (`TransactionNotificationListener`, `NotificationParser`). Credits, promos, OTPs, bill/statement reminders, "will be debited" notices, mandate registrations and failed payments are ignored; WhatsApp is not read. SMS + notification for the same transaction are deduped on amount within 3 minutes. With no categories a payment is saved as pending, never dropped. Settings → Auto-tracking card shows whether SMS and notification access are on and fixes each in one tap.
 - **Capture notification** — three category buttons: the auto-detected category, then the most used in the last 60 days, then alphabetical (`QuickCategories`). Tapping the notification opens the full picker.
 - **Overview (Dashboard)** — month navigation, budget warning (pending expenses count toward total), upcoming bills, EMI commitments, savings goals, Cash Flow Forecast (income − spent − bills still due − EMI still due = free to spend; current month only, when income is set). The 6-month trend chart was removed on purpose.
-- **Expenses** — search, category filter chips, multi-tagging, edit expense, date picker.
+- **Expenses** — search, category filter chips, multi-tagging, edit expense, date picker. Manual entry (F1): labelled "Add expense" button; the amount field takes sums like `120+45` or `3×40` (`AmountCalculator`, with `+ − × ÷` chips that insert at the cursor and an "= ₹165" preview); category is optional ("Choose later (pending)") and starts on the last one used; Edit → **Duplicate** copies an expense dated now (no SMS text copied).
+- **Subscriptions** (#8) — repeating payments detected from history (`SubscriptionDetector`): Overview card (top 3 + yearly total) and a Subscriptions page with "Remind me" (adds a bill) and "Not a subscription" (with Undo).
+- **Message rules** (#9) — teach a bank message the parser reads wrong ("It's a payment" / "Not a payment"), from an expense or by pasting text; rules are checked before the built-in parser and included in backups. Long multi-part SMS are joined before parsing.
 - **Statistics** — monthly view by default with yearly toggle, subcategory breakdown, smart insights (weekend vs weekday, no-spend days), auto-tracking stats.
 - **Budgets** — per-category limits (Settings → Category Budgets, or the Categories tab), alerts at a customizable threshold (slider) and at 100%.
 - **Settings** — Auto-tracking, Bills & Reminders (bills + loans/EMIs), Category Budgets, Cloud Backup (Back up now, Restore from Drive), Preferences (budget alerts, week start, privacy mode, App Lock, widget), Data & Backup (export, restore from file, reset; "Load mock data" in debug builds only).
 - **Backup** — format v2 includes categories, expenses, bills, loans, savings goals, learned merchants, income and alert settings. Restore checks the file first, shows what it contains, and runs in one transaction. v1 files still restore. Captured SMS text is never included.
 - **App Lock** — fingerprint, face or screen lock; re-locks after 30 s in the background (`AppLockState`); lock screen with Unlock button instead of closing the app.
 - **Privacy** — captured SMS/notification text is deleted after 7 days (`CapturedTextRetention`); Android's automatic Google backup excludes all app data; privacy mode hides the app in recents from startup.
-- **Other** — recurring bills auto-logged on their due day, bill reminders (WorkManager), Budget Pulse home-screen widget, savings goals with deposit dialog, merchant learning with whole-word matching, new app icon, dark splash background (`#171511`).
+- **Other** — recurring bills auto-logged on their due day, bill reminders (WorkManager), Budget Pulse home-screen widget (its "+" opens the add-expense dialog, F1; launch intents go through `LaunchAction`), savings goals with deposit dialog, merchant learning with whole-word matching, new app icon, dark splash background (`#171511`).
 
 ## Notable bug fixes (don't regress)
 
@@ -33,6 +35,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - PhonePe recipient phrasing ("sent you", "paid to you", …) treated as credit.
 - Weekend insight counts today in the day denominator.
 - Bottom nav "Overview" tab returns to Overview from nested screens.
+- A recreated activity (rotation, Android restoring it) doesn't act on its launch intent again (`LaunchAction.onCreate`); before F1 a rotation after a notification tap reopened Categorize.
 
 ### Merged PRs (2026-10-15/16, each tested on the emulator against `main`)
 
@@ -43,6 +46,11 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **#5 App Lock** — cancelling closed the app; returning from background skipped the lock; lock could be enabled without a screen lock (lockout), now it needs a successful prompt first and turns itself off with a dialog if the phone's screen lock is removed; Android 9–10 use `BIOMETRIC_WEAK | DEVICE_CREDENTIAL`; privacy mode applied at startup.
 - **#6 Smaller bugs** — capture notification showed only 2 categories (a "Categorize" button took the third slot); quick-action taps ignore the alert threshold; deleting a category leaves learned merchants and bills pointing at it (payments vanished), rules for missing categories are now ignored; auto-logged bills dated the 1st, now their due day (`RecurringSchedule`), duplicate check covers the whole month; forecast counts auto-logged bills until they're logged (`CashFlow`).
 - **#7 Privacy** — see Features (7-day retention, no captured text in backups, Google auto-backup off).
+- **#8 Subscriptions** — see Features. No schema change.
+- **#9 Message rules** — see Features (`CustomRules`); also fixed long SMS being parsed in pieces. No schema change.
+
+### Open PRs
+- **F1 Faster entry** (`feat/faster-entry`) — see Features. Fixes found on the emulator: operator chips inserted before the cursor's digits; the widget's "+" opened with no category because categories hadn't loaded; rotation reopened the add dialog (and, on `main`, Categorize).
 
 ### Known trade-offs
 
@@ -56,7 +64,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - Android Studio (Homebrew install) with its bundled JDK:
   `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"`
 - Build: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
-- Unit tests (JVM, 63): `./gradlew testDebugUnitTest` — parser, notification parser, merchant rules, backup codec + rule files, app lock timing, quick categories, recurring schedule, cash flow, starter categories.
+- Unit tests (JVM, 113 on `feat/faster-entry`, 92 on `main`): `./gradlew testDebugUnitTest` — parser, notification parser, merchant rules, custom rules, subscriptions, backup codec + rule files, app lock timing, quick categories, recurring schedule, cash flow, starter categories, amount calculator, expense copy, launch actions.
 - Device tests (11, in-memory DBs, need the emulator running): `./gradlew connectedDebugAndroidTest` — backup restore, category deletion, captured-text retention. Note: this uninstalls the app afterwards.
 - Emulator "Medium Phone API 37.0" (Android 17, Google Play image). The AVD itself is set to 1 core + software graphics, which crashes system_server; start it with
   `~/Library/Android/sdk/emulator/emulator -avd Medium_Phone_API_37.0 -cores 4 -gpu host -memory 4096 -no-boot-anim`
@@ -64,6 +72,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - Fake bank SMS: `adb emu sms send JD-ICICIB "ICICI Bank Acct XX123 debited for Rs 349.00 on 16-Oct-26; BIGBASKET credited. UPI:412345678901."`. GPay/PhonePe notifications need a real phone.
 - Device PIN for App Lock tests: `adb shell locksettings set-pin 1234` / `clear --old 1234`. Android blocks screenshots of its PIN screen.
 - Reading the app DB: copy `databases/expense_tracker.db` plus `-wal` and `-shm` with `adb shell "run-as com.example.expensetracker cat …"`, then `sqlite3` locally.
+- Emulator gotchas (Oct 2026): when the Mac is heavily loaded, `adb shell` and `uiautomator dump` hang and Android reports "failed to complete startup" ANRs (and `connectedDebugAndroidTest` fails with "Process crashed") — wait for the load to drop and retry. `uiautomator dump` also hangs while a text field has focus; use screenshots + coordinates then. A force-stopped app's widget shows as a grey placeholder until the app runs again. Silence the emulator with `adb shell cmd audio set-ringer-mode SILENT`.
 
 ## Open items
 
