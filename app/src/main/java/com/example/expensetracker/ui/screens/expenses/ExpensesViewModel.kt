@@ -162,9 +162,7 @@ class ExpensesViewModel(
             if (it.source != "Manual") {
                 mappingRepo.saveMapping(it.description, categoryId)
             }
-            if (prefs.budgetAlertsEnabled) {
-                BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
-            }
+            alertIfOverBudget(categoryId)
         }
         _selectedIds.value = emptySet()
     }
@@ -173,9 +171,7 @@ class ExpensesViewModel(
         expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
         // Remembered either way: choosing "Choose later" makes it the next default too.
         prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
-        if (categoryId != -1L && prefs.budgetAlertsEnabled) {
-            BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
-        }
+        alertIfOverBudget(categoryId)
     }
 
     /** The add dialog's starting category (see [defaultCategoryId]). Read from prefs once, not per frame. */
@@ -185,8 +181,7 @@ class ExpensesViewModel(
     /** Saves [copy] (from [duplicateWithEdits]) as a new expense. */
     fun duplicateExpense(copy: Expense) = viewModelScope.launch {
         expenseRepo.insert(copy)
-        if (copy.categoryId != -1L && prefs.budgetAlertsEnabled)
-            BudgetAlertHelper.checkAndNotify(appContext, copy.categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
+        alertIfOverBudget(copy.categoryId)
     }
 
     fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = expense.paymentMethod) = viewModelScope.launch {
@@ -194,9 +189,13 @@ class ExpensesViewModel(
         if (expense.source != "Manual" && categoryId != -1L) {
             mappingRepo.saveMapping(description, categoryId)
         }
-        if (categoryId != -1L && prefs.budgetAlertsEnabled) {
+        alertIfOverBudget(categoryId)
+    }
+
+    /** The one budget-alert check after an expense is added, copied, edited or categorized. */
+    private suspend fun alertIfOverBudget(categoryId: Long) {
+        if (categoryId != -1L && prefs.budgetAlertsEnabled)
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
-        }
     }
 
     fun deleteExpense(expense: Expense) = viewModelScope.launch {

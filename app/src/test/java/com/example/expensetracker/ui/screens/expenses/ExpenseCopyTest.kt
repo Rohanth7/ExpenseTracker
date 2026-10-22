@@ -3,6 +3,8 @@ package com.example.expensetracker.ui.screens.expenses
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -26,6 +28,12 @@ class ExpenseCopyTest {
         assertEquals(200.0, copy.amount, 0.0); assertEquals("SWIGGY dinner", copy.description); assertEquals(9L, copy.categoryId)
         assertEquals("team", copy.tags); assertEquals("Cash", copy.paymentMethod)
         assertEquals(0L, copy.id); assertEquals(9_999L, copy.date); assertEquals("Manual", copy.source); assertNull(copy.rawSms)
+    }
+    @Test fun `the edit form knows when it has unsaved changes`() {
+        assertFalse(original.isEditedTo(180.0, "SWIGGY", 3, "lunch", "Credit Card", 1_000L))
+        assertTrue(original.isEditedTo(180.0, "SWIGGY", 1, "lunch", "Credit Card", 1_000L))   // category
+        assertTrue(original.isEditedTo(200.0, "SWIGGY", 3, "lunch", "Credit Card", 1_000L))   // amount
+        assertTrue(original.isEditedTo(180.0, "SWIGGY", 3, "lunch", "Credit Card", 9_000L))   // date
     }
     @Test fun `last used category is the default when it still exists`() {
         val cats = listOf(Category(id = 1, name = "Food"), Category(id = 2, name = "Travel"))

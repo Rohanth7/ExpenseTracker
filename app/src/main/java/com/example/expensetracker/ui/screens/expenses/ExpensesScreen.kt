@@ -69,13 +69,19 @@ fun ExpensesScreen(
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     // The widget's "+": a one-shot request, consumed here so it can't fire twice.
-    LaunchedEffect(openAdd) {
-        if (openAdd) { showAddDialog = true; onAddOpened() }
-    }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }
     var showAdvancedFilters by remember { mutableStateOf(false) }
+    // The widget's "+": a one-shot request, consumed here so it can't fire twice. It replaces any
+    // dialog left open (Edit, Delete, filters) so two dialogs never stack.
+    LaunchedEffect(openAdd) {
+        if (openAdd) {
+            editingExpense = null; expenseToDelete = null; showBulkCategorize = false; showAdvancedFilters = false
+            showAddDialog = true
+            onAddOpened()
+        }
+    }
 
     val isSelectionMode = selectedIds.isNotEmpty()
     BackHandler(isSelectionMode) { viewModel.clearSelection() }
@@ -377,10 +383,11 @@ fun ExpensesScreen(
                 viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
             },
-            onDuplicate = { amount, description, categoryId, tags, paymentMethod ->
+            onDuplicate = { amount, description, categoryId, tags, paymentMethod, alsoSaved ->
                 viewModel.duplicateExpense(expense.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis()))
                 editingExpense = null
-                android.widget.Toast.makeText(context, "Duplicated — dated today", android.widget.Toast.LENGTH_SHORT).show()
+                val msg = if (alsoSaved) "Saved, and duplicated — the copy is dated today" else "Duplicated — dated today"
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -916,7 +923,7 @@ private fun EditExpenseDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit,
-    onDuplicate: (Double, String, Long, String, String) -> Unit
+    onDuplicate: (amount: Double, description: String, categoryId: Long, tags: String, paymentMethod: String, alsoSaved: Boolean) -> Unit
 ) {
     // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
     val amount = rememberAmountInputState(AmountCalculator.forEditing(expense.amount))
@@ -925,6 +932,10 @@ private fun EditExpenseDialog(
     var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
     var expanded by remember { mutableStateOf(false) }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(expense.date)) }
+    // Same day: keep the exact original time (buildTimestamp drops milliseconds, which made an
+    // untouched SMS expense look edited). Another day: that day at the original time of day.
+    val formDate = if (selectedDateUtcMidnight == toUtcMidnight(expense.date)) expense.date
+        else buildTimestamp(selectedDateUtcMidnight, expense.date)
     var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
@@ -999,16 +1010,22 @@ private fun EditExpenseDialog(
         confirmButton = {
             TextButton(onClick = {
                 val amt = amount.validated() ?: return@TextButton
-                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim(), selectedPaymentMethod)
+                onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
             }) { Text("Save", color = Jade) }
         },
         dismissButton = {
+            // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
+            // fix made here, like picking a category, isn't lost on the original.
+            val edited = expense.isEditedTo(
+                AmountCalculator.evaluate(amount.value.text) ?: -1.0, description.trim(), selectedCategoryId,
+                tags.trim(), selectedPaymentMethod, formDate
+            )
             Row {
-                // Copies the form as it is now, unsaved changes included.
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton
-                    onDuplicate(amt, description.trim(), selectedCategoryId, tags.trim(), selectedPaymentMethod)
-                }) { Text("Duplicate", color = Jade) }
+                    if (edited) onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
+                    onDuplicate(amt, description.trim(), selectedCategoryId, tags.trim(), selectedPaymentMethod, edited)
+                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Jade) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
             }
         }

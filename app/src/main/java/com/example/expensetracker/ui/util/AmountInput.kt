@@ -51,7 +51,8 @@ fun rememberAmountInputState(initial: String = ""): AmountInputState = remember 
 @Composable
 fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: String = "Amount (₹)") {
     val text = state.value.text
-    val result = if (AmountCalculator.needsPreview(text)) AmountCalculator.evaluate(text) else null
+    // Parsed once per text change, not on every recomposition.
+    val result = remember(text) { if (AmountCalculator.needsPreview(text)) AmountCalculator.evaluate(text) else null }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         OutlinedTextField(
             value = state.value,
@@ -62,7 +63,7 @@ fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: S
             isError = state.error.isNotEmpty(),
             supportingText = when {
                 state.error.isNotEmpty() -> {{ Text(state.error) }}
-                result != null -> {{ Text("= ₹${previewFormat(result)}", color = Muted, fontSize = 12.sp) }}
+                result != null -> {{ Text("= ₹${PREVIEW_FORMAT.format(result)}", color = Muted, fontSize = 12.sp) }}
                 else -> null
             },
             modifier = Modifier.fillMaxWidth()
@@ -83,7 +84,7 @@ fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: S
     }
 }
 
-/** "1,65,000" or "33.33": Indian grouping, paise only when there are some. */
-private fun previewFormat(n: Double): String = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
+/** "1,65,000" or "33.33": Indian grouping, paise only when there are some. Main-thread only. */
+private val PREVIEW_FORMAT: NumberFormat = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
     maximumFractionDigits = 2; minimumFractionDigits = 0
-}.format(n)
+}

@@ -23,3 +23,8 @@ fun defaultCategoryId(categories: List<Category>, lastUsedId: Long): Long =
  */
 fun startingCategoryId(userChoice: Long?, categories: List<Category>, lastUsedId: Long): Long =
     userChoice ?: defaultCategoryId(categories, lastUsedId)
+
+/** True when the edit form's values differ from this saved expense (so Duplicate also saves them). */
+fun Expense.isEditedTo(amount: Double, description: String, categoryId: Long, tags: String, paymentMethod: String, date: Long): Boolean =
+    amount != this.amount || description != this.description || categoryId != this.categoryId ||
+        tags != this.tags || paymentMethod != this.paymentMethod || date != this.date
