@@ -16,12 +16,25 @@ object AmountCalculator {
     /** "12,50" or "99,9": a comma typed as the decimal point (comma-decimal keyboards and locales). */
     private val DECIMAL_COMMA = Regex("""^\d+,\d{1,2}$""")
 
-    /** Positive, finite result rounded to 2 decimals, or null if the text isn't a valid amount. */
-    fun evaluate(text: String): Double? {
+    /** "1.234,50": dots grouping thousands, then a decimal comma (comma-decimal phones). */
+    private val DOT_GROUPED_DECIMAL_COMMA = Regex("""^\d{1,3}(\.\d{3})+,\d+$""")
+
+    /** True where the phone's language writes 1,5 for one and a half (German, French, Indonesian…). */
+    fun usesDecimalComma(locale: java.util.Locale = java.util.Locale.getDefault()): Boolean =
+        java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator == ','
+
+    /** Show "= ₹…" for sums, and whenever a comma was typed, so a comma read the wrong way is visible. */
+    fun needsPreview(text: String): Boolean = isExpression(text) || ',' in text
+
+    /**
+     * Positive, finite result rounded to 2 decimals, or null if the text isn't a valid amount.
+     * On a comma-decimal phone ([decimalComma]) a comma is the decimal point; elsewhere it groups thousands.
+     */
+    fun evaluate(text: String, decimalComma: Boolean = usesDecimalComma()): Double? {
         val s = text.replace("₹", "").replace(" ", "")
             .replace('×', '*').replace('x', '*').replace('X', '*').replace('÷', '/').replace('−', '-')
         if (s.isEmpty()) return null
-        val parser = Parser(s)
+        val parser = Parser(s, decimalComma)
         val value = parser.expression() ?: return null
         if (!parser.atEnd() || !value.isFinite() || value > MAX_AMOUNT) return null
         // Round before the zero check, so "0.004" is refused rather than saved as ₹0.
@@ -34,8 +47,13 @@ object AmountCalculator {
         java.math.BigDecimal.valueOf(amount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
 
     /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
-    private fun parseNumber(token: String): Double? = when {
+    private fun parseNumber(token: String, decimalComma: Boolean): Double? = when {
         ',' !in token -> token.toDoubleOrNull()
+        decimalComma -> when {
+            '.' in token -> if (DOT_GROUPED_DECIMAL_COMMA.matches(token)) token.replace(".", "").replace(',', '.').toDoubleOrNull() else null
+            token.count { it == ',' } == 1 && !token.endsWith(',') && !token.startsWith(',') -> token.replace(',', '.').toDoubleOrNull()
+            else -> null
+        }
         GROUPED.matches(token) -> token.replace(",", "").toDoubleOrNull()
         DECIMAL_COMMA.matches(token) -> token.replace(',', '.').toDoubleOrNull()
         else -> null
@@ -54,7 +72,7 @@ object AmountCalculator {
         return text.replaceRange(start, end, symbol) to start + symbol.length
     }
 
-    private class Parser(private val s: String) {
+    private class Parser(private val s: String, private val decimalComma: Boolean) {
         private var i = 0
         fun atEnd() = i == s.length
 
@@ -82,7 +100,7 @@ object AmountCalculator {
         private fun number(): Double? {
             val start = i
             while (i < s.length && (s[i].isDigit() || s[i] == '.' || s[i] == ',')) i++
-            return parseNumber(s.substring(start, i))
+            return parseNumber(s.substring(start, i), decimalComma)
         }
     }
 }

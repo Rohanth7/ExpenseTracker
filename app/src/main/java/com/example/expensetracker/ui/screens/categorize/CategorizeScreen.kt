@@ -1,5 +1,9 @@
 package com.example.expensetracker.ui.screens.categorize
 
+import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.ui.util.AmountInputState
+import com.example.expensetracker.ui.util.rememberAmountInputState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
@@ -55,7 +59,7 @@ fun CategorizeScreen(
 
     // Category mode state
     var selectedCategoryId by remember { mutableStateOf(-1L) }
-    var amountText by remember { mutableStateOf("") }
+    val amount = rememberAmountInputState()
     var tags by remember { mutableStateOf("") }
 
     // EMI mode state
@@ -63,13 +67,14 @@ fun CategorizeScreen(
 
     // Savings mode state
     var selectedGoalId by remember { mutableStateOf(-1L) }
-    var savingsAmountText by remember { mutableStateOf("") }
+    val savingsAmount = rememberAmountInputState()
 
     LaunchedEffect(expenseId) {
         expense = viewModel.getExpense(expenseId)
         expense?.let {
-            amountText = "%.2f".format(it.amount)
-            savingsAmountText = "%.2f".format(it.amount)
+            // Locale-free, so a comma-decimal phone shows 180.00 rather than 180,00.
+            amount.setText(AmountCalculator.forEditing(it.amount))
+            savingsAmount.setText(AmountCalculator.forEditing(it.amount))
             tags = it.tags
         }
         loaded = true
@@ -150,8 +155,7 @@ fun CategorizeScreen(
                 CategorizeMode.Category -> CategoryModeContent(
                     exp = exp,
                     categories = categories,
-                    amountText = amountText,
-                    onAmountChange = { amountText = it },
+                    amount = amount,
                     tags = tags,
                     onTagsChange = { tags = it },
                     selectedCategoryId = selectedCategoryId,
@@ -160,8 +164,9 @@ fun CategorizeScreen(
                     onLater = { viewModel.categorizeLater(onDone) },
                     onSave = {
                         if (selectedCategoryId != -1L) {
-                            val amount = amountText.toDoubleOrNull() ?: exp.amount
-                            viewModel.assignCategory(exp, selectedCategoryId, amount, tags.trim(), onDone)
+                            // Unreadable input shows an error; it used to fall back silently to the old amount.
+                            val value = amount.validated() ?: return@CategoryModeContent
+                            viewModel.assignCategory(exp, selectedCategoryId, value, tags.trim(), onDone)
                         }
                     }
                 )
@@ -181,8 +186,7 @@ fun CategorizeScreen(
 
                 CategorizeMode.Savings -> SavingsModeContent(
                     goals = savingsGoals,
-                    amountText = savingsAmountText,
-                    onAmountChange = { savingsAmountText = it },
+                    amount = savingsAmount,
                     selectedGoalId = selectedGoalId,
                     onSelectGoal = { selectedGoalId = it },
                     onDismiss = { viewModel.dismissExpense(exp, onDone) },
@@ -190,8 +194,8 @@ fun CategorizeScreen(
                     onSave = {
                         val goal = savingsGoals.find { it.id == selectedGoalId }
                         if (goal != null) {
-                            val amount = savingsAmountText.toDoubleOrNull() ?: exp.amount
-                            viewModel.linkToSavingsGoal(exp, goal, amount, onDone)
+                            val value = savingsAmount.validated() ?: return@SavingsModeContent
+                            viewModel.linkToSavingsGoal(exp, goal, value, onDone)
                         }
                     }
                 )
@@ -204,8 +208,7 @@ fun CategorizeScreen(
 private fun ColumnScope.CategoryModeContent(
     exp: Expense,
     categories: List<Category>,
-    amountText: String,
-    onAmountChange: (String) -> Unit,
+    amount: AmountInputState,
     tags: String,
     onTagsChange: (String) -> Unit,
     selectedCategoryId: Long,
@@ -214,14 +217,7 @@ private fun ColumnScope.CategoryModeContent(
     onLater: () -> Unit,
     onSave: () -> Unit
 ) {
-    OutlinedTextField(
-        value = amountText,
-        onValueChange = onAmountChange,
-        label = { Text("Amount (₹)") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
+    AmountField(amount)
 
     OutlinedTextField(
         value = tags,
@@ -321,8 +317,7 @@ private fun ColumnScope.LoanEmiModeContent(
 @Composable
 private fun ColumnScope.SavingsModeContent(
     goals: List<SavingsGoal>,
-    amountText: String,
-    onAmountChange: (String) -> Unit,
+    amount: AmountInputState,
     selectedGoalId: Long,
     onSelectGoal: (Long) -> Unit,
     onDismiss: () -> Unit,
@@ -338,14 +333,7 @@ private fun ColumnScope.SavingsModeContent(
             }
         }
     } else {
-        OutlinedTextField(
-            value = amountText,
-            onValueChange = onAmountChange,
-            label = { Text("Amount to add (₹)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        AmountField(amount, label = "Amount to add (₹)")
 
         Text("Select Goal", style = MaterialTheme.typography.titleSmall)
         LazyColumn(
