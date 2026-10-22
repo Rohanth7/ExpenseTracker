@@ -1,12 +1,25 @@
 package com.example.expensetracker.ui.screens.onboarding
 
 import com.example.expensetracker.data.backup.BackupData
+import com.google.gson.Gson
 
-/** Result of restoring a backup during first-run setup. */
-sealed class RestoreOutcome {
-    data class Restored(val summary: String, val hasIncome: Boolean) : RestoreOutcome()
-    data class Failed(val reason: String) : RestoreOutcome()
+/**
+ * A backup restored during first-run setup. It's saved in prefs until setup finishes, so the
+ * remaining steps still know about it after the app is closed and reopened.
+ */
+data class RestoredInfo(val summary: String, val hasIncome: Boolean, val hadCategories: Boolean) {
+    fun toJson(): String = Gson().toJson(this)
+
+    companion object {
+        /** Null if nothing was saved or it can't be read. */
+        @Suppress("SENSELESS_COMPARISON")
+        fun fromJson(json: String?): RestoredInfo? = json?.let {
+            runCatching { Gson().fromJson(it, RestoredInfo::class.java) }.getOrNull()?.takeIf { info -> info.summary != null }
+        }
+    }
 }
+
+fun restoredInfo(d: BackupData) = RestoredInfo(restoreSummary(d), restoredIncome(d), d.categories.orEmpty().isNotEmpty())
 
 /** "43 expenses, 7 categories, 4 bills": expenses and categories always, other sections if present. */
 fun restoreSummary(d: BackupData): String {

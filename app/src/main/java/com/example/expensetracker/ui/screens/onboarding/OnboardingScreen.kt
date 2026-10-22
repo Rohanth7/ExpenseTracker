@@ -47,20 +47,19 @@ private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
  * First-run setup: explains each permission before Android asks for it, then takes an optional
  * monthly income. Every step can be skipped; Settings → Auto-tracking can turn things on later.
  *
- * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup),
- * and whether a backup was restored. The Welcome step can restore a backup file for people moving
- * phones; setup then carries on with the permission steps, which a new phone still needs.
+ * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup).
+ * The Welcome step can restore a backup file for people moving phones; setup then carries on with
+ * the permission steps, which a new phone still needs.
  */
 @Composable
-fun OnboardingScreen(
-    onFinish: (monthlyIncome: Double?, restored: Boolean) -> Unit,
-    viewModel: OnboardingViewModel = viewModel()
-) {
+fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: OnboardingViewModel = viewModel()) {
     val context = LocalContext.current
-    var restoredSummary by rememberSaveable { mutableStateOf<String?>(null) }
-    var restoredHasIncome by rememberSaveable { mutableStateOf(false) }
-    var restoreError by rememberSaveable { mutableStateOf<String?>(null) }
+    val restored = viewModel.restored
     val restoring = viewModel.restoring
+    // A backup with an income needs nothing more; one without categories gets the starter set.
+    val skipIncome = restored?.hasIncome == true
+    val starterNote = "We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
+        DefaultCategories.STARTER.take(4).joinToString { it.name } + ". You can edit or delete them."
     val activity = context as? Activity
     val steps = remember {
         buildList {
@@ -70,7 +69,8 @@ fun OnboardingScreen(
             add(Step.Income)
         }
     }
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    // Reopened after a restore: the restore is done, so start at the first permission step.
+    var index by rememberSaveable { mutableIntStateOf(if (restored != null) 1 else 0) }
     val step = steps[index]
     val next = { if (index < steps.lastIndex) index++ }
     BackHandler(enabled = index > 0) { index-- }
@@ -99,20 +99,12 @@ fun OnboardingScreen(
     }
 
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        restoreError = null
-        viewModel.restore(uri)
+        if (uri != null) viewModel.restore(uri)
     }
-    LaunchedEffect(viewModel.outcome) {
-        when (val outcome = viewModel.outcome) {
-            is RestoreOutcome.Restored -> {
-                restoredSummary = outcome.summary; restoredHasIncome = outcome.hasIncome
-                if (step == Step.Welcome) next()
-            }
-            is RestoreOutcome.Failed -> restoreError = outcome.reason
-            null -> return@LaunchedEffect
-        }
-        viewModel.outcomeShown()
+    LaunchedEffect(viewModel.justRestored) {
+        if (!viewModel.justRestored) return@LaunchedEffect
+        if (step == Step.Welcome) next()
+        viewModel.restoreShown()
     }
 
     var incomeText by rememberSaveable { mutableStateOf("") }
@@ -137,7 +129,7 @@ fun OnboardingScreen(
                             "🔒  Your data never leaves your phone unless you back it up"
                         )
                     )
-                    restoreError?.let { Text(it, color = Coral, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+                    viewModel.restoreError?.let { Text(it, color = Coral, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
                 }
                 Step.Sms -> StepBody(
                     eyebrow = "STEP 1 · BANK SMS",
@@ -164,11 +156,12 @@ fun OnboardingScreen(
                         "It also warns you when a category is close to its budget.",
                     status = if (alertsGranted) "Alerts are on" else null
                 )
-                Step.Income -> if (restoredSummary != null && restoredHasIncome) {
+                Step.Income -> if (restored != null && skipIncome) {
                     StepBody(
                         eyebrow = "LAST STEP",
                         title = "You're all set",
-                        body = "Restored from your backup: $restoredSummary.\n\nYou can change anything later in Settings."
+                        body = "Restored from your backup: ${restored.summary}.\n\nYou can change anything later in Settings.",
+                        points = if (restored.hadCategories) emptyList() else listOf(starterNote)
                     )
                 } else {
                     StepBody(
@@ -176,9 +169,11 @@ fun OnboardingScreen(
                         title = "What's your monthly income?",
                         body = "This is optional. It lets the Overview show how much is still free to spend this month. " +
                             "You can change it any time from the Overview screen.",
-                        points = if (restoredSummary != null) listOf("Restored from your backup: $restoredSummary.")
-                            else listOf("We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
-                            DefaultCategories.STARTER.take(4).joinToString { it.name } + ". You can edit or delete them.")
+                        points = when {
+                            restored == null -> listOf(starterNote)
+                            restored.hadCategories -> listOf("Restored from your backup: ${restored.summary}.")
+                            else -> listOf("Restored from your backup: ${restored.summary}.", starterNote)
+                        }
                     )
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
@@ -226,12 +221,12 @@ fun OnboardingScreen(
                 PrimaryButton("Allow alerts") { alertsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 SecondaryButton("Not now", onClick = next)
             }
-            Step.Income -> if (restoredSummary != null && restoredHasIncome) {
-                PrimaryButton("Finish") { onFinish(null, true) }
+            Step.Income -> if (skipIncome) {
+                PrimaryButton("Finish") { onFinish(null) }
             } else {
                 val incomeInvalid = incomeText.isNotBlank() && parsedIncome == null
-                PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }, restoredSummary != null) }
-                SecondaryButton("Skip") { onFinish(null, restoredSummary != null) }
+                PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }) }
+                SecondaryButton("Skip") { onFinish(null) }
             }
         }
     }

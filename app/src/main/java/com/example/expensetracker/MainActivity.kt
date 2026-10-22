@@ -28,6 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.screens.onboarding.OnboardingScreen
+import com.example.expensetracker.ui.screens.onboarding.SetupGate
 import com.example.expensetracker.ui.theme.Canvas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -92,7 +93,7 @@ class MainActivity : FragmentActivity() {
                     Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics {} else Modifier)) {
                         when (showOnboarding) {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
-                            true -> OnboardingScreen(onFinish = { income, restored -> finishOnboarding(prefs, income, restored) })
+                            true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
                             false -> AppNavGraph(
                                 initialExpenseId = pendingExpenseId,
                                 onExpenseNavigated = { pendingExpenseId = null }
@@ -166,29 +167,30 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * A new install gets first-run setup. An existing install that already has data (upgrading
-     * from a version without onboarding) skips it, but still gets the starter categories if it
-     * has none, so auto-captured payments can be sorted.
+     * A new install gets first-run setup. An install from before setup existed (data, but no
+     * "finished" flag) skips it, but still gets the starter categories if it has none, so
+     * auto-captured payments can be sorted. That check runs only once; see [SetupGate].
      */
     private suspend fun needsOnboarding(prefs: PreferencesManager): Boolean {
-        // A backup restored during setup is data too, but setup isn't finished yet.
-        if (prefs.onboardingRestoreStarted) return true
         val db = AppDatabase.getInstance(applicationContext)
         val hasData = db.categoryDao().getCount() > 0 || db.expenseDao().count() > 0
-        if (!hasData) return true
-        DefaultCategories.seedIfEmpty(db)
-        prefs.onboardingCompleted = true
-        return false
+        val decision = SetupGate.decide(prefs.onboardingCompleted, prefs.onboardingFirstLaunchChecked, hasData)
+        prefs.onboardingFirstLaunchChecked = true
+        if (decision == SetupGate.Decision.SkipForUpgrade) {
+            DefaultCategories.seedIfEmpty(db)
+            prefs.onboardingCompleted = true
+        }
+        return decision == SetupGate.Decision.Setup
     }
 
-    /** A restored backup is kept exactly as it was, so it gets no starter categories even if it had none. */
-    private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?, restored: Boolean) {
+    /** Starter categories are added only if there are none, so a restored backup's stay as they were. */
+    private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?) {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                if (!restored) DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
+                DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
                 if (monthlyIncome != null) prefs.monthlyIncome = monthlyIncome
                 prefs.onboardingCompleted = true
-                prefs.onboardingRestoreStarted = false
+                prefs.onboardingRestore = null
             }
             showOnboarding = false
         }

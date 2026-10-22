@@ -16,18 +16,21 @@ object CsvExporter {
     const val BOM = "﻿"
     val HEADER = listOf("date", "time", "type", "amount", "description", "category", "subcategory", "payment_method", "tags", "source")
 
-    fun expensesToCsv(expenses: List<Expense>, categories: List<Category>, zone: TimeZone = TimeZone.getDefault()): String {
+    fun expensesToCsv(expenses: List<Expense>, categories: List<Category>, zone: TimeZone = TimeZone.getDefault()): String =
+        buildString { write(this, expenses, categories, zone) }
+
+    /** Writes row by row, so a long history goes straight to the file without a copy in memory. */
+    fun write(out: Appendable, expenses: List<Expense>, categories: List<Category>, zone: TimeZone = TimeZone.getDefault()) {
         val byId = categories.associateBy { it.id }
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = zone }
         val time = SimpleDateFormat("HH:mm", Locale.US).apply { timeZone = zone }
-        val sb = StringBuilder(BOM).append(HEADER.joinToString(",")).append("\r\n")
+        out.append(BOM).append(HEADER.joinToString(",")).append("\r\n")
         expenses.sortedBy { it.date }.forEach { e ->
             val (category, subcategory) = names(e.categoryId, byId)
             val row = listOf(day.format(e.date), time.format(e.date), "expense", money(e.amount)) +
                 listOf(e.description, category, subcategory, e.paymentMethod, e.tags.trim(), e.source).map { text(it) }
-            sb.append(row.joinToString(",") { quote(it) }).append("\r\n")
+            out.append(row.joinToString(",") { quote(it) }).append("\r\n")
         }
-        return sb.toString()
     }
 
     /** (category, subcategory): a subcategory is shown under its parent; unknown or -1 is "Pending". */
@@ -37,7 +40,9 @@ object CsvExporter {
         return if (parent != null) parent.name to c.name else c.name to ""
     }
 
-    internal fun money(amount: Double): String = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toPlainString()
+    /** Two decimals; empty if the amount isn't a finite number (BigDecimal would throw). */
+    internal fun money(amount: Double): String =
+        if (amount.isFinite()) BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toPlainString() else ""
 
     /**
      * Payee names come from bank SMS and notifications, which anyone can send. Excel and Sheets run

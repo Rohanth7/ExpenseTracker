@@ -16,43 +16,51 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Runs "Moving from another phone?" restores. It lives in a ViewModel so rotating the phone or
- * switching dark mode mid-restore doesn't cancel it or lose the result.
+ * Runs "Moving from another phone?" restores and remembers what came back. It lives in a
+ * ViewModel so rotating mid-restore doesn't cancel it, and the result is saved in prefs so it's
+ * still known if the app is closed before setup finishes.
  */
 class OnboardingViewModel(app: Application) : AndroidViewModel(app) {
+    private val prefs = PreferencesManager(app)
+
     var restoring by mutableStateOf(false)
         private set
 
-    /** The finished restore, until the screen has shown it. */
-    var outcome by mutableStateOf<RestoreOutcome?>(null)
+    /** The backup restored during this setup, or null. */
+    var restored by mutableStateOf(RestoredInfo.fromJson(prefs.onboardingRestore))
+        private set
+
+    var restoreError by mutableStateOf<String?>(null)
+        private set
+
+    /** True right after a restore, until the screen has moved on from Welcome. */
+    var justRestored by mutableStateOf(false)
         private set
 
     fun restore(uri: Uri) {
         if (restoring) return
         restoring = true
+        restoreError = null
         viewModelScope.launch {
-            outcome = restoreBackup(uri)
+            val manager = BackupManager(getApplication())
+            when (val read = manager.readFromUri(uri)) {
+                is ParseResult.Invalid -> restoreError = read.reason
+                is ParseResult.Ok -> try {
+                    manager.restore(read.data)
+                    val info = restoredInfo(read.data)
+                    withContext(Dispatchers.IO) { prefs.onboardingRestore = info.toJson() }
+                    restored = info
+                    justRestored = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The database part runs in one transaction, so a failure there changes nothing.
+                    restoreError = "The restore didn't finish. Please try again."
+                }
+            }
             restoring = false
         }
     }
 
-    fun outcomeShown() { outcome = null }
-
-    private suspend fun restoreBackup(uri: Uri): RestoreOutcome {
-        val manager = BackupManager(getApplication())
-        return when (val read = manager.readFromUri(uri)) {
-            is ParseResult.Invalid -> RestoreOutcome.Failed(read.reason)
-            is ParseResult.Ok -> try {
-                withContext(Dispatchers.IO) { PreferencesManager(getApplication()).onboardingRestoreStarted = true }
-                manager.restore(read.data)
-                RestoreOutcome.Restored(restoreSummary(read.data), restoredIncome(read.data))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Part of it may have been saved (the database is restored first, in one go). A
-                // restore replaces everything, so trying again is safe.
-                RestoreOutcome.Failed("The restore didn't finish. Please try again.")
-            }
-        }
-    }
+    fun restoreShown() { justRestored = false }
 }

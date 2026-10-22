@@ -32,4 +32,20 @@ class RestoreSummaryTest {
         assertFalse(restoredIncome(data(1, 1, income = 0.0)))
         assertFalse(restoredIncome(data(1, 1)))
     }
+
+    @Test fun `restored info remembers income and whether there were categories`() {
+        assertEquals(RestoredInfo("1 expense, 0 categories", hasIncome = true, hadCategories = false), restoredInfo(data(1, 0, income = 5000.0)))
+        assertTrue(restoredInfo(data(1, 2)).hadCategories)
+    }
+
+    @Test fun `restored info survives being saved as text`() {
+        val info = RestoredInfo("43 expenses, 7 categories", hasIncome = true, hadCategories = true)
+        assertEquals(info, RestoredInfo.fromJson(info.toJson()))
+    }
+
+    @Test fun `missing or damaged saved info reads as no restore`() {
+        assertEquals(null, RestoredInfo.fromJson(null))
+        assertEquals(null, RestoredInfo.fromJson("not json"))
+        assertEquals(null, RestoredInfo.fromJson("{}"))
+    }
 }

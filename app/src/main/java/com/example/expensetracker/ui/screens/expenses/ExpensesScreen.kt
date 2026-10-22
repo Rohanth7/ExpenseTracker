@@ -1036,8 +1036,10 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
     if (showPicker) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = selectedUtcMidnight,
+            // Picker days are UTC midnights, so compare with today's (the current instant is still
+            // "yesterday" in UTC until 05:30 in India).
             selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= toUtcMidnight(System.currentTimeMillis())
             }
         )
         DatePickerDialog(

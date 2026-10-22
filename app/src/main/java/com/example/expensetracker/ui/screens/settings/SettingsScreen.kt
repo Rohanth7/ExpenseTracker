@@ -1260,6 +1260,9 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var showPicker by remember { mutableStateOf(false) }
     val dateFmt = remember { java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val select = { p: ExportPreset -> preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
+    // Closing the picker without dates goes back to the default, since "Choose dates" needs some.
+    val closePicker = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH }
 
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
@@ -1268,11 +1271,11 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
             Column {
                 ExportPreset.entries.forEach { p ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
+                        Modifier.fillMaxWidth().clickable { select(p) }
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = preset == p, onClick = { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true },
+                        RadioButton(selected = preset == p, onClick = { select(p) },
                             colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
                         val label = if (p == ExportPreset.CUSTOM && custom != null)
                             "${dateFmt.format(custom!!.first)} – ${dateFmt.format(custom!!.second)}" else p.label
@@ -1295,11 +1298,15 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     if (showPicker) {
         // Picker days are UTC midnights, so compare with today's, not with the current instant.
         val today = remember { toUtcMidnight(System.currentTimeMillis()) }
-        val state = rememberDateRangePickerState(selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= today
-        })
+        val state = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = custom?.first?.let(::toUtcMidnight),
+            initialSelectedEndDateMillis = custom?.second?.let(::toUtcMidnight),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= today
+            }
+        )
         DatePickerDialog(
-            onDismissRequest = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH },
+            onDismissRequest = closePicker,
             confirmButton = {
                 val start = state.selectedStartDateMillis
                 val end = state.selectedEndDateMillis ?: start
@@ -1308,7 +1315,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
                     showPicker = false
                 }) { Text("OK", color = Jade) }
             },
-            dismissButton = { TextButton(onClick = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH }) { Text("Cancel", color = Muted) } }
+            dismissButton = { TextButton(onClick = closePicker) { Text("Cancel", color = Muted) } }
         ) {
             DateRangePicker(state = state, modifier = Modifier.weight(1f), title = { Text("Dates to export", modifier = Modifier.padding(16.dp)) })
         }

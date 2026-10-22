@@ -30,14 +30,15 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
 
-    /**
-     * Set when a restore starts during first-run setup and cleared when setup finishes. Without it,
-     * an activity restart mid-setup would see the restored data and skip the remaining steps.
-     * Written with commit() so it's on disk before the restore touches the database.
-     */
-    var onboardingRestoreStarted: Boolean
-        get() = prefs.getBoolean("onboarding_restore_started", false)
-        set(value) { prefs.edit().putBoolean("onboarding_restore_started", value).commit() }
+    /** Set on the first launch, after checking whether this install predates setup (`SetupGate`). */
+    var onboardingFirstLaunchChecked: Boolean
+        get() = prefs.getBoolean("onboarding_first_launch_checked", false)
+        set(value) { prefs.edit().putBoolean("onboarding_first_launch_checked", value).commit() }
+
+    /** `RestoredInfo` JSON for a backup restored during setup; cleared when setup finishes. */
+    var onboardingRestore: String?
+        get() = prefs.getString("onboarding_restore", null)
+        set(value) { prefs.edit().putString("onboarding_restore", value).commit() }
 
     var biometricLockEnabled: Boolean
         get() = prefs.getBoolean("biometric_lock_enabled", false)

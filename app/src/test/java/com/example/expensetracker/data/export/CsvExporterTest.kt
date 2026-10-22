@@ -66,4 +66,17 @@ class CsvExporterTest {
         assertTrue(lines(csv)[2].contains(",'@work,"))
         assertTrue(lines(csv)[3].startsWith("2026-10-04,09:30,expense,30.00,'-Cash,"))
     }
+
+    @Test fun `an amount that isn't a number is left empty instead of crashing`() {
+        val csv = CsvExporter.expensesToCsv(
+            listOf(Expense(amount = Double.NaN, description = "X", categoryId = -1, date = at(2026, 10, 2))), emptyList(), ist)
+        assertTrue(lines(csv)[1].startsWith("2026-10-02,09:30,expense,,X,"))
+    }
+
+    @Test fun `writing to a stream gives the same file`() {
+        val expenses = listOf(Expense(amount = 99.5, description = "Tea", categoryId = 1, date = at(2026, 10, 1)))
+        val out = StringBuilder()
+        CsvExporter.write(out, expenses, listOf(food), ist)
+        assertEquals(CsvExporter.expensesToCsv(expenses, listOf(food), ist), out.toString())
+    }
 }

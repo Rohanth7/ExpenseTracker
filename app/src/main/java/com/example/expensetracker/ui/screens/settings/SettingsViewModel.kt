@@ -17,6 +17,7 @@ import com.example.expensetracker.data.backup.ParseResult
 import com.example.expensetracker.data.export.CsvExporter
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.google.android.gms.auth.UserRecoverableAuthException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.expensetracker.data.backup.BackupManager
@@ -184,15 +185,21 @@ class SettingsViewModel(
 
     /** [range] is (start, endInclusive) from the CSV dialog; null = all time. */
     fun exportCsvTo(uri: Uri, range: Pair<Long, Long>?) = viewModelScope.launch {
-        val expenses = if (range == null) expenseRepo.allExpenses.first()
-            else expenseRepo.getByDateRange(range.first, range.second).first()
-        val csv = withContext(Dispatchers.Default) { CsvExporter.expensesToCsv(expenses, categoryRepo.getAll()) }
-        val ok = withContext(Dispatchers.IO) {
-            runCatching {
-                appContext.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) } != null
-            }.getOrDefault(false)
+        val count = try {
+            val expenses = if (range == null) expenseRepo.allExpenses.first()
+                else expenseRepo.getByDateRange(range.first, range.second).first()
+            val categories = categoryRepo.getAll()
+            withContext(Dispatchers.IO) {
+                val out = appContext.contentResolver.openOutputStream(uri) ?: return@withContext null
+                out.bufferedWriter(Charsets.UTF_8).use { CsvExporter.write(it, expenses, categories) }
+                expenses.size
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
         }
-        snackbarMessage = if (ok) "Exported ${expenses.size} ${if (expenses.size == 1) "expense" else "expenses"} to CSV"
+        snackbarMessage = if (count != null) "Exported $count ${if (count == 1) "expense" else "expenses"} to CSV"
             else "Couldn't save the CSV"
     }
 
@@ -381,6 +388,7 @@ class SettingsViewModel(
         _monthlyIncome.value = 0.0
         // Show first-run setup again on next launch, which recreates the starter categories.
         prefs.onboardingCompleted = false
+        prefs.onboardingRestore = null
         snackbarMessage = "All data deleted"
     }
 
