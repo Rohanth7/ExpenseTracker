@@ -171,7 +171,8 @@ class ExpensesViewModel(
 
     fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") = viewModelScope.launch {
         expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
-        if (categoryId != -1L) { prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId }
+        // Remembered either way: choosing "Choose later" makes it the next default too.
+        prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
         if (categoryId != -1L && prefs.budgetAlertsEnabled) {
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
         }
