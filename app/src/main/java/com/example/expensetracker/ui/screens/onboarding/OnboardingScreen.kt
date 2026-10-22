@@ -2,7 +2,6 @@ package com.example.expensetracker.ui.screens.onboarding
 
 import android.Manifest
 import android.app.Activity
-import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,7 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -48,18 +47,20 @@ private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
  * First-run setup: explains each permission before Android asks for it, then takes an optional
  * monthly income. Every step can be skipped; Settings → Auto-tracking can turn things on later.
  *
- * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup).
- * [onRestoreBackup] restores a backup file chosen on the Welcome step, for people moving phones;
- * setup then carries on with the permission steps, which a new phone still needs.
+ * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup),
+ * and whether a backup was restored. The Welcome step can restore a backup file for people moving
+ * phones; setup then carries on with the permission steps, which a new phone still needs.
  */
 @Composable
-fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, onRestoreBackup: suspend (Uri) -> RestoreOutcome) {
+fun OnboardingScreen(
+    onFinish: (monthlyIncome: Double?, restored: Boolean) -> Unit,
+    viewModel: OnboardingViewModel = viewModel()
+) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var restoredSummary by rememberSaveable { mutableStateOf<String?>(null) }
     var restoredHasIncome by rememberSaveable { mutableStateOf(false) }
     var restoreError by rememberSaveable { mutableStateOf<String?>(null) }
-    var restoring by remember { mutableStateOf(false) }
+    val restoring = viewModel.restoring
     val activity = context as? Activity
     val steps = remember {
         buildList {
@@ -99,17 +100,19 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, onRestoreBackup
 
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        restoring = true; restoreError = null
-        scope.launch {
-            when (val outcome = onRestoreBackup(uri)) {
-                is RestoreOutcome.Restored -> {
-                    restoredSummary = outcome.summary; restoredHasIncome = outcome.hasIncome
-                    next()
-                }
-                is RestoreOutcome.Failed -> restoreError = outcome.reason
+        restoreError = null
+        viewModel.restore(uri)
+    }
+    LaunchedEffect(viewModel.outcome) {
+        when (val outcome = viewModel.outcome) {
+            is RestoreOutcome.Restored -> {
+                restoredSummary = outcome.summary; restoredHasIncome = outcome.hasIncome
+                if (step == Step.Welcome) next()
             }
-            restoring = false
+            is RestoreOutcome.Failed -> restoreError = outcome.reason
+            null -> return@LaunchedEffect
         }
+        viewModel.outcomeShown()
     }
 
     var incomeText by rememberSaveable { mutableStateOf("") }
@@ -224,11 +227,11 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, onRestoreBackup
                 SecondaryButton("Not now", onClick = next)
             }
             Step.Income -> if (restoredSummary != null && restoredHasIncome) {
-                PrimaryButton("Finish") { onFinish(null) }
+                PrimaryButton("Finish") { onFinish(null, true) }
             } else {
                 val incomeInvalid = incomeText.isNotBlank() && parsedIncome == null
-                PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }) }
-                SecondaryButton("Skip") { onFinish(null) }
+                PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }, restoredSummary != null) }
+                SecondaryButton("Skip") { onFinish(null, restoredSummary != null) }
             }
         }
     }

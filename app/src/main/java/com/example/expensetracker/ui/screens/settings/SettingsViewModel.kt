@@ -182,15 +182,11 @@ class SettingsViewModel(
         snackbarMessage = if (ok) "Backup saved (${data.expenses.orEmpty().size} expenses)" else "Couldn't save the backup"
     }
 
-    /** Range chosen in the CSV dialog, kept until the system file picker returns. Null = all time. */
-    private var pendingCsvRange: Pair<Long, Long>? = null
-
-    fun prepareCsvExport(range: Pair<Long, Long>?) { pendingCsvRange = range }
-
-    fun exportCsvTo(uri: Uri) = viewModelScope.launch {
-        val range = pendingCsvRange
-        val expenses = expenseRepo.allExpenses.first().filter { range == null || it.date in range.first..range.second }
-        val csv = CsvExporter.expensesToCsv(expenses, categoryRepo.getAll())
+    /** [range] is (start, endInclusive) from the CSV dialog; null = all time. */
+    fun exportCsvTo(uri: Uri, range: Pair<Long, Long>?) = viewModelScope.launch {
+        val expenses = if (range == null) expenseRepo.allExpenses.first()
+            else expenseRepo.getByDateRange(range.first, range.second).first()
+        val csv = withContext(Dispatchers.Default) { CsvExporter.expensesToCsv(expenses, categoryRepo.getAll()) }
         val ok = withContext(Dispatchers.IO) {
             runCatching {
                 appContext.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) } != null

@@ -1,7 +1,6 @@
 package com.example.expensetracker
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,10 +32,6 @@ import com.example.expensetracker.ui.theme.Canvas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.expensetracker.data.backup.BackupManager
-import com.example.expensetracker.data.backup.ParseResult
-import com.example.expensetracker.ui.screens.onboarding.RestoreOutcome
-import com.example.expensetracker.ui.screens.onboarding.restoreSummary
-import com.example.expensetracker.ui.screens.onboarding.restoredIncome
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.notification.NotificationHelper
 import com.example.expensetracker.ui.navigation.AppNavGraph
@@ -97,10 +92,7 @@ class MainActivity : FragmentActivity() {
                     Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics {} else Modifier)) {
                         when (showOnboarding) {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
-                            true -> OnboardingScreen(
-                                onFinish = { income -> finishOnboarding(prefs, income) },
-                                onRestoreBackup = ::restoreFromBackup
-                            )
+                            true -> OnboardingScreen(onFinish = { income, restored -> finishOnboarding(prefs, income, restored) })
                             false -> AppNavGraph(
                                 initialExpenseId = pendingExpenseId,
                                 onExpenseNavigated = { pendingExpenseId = null }
@@ -179,6 +171,8 @@ class MainActivity : FragmentActivity() {
      * has none, so auto-captured payments can be sorted.
      */
     private suspend fun needsOnboarding(prefs: PreferencesManager): Boolean {
+        // A backup restored during setup is data too, but setup isn't finished yet.
+        if (prefs.onboardingRestoreStarted) return true
         val db = AppDatabase.getInstance(applicationContext)
         val hasData = db.categoryDao().getCount() > 0 || db.expenseDao().count() > 0
         if (!hasData) return true
@@ -187,24 +181,14 @@ class MainActivity : FragmentActivity() {
         return false
     }
 
-    /** "Moving from another phone?" on the setup screen: check the file, then restore it in one go. */
-    private suspend fun restoreFromBackup(uri: Uri): RestoreOutcome {
-        val manager = BackupManager(this)
-        return when (val read = manager.readFromUri(uri)) {
-            is ParseResult.Invalid -> RestoreOutcome.Failed(read.reason)
-            is ParseResult.Ok -> runCatching {
-                manager.restore(read.data)
-                RestoreOutcome.Restored(restoreSummary(read.data), restoredIncome(read.data))
-            }.getOrElse { RestoreOutcome.Failed("The restore didn't finish. Nothing was changed.") }
-        }
-    }
-
-    private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?) {
+    /** A restored backup is kept exactly as it was, so it gets no starter categories even if it had none. */
+    private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?, restored: Boolean) {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
+                if (!restored) DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
                 if (monthlyIncome != null) prefs.monthlyIncome = monthlyIncome
                 prefs.onboardingCompleted = true
+                prefs.onboardingRestoreStarted = false
             }
             showOnboarding = false
         }

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,7 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.utcMidnightToLocalDayEnd
 import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
 import androidx.fragment.app.FragmentActivity
@@ -106,8 +108,10 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportTo(it) }
     }
+    // The chosen range has to outlive the file picker, which can outlive the app's process.
+    var pendingCsvRange by rememberSaveable { mutableStateOf<Pair<Long, Long>?>(null) }
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        uri?.let { viewModel.exportCsvTo(it) }
+        uri?.let { viewModel.exportCsvTo(it, pendingCsvRange) }
     }
     val tracking = rememberTrackingStatus()
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -222,7 +226,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                 onExportCsv = { preset, range ->
-                    viewModel.prepareCsvExport(range)
+                    pendingCsvRange = range
                     csvLauncher.launch(ExportRange.fileName(preset, range))
                 },
                 showMockData = isDebugBuild(context),
@@ -1289,7 +1293,8 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     )
 
     if (showPicker) {
-        val today = remember { System.currentTimeMillis() }
+        // Picker days are UTC midnights, so compare with today's, not with the current instant.
+        val today = remember { toUtcMidnight(System.currentTimeMillis()) }
         val state = rememberDateRangePickerState(selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= today
         })

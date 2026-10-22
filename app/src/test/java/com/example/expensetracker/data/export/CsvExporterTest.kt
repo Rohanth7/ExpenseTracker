@@ -54,4 +54,16 @@ class CsvExporterTest {
             listOf(Expense(amount = 125000.0, description = "Laptop", categoryId = -1, date = at(2026, 10, 2))), emptyList(), ist)
         assertTrue(lines(csv)[1].contains(",125000.00,"))
     }
+
+    @Test fun `text that a spreadsheet would run as a formula is escaped`() {
+        val csv = CsvExporter.expensesToCsv(listOf(
+            Expense(amount = 10.0, description = "=HYPERLINK(\"http://x\",\"Refund\")", categoryId = -1, date = at(2026, 10, 2)),
+            Expense(amount = 20.0, description = "+91 98765 43210", categoryId = -1, date = at(2026, 10, 3), tags = "@work"),
+            Expense(amount = 30.0, description = "-Cash", categoryId = -1, date = at(2026, 10, 4)),
+        ), emptyList(), ist)
+        assertTrue(csv.contains(",\"'=HYPERLINK(\"\"http://x\"\",\"\"Refund\"\")\","))
+        assertTrue(lines(csv)[2].contains(",'+91 98765 43210,"))
+        assertTrue(lines(csv)[2].contains(",'@work,"))
+        assertTrue(lines(csv)[3].startsWith("2026-10-04,09:30,expense,30.00,'-Cash,"))
+    }
 }

@@ -23,8 +23,8 @@ object CsvExporter {
         val sb = StringBuilder(BOM).append(HEADER.joinToString(",")).append("\r\n")
         expenses.sortedBy { it.date }.forEach { e ->
             val (category, subcategory) = names(e.categoryId, byId)
-            val row = listOf(day.format(e.date), time.format(e.date), "expense", money(e.amount), e.description,
-                category, subcategory, e.paymentMethod, e.tags.trim(), e.source)
+            val row = listOf(day.format(e.date), time.format(e.date), "expense", money(e.amount)) +
+                listOf(e.description, category, subcategory, e.paymentMethod, e.tags.trim(), e.source).map { text(it) }
             sb.append(row.joinToString(",") { quote(it) }).append("\r\n")
         }
         return sb.toString()
@@ -38,6 +38,13 @@ object CsvExporter {
     }
 
     internal fun money(amount: Double): String = BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toPlainString()
+
+    /**
+     * Payee names come from bank SMS and notifications, which anyone can send. Excel and Sheets run
+     * a cell starting with = + - @ (or a tab or CR) as a formula, so those get a leading apostrophe.
+     */
+    internal fun text(field: String): String =
+        if (field.isNotEmpty() && field[0] in "=+-@\t\r") "'$field" else field
 
     internal fun quote(field: String): String =
         if (field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + field.replace("\"", "\"\"") + "\"" else field
