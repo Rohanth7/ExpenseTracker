@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -58,15 +59,9 @@ import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
-    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}&add={add}") {
-        /** [add] opens the add-expense dialog straight away (the widget's "+"). */
-        fun createRoute(start: Long? = null, end: Long? = null, add: Boolean = false): String {
-            val openAdd = add
-            val args = buildList {
-                if (start != null && end != null) { add("start=$start"); add("end=$end") }
-                if (openAdd) add("add=true")
-            }
-            return if (args.isEmpty()) "expenses" else "expenses?" + args.joinToString("&")
+    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}") {
+        fun createRoute(start: Long? = null, end: Long? = null): String {
+            return if (start != null && end != null) "expenses?start=$start&end=$end" else "expenses"
         }
     }
     object Categories : Screen("categories", "Categories")
@@ -99,6 +94,9 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
     val backupManager = remember { BackupManager(context.applicationContext) }
 
     val navController = rememberNavController()
+    // The widget's "+", waiting for the Expenses screen to open its add dialog. Saveable, so a
+    // rotation between the tap and the dialog opening doesn't lose it.
+    var quickAddRequested by rememberSaveable { mutableStateOf(false) }
 
     // Apply recurring expenses if it's a new month; schedule bill reminders
     LaunchedEffect(Unit) {
@@ -110,9 +108,15 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         when (launchAction) {
             null -> return@LaunchedEffect
             is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
-            // Back to Overview first, so repeated widget taps don't pile up copies of the screen.
-            LaunchAction.QuickAdd -> navController.navigate(Screen.Expenses.createRoute(add = true)) {
-                popUpTo(navController.graph.findStartDestination().id)
+            // Like the bottom nav's Expenses tab: the same screen (filters kept), never a pile of
+            // copies; the request then opens its add dialog.
+            LaunchAction.QuickAdd -> {
+                navController.navigate(Screen.Expenses.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                quickAddRequested = true
             }
             LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route) {
                 popUpTo(navController.graph.findStartDestination().id)
@@ -209,13 +213,11 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                 route = Screen.Expenses.pattern,
                 arguments = listOf(
                     navArgument("start") { type = NavType.LongType; defaultValue = -1L },
-                    navArgument("end") { type = NavType.LongType; defaultValue = -1L },
-                    navArgument("add") { type = NavType.BoolType; defaultValue = false }
+                    navArgument("end") { type = NavType.LongType; defaultValue = -1L }
                 )
             ) { backStackEntry ->
                 val start = backStackEntry.arguments?.getLong("start") ?: -1L
                 val end = backStackEntry.arguments?.getLong("end") ?: -1L
-                val add = backStackEntry.arguments?.getBoolean("add") ?: false
                 
                 val vm: ExpensesViewModel = viewModel(
                     factory = ExpensesViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)
@@ -231,7 +233,8 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
 
                 ExpensesScreen(
                     viewModel = vm,
-                    openAddOnStart = add,
+                    openAdd = quickAddRequested,
+                    onAddOpened = { quickAddRequested = false },
                     onCategorize = { id -> navController.navigate(Screen.Categorize.createRoute(id)) }
                 )
             }

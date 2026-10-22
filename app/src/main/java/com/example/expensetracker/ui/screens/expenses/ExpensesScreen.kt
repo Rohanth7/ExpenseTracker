@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,9 +27,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -39,6 +36,8 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -51,7 +50,12 @@ private data class DayGroup(
 )
 
 @Composable
-fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, openAddOnStart: Boolean = false) {
+fun ExpensesScreen(
+    viewModel: ExpensesViewModel,
+    onCategorize: (Long) -> Unit,
+    openAdd: Boolean = false,
+    onAddOpened: () -> Unit = {}
+) {
     val context = LocalContext.current
     val expenses by viewModel.expenses.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -63,9 +67,11 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit, o
     val maxAmount by viewModel.maxAmount.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
-    // Saveable: the route keeps add=true, so a plain remember would reopen the dialog after the
-    // user closed it, on rotation or when Android restores the screen.
-    var showAddDialog by rememberSaveable { mutableStateOf(openAddOnStart) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    // The widget's "+": a one-shot request, consumed here so it can't fire twice.
+    LaunchedEffect(openAdd) {
+        if (openAdd) { showAddDialog = true; onAddOpened() }
+    }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }
@@ -805,14 +811,13 @@ private fun AddExpenseDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
-    var amount by remember { mutableStateOf("") }
+    val amount = rememberAmountInputState()
     var description by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
     // null until the user picks one, so the last-used default can appear once categories load.
     var userCategoryChoice by remember { mutableStateOf<Long?>(null) }
     val selectedCategoryId = startingCategoryId(userCategoryChoice, categories, lastUsedCategoryId)
     var expanded by remember { mutableStateOf(false) }
-    var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
     var selectedPaymentMethod by remember { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
@@ -823,7 +828,7 @@ private fun AddExpenseDialog(
         title = { Text("Add Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AmountField(amount = amount, error = amountError, onChange = { amount = it; amountError = "" })
+                AmountField(amount)
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -895,8 +900,7 @@ private fun AddExpenseDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val amt = AmountCalculator.evaluate(amount)
-                    if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
+                    val amt = amount.validated() ?: return@TextButton
                     onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim(), selectedPaymentMethod)
                 }
             ) { Text("Add", color = Jade) }
@@ -915,12 +919,11 @@ private fun EditExpenseDialog(
     onDuplicate: (Double, String, Long, String, String) -> Unit
 ) {
     // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
-    var amount by remember { mutableStateOf(AmountCalculator.forEditing(expense.amount)) }
+    val amount = rememberAmountInputState(AmountCalculator.forEditing(expense.amount))
     var description by remember { mutableStateOf(expense.description) }
     var tags by remember { mutableStateOf(expense.tags) }
     var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
     var expanded by remember { mutableStateOf(false) }
-    var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(expense.date)) }
     var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
@@ -931,7 +934,7 @@ private fun EditExpenseDialog(
         title = { Text("Edit Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AmountField(amount = amount, error = amountError, onChange = { amount = it; amountError = "" })
+                AmountField(amount)
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -995,8 +998,7 @@ private fun EditExpenseDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = AmountCalculator.evaluate(amount)
-                if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
+                val amt = amount.validated() ?: return@TextButton
                 onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim(), selectedPaymentMethod)
             }) { Text("Save", color = Jade) }
         },
@@ -1004,8 +1006,7 @@ private fun EditExpenseDialog(
             Row {
                 // Copies the form as it is now, unsaved changes included.
                 TextButton(onClick = {
-                    val amt = AmountCalculator.evaluate(amount)
-                    if (amt == null) { amountError = "Enter a valid amount"; return@TextButton }
+                    val amt = amount.validated() ?: return@TextButton
                     onDuplicate(amt, description.trim(), selectedCategoryId, tags.trim(), selectedPaymentMethod)
                 }) { Text("Duplicate", color = Jade) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
@@ -1015,46 +1016,6 @@ private fun EditExpenseDialog(
 }
 
 private const val CHOOSE_LATER = "Choose later (pending)"
-
-/**
- * The amount input for both dialogs. Accepts sums like "120+45" or "3×40" (see [AmountCalculator]);
- * the decimal keyboard has no operator keys, so small chips add them.
- */
-@Composable
-private fun AmountField(amount: String, error: String, onChange: (String) -> Unit) {
-    val result = if (AmountCalculator.isExpression(amount)) AmountCalculator.evaluate(amount) else null
-    // Holds the cursor, so a chip's symbol goes where the cursor is and digits typed next follow it.
-    var field by remember { mutableStateOf(TextFieldValue(amount, TextRange(amount.length))) }
-    if (field.text != amount) field = TextFieldValue(amount, TextRange(amount.length))
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedTextField(
-            value = field,
-            onValueChange = { field = it; if (it.text != amount) onChange(it.text) },
-            label = { Text("Amount (₹)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            singleLine = true,
-            isError = error.isNotEmpty(),
-            supportingText = when {
-                error.isNotEmpty() -> {{ Text(error) }}
-                result != null -> {{ Text("= ₹${fmtINR(result, maxFractionDigits = 2)}", color = Muted, fontSize = 12.sp) }}
-                else -> null
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("+", "−", "×", "÷").forEach { op ->
-                AssistChip(
-                    onClick = {
-                        val (text, cursor) = AmountCalculator.insertAt(field.text, field.selection.start, field.selection.end, op)
-                        field = TextFieldValue(text, TextRange(cursor))
-                        onChange(text)
-                    },
-                    label = { Text(op, fontSize = 14.sp) }
-                )
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1168,11 +1129,9 @@ private fun buildTimestamp(utcMidnight: Long, referenceMillis: Long): Long {
     }.timeInMillis
 }
 
-private fun fmtINR(n: Double, maxFractionDigits: Int = 0): String {
+private fun fmtINR(n: Double): String {
     if (n.isNaN() || n.isInfinite()) return "—"
-    val format = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = maxFractionDigits; minimumFractionDigits = 0
-    }
-    // Whole rupees truncate as before; with decimals (the "= ₹33.33" preview) they're kept.
-    return if (maxFractionDigits == 0) format.format(n.toLong()) else format.format(n)
+    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
+        maximumFractionDigits = 0; minimumFractionDigits = 0
+    }.format(n.toLong())
 }
