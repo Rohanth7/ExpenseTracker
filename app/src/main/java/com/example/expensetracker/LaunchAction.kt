@@ -1,6 +1,6 @@
 package com.example.expensetracker
 
-/** What a launch intent asks the app to do. F5 adds OpenSubscriptions. */
+/** What a launch intent asks the app to do. OpenSubscriptions is for F5's price-change alerts. */
 sealed class LaunchAction {
     data class Categorize(val expenseId: Long) : LaunchAction()
     object QuickAdd : LaunchAction()

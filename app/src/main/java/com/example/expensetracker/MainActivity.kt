@@ -85,7 +85,7 @@ class MainActivity : FragmentActivity() {
             recreated = savedInstanceState != null,
             action = intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
             expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L,
-            stillPending = savedInstanceState?.takeIf { it.getBoolean(SAVED_HAS_PENDING) }?.let {
+            stillPending = savedInstanceState?.takeIf { it.containsKey(SAVED_PENDING_EXPENSE_ID) }?.let {
                 LaunchAction.from(it.getString(SAVED_PENDING_ACTION), it.getLong(SAVED_PENDING_EXPENSE_ID, -1L))
             }
         )
@@ -101,7 +101,9 @@ class MainActivity : FragmentActivity() {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
                             true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
                             false -> AppNavGraph(
-                                launchAction = pendingAction,
+                                // Held until unlocked: a dialog (the widget's add dialog) is its own
+                                // window and would draw on top of the lock screen.
+                                launchAction = pendingAction.takeIf { !locked },
                                 onLaunchHandled = { pendingAction = null }
                             )
                         }
@@ -128,7 +130,6 @@ class MainActivity : FragmentActivity() {
         super.onSaveInstanceState(outState)
         val pending = pendingAction ?: return
         val (action, expenseId) = pending.toExtras()
-        outState.putBoolean(SAVED_HAS_PENDING, true)
         outState.putString(SAVED_PENDING_ACTION, action)
         outState.putLong(SAVED_PENDING_EXPENSE_ID, expenseId)
     }
@@ -212,7 +213,6 @@ class MainActivity : FragmentActivity() {
     }
 
     private companion object {
-        const val SAVED_HAS_PENDING = "pending_launch"
         const val SAVED_PENDING_ACTION = "pending_launch_action"
         const val SAVED_PENDING_EXPENSE_ID = "pending_launch_expense_id"
     }
