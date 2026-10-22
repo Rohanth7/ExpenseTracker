@@ -57,6 +57,7 @@ import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
 import com.example.expensetracker.ui.screens.rules.MessageRulesScreen
 import com.example.expensetracker.ui.screens.rules.MessageRulesViewModel
 import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
+import kotlinx.coroutines.flow.first
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
@@ -117,8 +118,11 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
     }
 
     LaunchedEffect(launchAction) {
+        if (launchAction == null) return@LaunchedEffect
+        // On a cold start this runs before NavHost has set its graph; navigating then crashed
+        // ("You must call setGraph() before calling getGraph()"). Wait for the first screen.
+        navController.currentBackStackEntryFlow.first()
         when (launchAction) {
-            null -> return@LaunchedEffect
             is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
             // Like the bottom nav's Expenses tab: the same screen (filters kept), never a pile of
             // copies; the request then opens its add dialog.
