@@ -41,6 +41,16 @@ class AmountCalculatorTest {
         assertEquals(22.5, AmountCalculator.evaluate("10,5+12", decimalComma = true)!!, 0.0)
         listOf("1,2,3", "1.23,4", "1,").forEach { assertNull("'$it'", AmountCalculator.evaluate(it, decimalComma = true)) }
     }
+    @Test fun `on a comma-decimal phone dots group thousands`() {
+        // "1.500" is how a German writes fifteen hundred; it was saved as 1.50.
+        assertEquals(1500.0, AmountCalculator.evaluate("1.500", decimalComma = true)!!, 0.0)
+        assertEquals(1234567.0, AmountCalculator.evaluate("1.234.567", decimalComma = true)!!, 0.0)
+        assertEquals(1.5, AmountCalculator.evaluate("1.5", decimalComma = true)!!, 0.0)  // not a grouping, so a decimal point
+    }
+    @Test fun `on a comma-decimal phone a dot always gets the preview`() {
+        assertTrue(AmountCalculator.needsPreview("1.500", decimalComma = true))
+        assertFalse(AmountCalculator.needsPreview("1.500", decimalComma = false))
+    }
     @Test fun `on a dot-decimal phone the same text is grouping`() =
         assertEquals(1500.0, AmountCalculator.evaluate("1,500", decimalComma = false)!!, 0.0)
     @Test fun `the phone's language decides which one it is`() {
@@ -48,8 +58,8 @@ class AmountCalculatorTest {
         assertFalse(AmountCalculator.usesDecimalComma(java.util.Locale.forLanguageTag("en-IN")))
     }
     @Test fun `a comma always gets the preview, so a misread amount is visible`() {
-        assertTrue(AmountCalculator.needsPreview("1,500")); assertTrue(AmountCalculator.needsPreview("120+45"))
-        assertFalse(AmountCalculator.needsPreview("250")); assertFalse(AmountCalculator.needsPreview("99.50"))
+        assertTrue(AmountCalculator.needsPreview("1,500", decimalComma = false)); assertTrue(AmountCalculator.needsPreview("120+45", decimalComma = false))
+        assertFalse(AmountCalculator.needsPreview("250", decimalComma = false)); assertFalse(AmountCalculator.needsPreview("99.50", decimalComma = false))
     }
     @Test fun `commas that are neither grouping nor a decimal point are refused`() {
         listOf("1,2,3", "1,2345", "12,5.5", "1,,000", ",5", "5,").forEach { assertNull("'$it'", eval(it)) }

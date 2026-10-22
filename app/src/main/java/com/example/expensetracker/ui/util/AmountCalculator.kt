@@ -16,6 +16,9 @@ object AmountCalculator {
     /** "12,50" or "99,9": a comma typed as the decimal point (comma-decimal keyboards and locales). */
     private val DECIMAL_COMMA = Regex("""^\d+,\d{1,2}$""")
 
+    /** "1.500" or "1.234.567": dots grouping thousands, as comma-decimal phones write them. */
+    private val DOT_GROUPED = Regex("""^\d{1,3}(\.\d{3})+$""")
+
     /** "1.234,50": dots grouping thousands, then a decimal comma (comma-decimal phones). */
     private val DOT_GROUPED_DECIMAL_COMMA = Regex("""^\d{1,3}(\.\d{3})+,\d+$""")
 
@@ -23,8 +26,12 @@ object AmountCalculator {
     fun usesDecimalComma(locale: java.util.Locale = java.util.Locale.getDefault()): Boolean =
         java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator == ','
 
-    /** Show "= ₹…" for sums, and whenever a comma was typed, so a comma read the wrong way is visible. */
-    fun needsPreview(text: String): Boolean = isExpression(text) || ',' in text
+    /**
+     * Show "= ₹…" for sums and whenever a separator could be read two ways: any comma, and on a
+     * comma-decimal phone any dot ("1.500" is 1500 there). A misread amount is then visible.
+     */
+    fun needsPreview(text: String, decimalComma: Boolean = usesDecimalComma()): Boolean =
+        isExpression(text) || ',' in text || (decimalComma && '.' in text)
 
     /**
      * Positive, finite result rounded to 2 decimals, or null if the text isn't a valid amount.
@@ -48,7 +55,8 @@ object AmountCalculator {
 
     /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
     private fun parseNumber(token: String, decimalComma: Boolean): Double? = when {
-        ',' !in token -> token.toDoubleOrNull()
+        ',' !in token ->
+            if (decimalComma && DOT_GROUPED.matches(token)) token.replace(".", "").toDoubleOrNull() else token.toDoubleOrNull()
         decimalComma -> when {
             '.' in token -> if (DOT_GROUPED_DECIMAL_COMMA.matches(token)) token.replace(".", "").replace(',', '.').toDoubleOrNull() else null
             token.count { it == ',' } == 1 && !token.endsWith(',') && !token.startsWith(',') -> token.replace(',', '.').toDoubleOrNull()

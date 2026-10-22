@@ -9,9 +9,14 @@ import java.math.BigDecimal
 fun formatLimitInput(limit: Double): String =
     if (limit > 0) BigDecimal.valueOf(limit).stripTrailingZeros().toPlainString() else ""
 
-/** Blank → 0.0 (no limit). Ignores ₹, commas and spaces. Returns null for anything else unparseable. */
-fun parseLimitInput(text: String): Double? {
-    val cleaned = text.replace("₹", "").replace(",", "").trim()
-    if (cleaned.isEmpty()) return 0.0
-    return cleaned.toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }
+private val ZERO = Regex("""^₹?\s*0+([.,]0*)?$""")
+
+/**
+ * Blank or 0 → 0.0 (no limit). Anything else is read exactly like the amount field (₹, grouping,
+ * the phone's decimal comma, even sums), so "1,5" is the same number everywhere. Null if unreadable.
+ */
+fun parseLimitInput(text: String, decimalComma: Boolean = AmountCalculator.usesDecimalComma()): Double? {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty() || ZERO.matches(trimmed)) return 0.0
+    return AmountCalculator.evaluate(trimmed, decimalComma)
 }
