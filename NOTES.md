@@ -11,15 +11,16 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 
 ## Features
 
-- **Onboarding** — first run: welcome → bank SMS → notification access → alerts → optional monthly income. Each permission is explained before Android asks; every step has "Not now". Adds 10 starter categories. "Reset everything" shows it again.
+- **Onboarding** — first run: welcome → bank SMS → notification access → alerts → optional monthly income. Each permission is explained before Android asks; every step has "Not now". Adds 10 starter categories. "Reset everything" shows it again. The welcome step also offers "Moving from another phone? Restore a backup" (file picker; Drive restore needs the OAuth client): after a restore no starter categories are added, the last step lists what came back, and it's skipped if the backup had an income.
 - **Auto-tracking** — parses bank SMS (`SmsReceiver`, `SmsParser`) and GPay/PhonePe/Paytm notifications (`TransactionNotificationListener`, `NotificationParser`). Credits, promos, OTPs, bill/statement reminders, "will be debited" notices, mandate registrations and failed payments are ignored; WhatsApp is not read. SMS + notification for the same transaction are deduped on amount within 3 minutes. With no categories a payment is saved as pending, never dropped. Settings → Auto-tracking card shows whether SMS and notification access are on and fixes each in one tap.
 - **Capture notification** — three category buttons: the auto-detected category, then the most used in the last 60 days, then alphabetical (`QuickCategories`). Tapping the notification opens the full picker.
 - **Overview (Dashboard)** — month navigation, budget warning (pending expenses count toward total), upcoming bills, EMI commitments, savings goals, Cash Flow Forecast (income − spent − bills still due − EMI still due = free to spend; current month only, when income is set). The 6-month trend chart was removed on purpose.
 - **Expenses** — search, category filter chips, multi-tagging, edit expense, date picker.
 - **Statistics** — monthly view by default with yearly toggle, subcategory breakdown, smart insights (weekend vs weekday, no-spend days), auto-tracking stats.
 - **Budgets** — per-category limits (Settings → Category Budgets, or the Categories tab), alerts at a customizable threshold (slider) and at 100%.
-- **Settings** — Auto-tracking, Bills & Reminders (bills + loans/EMIs), Category Budgets, Cloud Backup (Back up now, Restore from Drive), Preferences (budget alerts, week start, privacy mode, App Lock, widget), Data & Backup (export, restore from file, reset; "Load mock data" in debug builds only).
+- **Settings** — Auto-tracking, Bills & Reminders (bills + loans/EMIs), Category Budgets, Cloud Backup (Back up now, Restore from Drive), Preferences (budget alerts, week start, privacy mode, App Lock, widget), Data & Backup (export, CSV export, restore from file, reset; "Load mock data" in debug builds only).
 - **Backup** — format v2 includes categories, expenses, bills, loans, savings goals, learned merchants, income and alert settings. Restore checks the file first, shows what it contains, and runs in one transaction. v1 files still restore. Captured SMS text is never included.
+- **CSV export** — Settings → Data & Backup → Export CSV: this month, last month, this year, all time or a custom range (`ExportRange`). `CsvExporter` writes RFC 4180 with a UTF-8 BOM (Excel shows ₹ correctly), oldest first, columns date, time, type, amount, description, category, subcategory, payment_method, tags, source. Saved through the system file picker.
 - **App Lock** — fingerprint, face or screen lock; re-locks after 30 s in the background (`AppLockState`); lock screen with Unlock button instead of closing the app.
 - **Privacy** — captured SMS/notification text is deleted after 7 days (`CapturedTextRetention`); Android's automatic Google backup excludes all app data; privacy mode hides the app in recents from startup.
 - **Other** — recurring bills auto-logged on their due day, bill reminders (WorkManager), Budget Pulse home-screen widget, savings goals with deposit dialog, merchant learning with whole-word matching, new app icon, dark splash background (`#171511`).
@@ -49,6 +50,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - A bill due today counts as "still due" even if already paid.
 - Two auto-log bills with the same name, amount and month log only once.
 - Auto-logged bills are only added when the app is opened (dated correctly, even if opened late).
+- CSV export has expenses only; income rows (type = income) come with the income feature.
 - Existing expenses keep the old, broken descriptions from before #2; only learned rules were cleaned.
 
 ## Testing setup
@@ -56,7 +58,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - Android Studio (Homebrew install) with its bundled JDK:
   `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk"`
 - Build: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
-- Unit tests (JVM, 63): `./gradlew testDebugUnitTest` — parser, notification parser, merchant rules, backup codec + rule files, app lock timing, quick categories, recurring schedule, cash flow, starter categories.
+- Unit tests (JVM, 110): `./gradlew testDebugUnitTest` — parser, notification parser, merchant rules, backup codec + rule files, app lock timing, quick categories, recurring schedule, cash flow, starter categories, CSV export, export ranges, date-picker conversion, restore summary.
 - Device tests (11, in-memory DBs, need the emulator running): `./gradlew connectedDebugAndroidTest` — backup restore, category deletion, captured-text retention. Note: this uninstalls the app afterwards.
 - Emulator "Medium Phone API 37.0" (Android 17, Google Play image). The AVD itself is set to 1 core + software graphics, which crashes system_server; start it with
   `~/Library/Android/sdk/emulator/emulator -avd Medium_Phone_API_37.0 -cores 4 -gpu host -memory 4096 -no-boot-anim`
@@ -74,7 +76,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **Dead code:** `MerchantMappingRepository.getCategoryId` (duplicate of `MappingHelper.getCategoryId`, no callers); `ui/widgets/ExpenseWidget.kt` (not registered in the manifest).
 - **Splash icon** is still pixelated — waiting on a high-res icon from the user.
 - **Notification keyword allowlist** (only treat as expense if it contains debit words like "debited", "paid", …) — discussed, user chose to leave it for now.
-- **Feature ideas not built:** payment-method breakdown chart, merchant mapping management screen (`MerchantMapping` table exists, no UI), CSV/PDF export, weekly spending digest notification, no-spend streaks, net worth snapshot, year-over-year comparison, receipt photo attachment.
+- **Feature ideas not built:** payment-method breakdown chart, merchant mapping management screen (`MerchantMapping` table exists, no UI), PDF export, weekly spending digest notification, no-spend streaks, net worth snapshot, year-over-year comparison, receipt photo attachment.
 - **Sharing:** debug APK only. No release signing config yet.
 
 ## Release plan (from 2026-10-15 audit + competitor and store research)
@@ -83,9 +85,9 @@ Positioning: automatic expense tracking for India with no account, no ads, no lo
 
 **Phase 0 — make it work for a new user: done** (PRs #2–#7). Only database encryption is left, as a separate PR.
 
-**Phase 1 — Play Store launch (next):** final app name + package ID (permanent; currently `com.example.expensetracker`, which Play rejects; the app calls itself "MyMoney"), release signing, R8 with Gson keep rules, privacy policy, use or remove `READ_SMS`, SMS Permissions Declaration + demo video, Data safety form, migrate Drive to the new authorization API + register the OAuth client, crash reporting, CSV export, $25 fee, closed test with 12 testers for 14 days, keep a no-SMS fallback build ready.
+**Phase 1 — Play Store launch (next):** final app name + package ID (permanent; currently `com.example.expensetracker`, which Play rejects; the app calls itself "MyMoney"), release signing, R8 with Gson keep rules, privacy policy, use or remove `READ_SMS`, SMS Permissions Declaration + demo video, Data safety form, migrate Drive to the new authorization API + register the OAuth client, crash reporting, CSV export (done), $25 fee, closed test with 12 testers for 14 days, keep a no-SMS fallback build ready.
 
-**Phase 2 — catch up:** CSV/PDF export, accounts with balances + credit cards, splits/IOUs, date-range search, receipt photos, light theme, a "missed SMS" inbox.
+**Phase 2 — catch up:** PDF export, accounts with balances + credit cards, splits/IOUs, date-range search, receipt photos, light theme, a "missed SMS" inbox.
 
 **Phase 3 — stand out and earn:** subscription/UPI AutoPay detection, PDF bank-statement import, custom parsing rules, on-device AI questions, one-time Pro at ₹299–499.
 

@@ -14,6 +14,7 @@ import com.example.expensetracker.data.backup.BackupCodec
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.backup.DriveBackupClient
 import com.example.expensetracker.data.backup.ParseResult
+import com.example.expensetracker.data.export.CsvExporter
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.google.android.gms.auth.UserRecoverableAuthException
 import kotlinx.coroutines.Dispatchers
@@ -179,6 +180,24 @@ class SettingsViewModel(
         val data = backupManager.snapshot()
         val ok = backupManager.exportToUri(uri, data)
         snackbarMessage = if (ok) "Backup saved (${data.expenses.orEmpty().size} expenses)" else "Couldn't save the backup"
+    }
+
+    /** Range chosen in the CSV dialog, kept until the system file picker returns. Null = all time. */
+    private var pendingCsvRange: Pair<Long, Long>? = null
+
+    fun prepareCsvExport(range: Pair<Long, Long>?) { pendingCsvRange = range }
+
+    fun exportCsvTo(uri: Uri) = viewModelScope.launch {
+        val range = pendingCsvRange
+        val expenses = expenseRepo.allExpenses.first().filter { range == null || it.date in range.first..range.second }
+        val csv = CsvExporter.expensesToCsv(expenses, categoryRepo.getAll())
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                appContext.contentResolver.openOutputStream(uri)?.use { it.write(csv.toByteArray(Charsets.UTF_8)) } != null
+            }.getOrDefault(false)
+        }
+        snackbarMessage = if (ok) "Exported ${expenses.size} ${if (expenses.size == 1) "expense" else "expenses"} to CSV"
+            else "Couldn't save the CSV"
     }
 
     /** Reads and checks the file first; nothing is deleted unless the user then confirms. */

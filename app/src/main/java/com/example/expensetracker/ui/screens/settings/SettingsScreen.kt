@@ -43,6 +43,10 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.ui.util.utcMidnightToLocalDayEnd
+import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
 import androidx.fragment.app.FragmentActivity
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.util.BiometricUtil
@@ -101,6 +105,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportTo(it) }
+    }
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let { viewModel.exportCsvTo(it) }
     }
     val tracking = rememberTrackingStatus()
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -214,6 +221,10 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onBack = { currentPage = null },
                 onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                onExportCsv = { preset, range ->
+                    viewModel.prepareCsvExport(range)
+                    csvLauncher.launch(ExportRange.fileName(preset, range))
+                },
                 showMockData = isDebugBuild(context),
                 onMockData = { viewModel.loadMockData() },
                 onReset = { viewModel.resetAll() }
@@ -745,9 +756,11 @@ private fun PreferencesSubPage(
 @Composable
 private fun DataSubPage(
     modifier: Modifier = Modifier, onBack: () -> Unit,
-    onExport: () -> Unit, onImport: () -> Unit, showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
+    onExport: () -> Unit, onImport: () -> Unit, onExportCsv: (ExportPreset, Pair<Long, Long>?) -> Unit,
+    showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
 ) {
     var showMockDataDialog by remember { mutableStateOf(false) }
+    var showCsvDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -757,6 +770,9 @@ private fun DataSubPage(
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
                 SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
+                    title = "Export CSV", subtitle = "Expenses for Excel or Google Sheets", onClick = { showCsvDialog = true })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
@@ -781,6 +797,12 @@ private fun DataSubPage(
         }
     }
 
+    if (showCsvDialog) {
+        CsvExportDialog(
+            onDismiss = { showCsvDialog = false },
+            onExport = { preset, range -> showCsvDialog = false; onExportCsv(preset, range) }
+        )
+    }
     if (showMockDataDialog) {
         AlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
@@ -1223,5 +1245,67 @@ private fun DetailRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontSize = 12.sp, color = Muted)
         Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
+    }
+}
+
+/** Pick what to export: a preset range, or any dates with the date-range picker. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?) -> Unit) {
+    var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
+    var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
+    val dateFmt = remember { java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text("Export CSV") },
+        text = {
+            Column {
+                ExportPreset.entries.forEach { p ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = preset == p, onClick = { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true },
+                            colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                        val label = if (p == ExportPreset.CUSTOM && custom != null)
+                            "${dateFmt.format(custom!!.first)} – ${dateFmt.format(custom!!.second)}" else p.label
+                        Text(label, color = Ink, fontSize = 14.sp)
+                    }
+                }
+                Text("Includes date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            val ready = preset != ExportPreset.CUSTOM || custom != null
+            TextButton(enabled = ready, onClick = {
+                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom))
+            }) { Text("Export", color = if (ready) Jade else Muted) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
+
+    if (showPicker) {
+        val today = remember { System.currentTimeMillis() }
+        val state = rememberDateRangePickerState(selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= today
+        })
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH },
+            confirmButton = {
+                val start = state.selectedStartDateMillis
+                val end = state.selectedEndDateMillis ?: start
+                TextButton(enabled = start != null, onClick = {
+                    custom = utcMidnightToLocalDayStart(start!!) to utcMidnightToLocalDayEnd(end!!)
+                    showPicker = false
+                }) { Text("OK", color = Jade) }
+            },
+            dismissButton = { TextButton(onClick = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH }) { Text("Cancel", color = Muted) } }
+        ) {
+            DateRangePicker(state = state, modifier = Modifier.weight(1f), title = { Text("Dates to export", modifier = Modifier.padding(16.dp)) })
+        }
     }
 }

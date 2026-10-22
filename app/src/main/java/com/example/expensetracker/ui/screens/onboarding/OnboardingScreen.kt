@@ -2,6 +2,7 @@ package com.example.expensetracker.ui.screens.onboarding
 
 import android.Manifest
 import android.app.Activity
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -46,11 +48,18 @@ private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
  * First-run setup: explains each permission before Android asks for it, then takes an optional
  * monthly income. Every step can be skipped; Settings → Auto-tracking can turn things on later.
  *
- * [onFinish] receives the monthly income, or null if the user skipped it.
+ * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup).
+ * [onRestoreBackup] restores a backup file chosen on the Welcome step, for people moving phones;
+ * setup then carries on with the permission steps, which a new phone still needs.
  */
 @Composable
-fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
+fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, onRestoreBackup: suspend (Uri) -> RestoreOutcome) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var restoredSummary by rememberSaveable { mutableStateOf<String?>(null) }
+    var restoredHasIncome by rememberSaveable { mutableStateOf(false) }
+    var restoreError by rememberSaveable { mutableStateOf<String?>(null) }
+    var restoring by remember { mutableStateOf(false) }
     val activity = context as? Activity
     val steps = remember {
         buildList {
@@ -88,6 +97,21 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
         next()
     }
 
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        restoring = true; restoreError = null
+        scope.launch {
+            when (val outcome = onRestoreBackup(uri)) {
+                is RestoreOutcome.Restored -> {
+                    restoredSummary = outcome.summary; restoredHasIncome = outcome.hasIncome
+                    next()
+                }
+                is RestoreOutcome.Failed -> restoreError = outcome.reason
+            }
+            restoring = false
+        }
+    }
+
     var incomeText by rememberSaveable { mutableStateOf("") }
     val parsedIncome = parseLimitInput(incomeText)
 
@@ -98,17 +122,20 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
         Spacer(Modifier.height(32.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             when (step) {
-                Step.Welcome -> StepBody(
-                    eyebrow = "WELCOME",
-                    title = "Your spending, tracked automatically",
-                    body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
-                        "Everything stays on this phone. There's no account, no ads and no loans.",
-                    points = listOf(
-                        "📩  Reads bank SMS and GPay, PhonePe and Paytm alerts",
-                        "🗂  Sorts payments into categories, and learns as you go",
-                        "🔒  Your data never leaves your phone unless you back it up"
+                Step.Welcome -> {
+                    StepBody(
+                        eyebrow = "WELCOME",
+                        title = "Your spending, tracked automatically",
+                        body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
+                            "Everything stays on this phone. There's no account, no ads and no loans.",
+                        points = listOf(
+                            "📩  Reads bank SMS and GPay, PhonePe and Paytm alerts",
+                            "🗂  Sorts payments into categories, and learns as you go",
+                            "🔒  Your data never leaves your phone unless you back it up"
+                        )
                     )
-                )
+                    restoreError?.let { Text(it, color = Coral, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+                }
                 Step.Sms -> StepBody(
                     eyebrow = "STEP 1 · BANK SMS",
                     title = "Log payments from bank SMS",
@@ -134,13 +161,20 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
                         "It also warns you when a category is close to its budget.",
                     status = if (alertsGranted) "Alerts are on" else null
                 )
-                Step.Income -> {
+                Step.Income -> if (restoredSummary != null && restoredHasIncome) {
+                    StepBody(
+                        eyebrow = "LAST STEP",
+                        title = "You're all set",
+                        body = "Restored from your backup: $restoredSummary.\n\nYou can change anything later in Settings."
+                    )
+                } else {
                     StepBody(
                         eyebrow = "LAST STEP",
                         title = "What's your monthly income?",
                         body = "This is optional. It lets the Overview show how much is still free to spend this month. " +
                             "You can change it any time from the Overview screen.",
-                        points = listOf("We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
+                        points = if (restoredSummary != null) listOf("Restored from your backup: $restoredSummary.")
+                            else listOf("We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
                             DefaultCategories.STARTER.take(4).joinToString { it.name } + ". You can edit or delete them.")
                     )
                     Spacer(Modifier.height(16.dp))
@@ -167,7 +201,13 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
 
         // Buttons
         when (step) {
-            Step.Welcome -> PrimaryButton("Get started", onClick = next)
+            Step.Welcome -> {
+                PrimaryButton("Get started", enabled = !restoring, onClick = next)
+                SecondaryButton(if (restoring) "Restoring…" else "Moving from another phone? Restore a backup") {
+                    // Drive restore needs the app's Google sign-in client registered first (Play launch work).
+                    if (!restoring) restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                }
+            }
             Step.Sms -> if (tracking.status.sms) PrimaryButton("Continue", onClick = next) else {
                 PrimaryButton(if (smsDeniedForGood) "Open app settings" else "Allow SMS access") {
                     if (smsDeniedForGood) SmsPermissionUtil.openSettings(context)
@@ -183,7 +223,9 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
                 PrimaryButton("Allow alerts") { alertsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 SecondaryButton("Not now", onClick = next)
             }
-            Step.Income -> {
+            Step.Income -> if (restoredSummary != null && restoredHasIncome) {
+                PrimaryButton("Finish") { onFinish(null) }
+            } else {
                 val incomeInvalid = incomeText.isNotBlank() && parsedIncome == null
                 PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }) }
                 SecondaryButton("Skip") { onFinish(null) }
