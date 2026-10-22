@@ -18,6 +18,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.screens.lock.LockedScreen
 import com.example.expensetracker.ui.theme.Ink
@@ -85,6 +87,7 @@ class MainActivity : FragmentActivity() {
             recreated = savedInstanceState != null,
             action = intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
             expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L,
+            fromHistory = ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0,
             stillPending = savedInstanceState?.takeIf { it.containsKey(SAVED_PENDING_EXPENSE_ID) }?.let {
                 LaunchAction.from(it.getString(SAVED_PENDING_ACTION), it.getLong(SAVED_PENDING_EXPENSE_ID, -1L))
             }
@@ -101,14 +104,24 @@ class MainActivity : FragmentActivity() {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
                             true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
                             false -> AppNavGraph(
-                                // Held until unlocked: a dialog (the widget's add dialog) is its own
-                                // window and would draw on top of the lock screen.
+                                // Held until unlocked: a dialog opened now (the widget's add dialog)
+                                // would be a newer window than the lock, so it would sit on top of it.
                                 launchAction = pendingAction.takeIf { !locked },
                                 onLaunchHandled = { pendingAction = null }
                             )
                         }
                     }
-                    if (locked) LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
+                    // A window of its own, not an overlay: dialogs the user had open (Add, Edit,
+                    // filters) are separate windows and drew on top of an in-window overlay. A
+                    // window added later sits above them. Back sends the app away rather than
+                    // dismissing the lock.
+                    if (locked) Dialog(
+                        onDismissRequest = { moveTaskToBack(true) },
+                        properties = DialogProperties(
+                            dismissOnBackPress = true, dismissOnClickOutside = false,
+                            usePlatformDefaultWidth = false, decorFitsSystemWindows = false
+                        )
+                    ) { LockedScreen(message = lockMessage, onUnlock = ::promptUnlock) }
                     if (showLockTurnedOff) {
                         AlertDialog(
                             onDismissRequest = { showLockTurnedOff = false },

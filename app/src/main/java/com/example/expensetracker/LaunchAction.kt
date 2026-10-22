@@ -30,9 +30,14 @@ sealed class LaunchAction {
          * For Activity.onCreate. A recreated activity (rotation, or Android restoring it) gets its
          * original intent again; acting on it twice would reopen the add dialog or Categorize. What
          * counts then is [stillPending]: an action saved because it hadn't been handled yet (it
-         * arrived during onboarding, say), which must still run.
+         * arrived during onboarding, say), which must still run. Reopening from Recents
+         * ([fromHistory], FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) re-delivers the task's first intent
+         * too, e.g. the widget's +, which was handled back then.
          */
-        fun onCreate(recreated: Boolean, action: String?, expenseId: Long, stillPending: LaunchAction? = null): LaunchAction? =
-            if (recreated) stillPending else from(action, expenseId)
+        fun onCreate(recreated: Boolean, action: String?, expenseId: Long, stillPending: LaunchAction? = null, fromHistory: Boolean = false): LaunchAction? = when {
+            recreated -> stillPending
+            fromHistory -> null
+            else -> from(action, expenseId)
+        }
     }
 }

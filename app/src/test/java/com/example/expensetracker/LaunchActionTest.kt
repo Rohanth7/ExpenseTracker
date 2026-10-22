@@ -15,6 +15,11 @@ class LaunchActionTest {
         assertNull(LaunchAction.onCreate(recreated = true, action = null, expenseId = 7))
         assertEquals(LaunchAction.QuickAdd, LaunchAction.onCreate(recreated = false, action = LaunchAction.QUICK_ADD, expenseId = -1))
     }
+    @Test fun `reopening from Recents doesn't replay the launch`() {
+        // Android re-delivers the task's original intent (the widget's +) with LAUNCHED_FROM_HISTORY.
+        assertNull(LaunchAction.onCreate(recreated = false, action = LaunchAction.QUICK_ADD, expenseId = -1, fromHistory = true))
+        assertNull(LaunchAction.onCreate(recreated = false, action = null, expenseId = 7, fromHistory = true))
+    }
     @Test fun `an action not handled yet survives recreation`() {
         // A tap that arrived during onboarding, then a rotation: it must still run once the app is up.
         assertEquals(LaunchAction.Categorize(7), LaunchAction.onCreate(recreated = true, action = null, expenseId = 7, stillPending = LaunchAction.Categorize(7)))
