@@ -50,9 +50,7 @@ fun rememberAmountInputState(initial: String = ""): AmountInputState = remember 
 fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: String = "Amount (₹)") {
     val text = state.value.text
     // Parsed once per text change, not on every recomposition.
-    val result = remember(text) {
-        if (AmountCalculator.needsPreview(text)) AmountCalculator.evaluate(text)?.let(AmountCalculator::formatPreview) else null
-    }
+    val preview = remember(text) { AmountCalculator.previewText(text, AmountCalculator.evaluate(text)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         OutlinedTextField(
             value = state.value,
@@ -63,7 +61,7 @@ fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: S
             isError = state.error.isNotEmpty(),
             supportingText = when {
                 state.error.isNotEmpty() -> {{ Text(state.error) }}
-                result != null -> {{ Text("= ₹$result", color = Muted, fontSize = 12.sp) }}
+                preview != null -> {{ Text(preview, color = Muted, fontSize = 12.sp) }}
                 else -> null
             },
             modifier = Modifier.fillMaxWidth()

@@ -44,8 +44,9 @@ object AmountCalculator {
         val parser = Parser(s, decimalComma)
         val value = parser.expression() ?: return null
         if (!parser.atEnd() || !value.isFinite() || value > MAX_AMOUNT) return null
-        // Round before the zero check, so "0.004" is refused rather than saved as ₹0.
-        val rounded = Math.round(value * 100) / 100.0
+        // Round before the zero check, so "0.004" is refused rather than saved as ₹0. Rounded like
+        // forEditing (Math.round(1.005 * 100) gave 1.00, as 1.005 * 100 is 100.4999… in a double).
+        val rounded = java.math.BigDecimal.valueOf(value).setScale(2, java.math.RoundingMode.HALF_UP).toDouble()
         return if (rounded > 0) rounded else null
     }
 
@@ -62,6 +63,17 @@ object AmountCalculator {
         java.text.NumberFormat.getNumberInstance(if (usesDecimalComma(locale)) locale else java.util.Locale.forLanguageTag("en-IN"))
             .apply { maximumFractionDigits = 2; minimumFractionDigits = 0 }
             .format(amount)
+
+    /**
+     * "= ₹165" under an amount or limit field for [text] read as [value]: only for sums and text
+     * whose separators could be read two ways (see [needsPreview]), and only for a positive amount.
+     */
+    fun previewText(
+        text: String, value: Double?,
+        decimalComma: Boolean = usesDecimalComma(), locale: java.util.Locale = java.util.Locale.getDefault()
+    ): String? =
+        if (value == null || value <= 0 || !needsPreview(text.trim(), decimalComma)) null
+        else "= ₹" + formatPreview(value, locale)
 
     /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
     private fun parseNumber(token: String, decimalComma: Boolean): Double? = when {

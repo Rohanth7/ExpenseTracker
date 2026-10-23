@@ -94,4 +94,16 @@ class AmountCalculatorTest {
         assertEquals("12,5", AmountCalculator.formatPreview(12.5, java.util.Locale.GERMANY))
         assertEquals("33.33", AmountCalculator.formatPreview(33.333, java.util.Locale.US))
     }
+    @Test fun `half a paisa rounds up, as the edit field shows it`() {
+        // Math.round(1.005 * 100) gave 1.00: 1.005 * 100 is 100.49999… in floating point.
+        assertEquals(1.01, eval("1.005")!!, 0.0); assertEquals(0.29, eval("0.285")!!, 0.0)
+        assertEquals("1.01", AmountCalculator.forEditing(1.005))
+    }
+    @Test fun `the preview shows only when the text could be read two ways or is a sum`() {
+        val us = java.util.Locale.US
+        assertEquals("= ₹50", AmountCalculator.previewText("50,00", 50.0, decimalComma = false, locale = us))
+        assertEquals("= ₹1,500", AmountCalculator.previewText("1000+500", 1500.0, decimalComma = false, locale = us))
+        assertNull(AmountCalculator.previewText("5000", 5000.0, decimalComma = false, locale = us))
+        assertNull(AmountCalculator.previewText("1+x", null, decimalComma = false, locale = us))
+    }
 }

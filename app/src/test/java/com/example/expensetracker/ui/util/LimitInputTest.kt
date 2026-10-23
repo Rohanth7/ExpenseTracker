@@ -32,10 +32,11 @@ class LimitInputTest {
     @Test fun `a limit that could be read two ways shows what it was read as`() {
         // "50,00" is ₹50 now (a decimal comma), not ₹5000 as before; the field must say so.
         val us = java.util.Locale.US
-        assertEquals("= ₹50", limitPreview("50,00", decimalComma = false, locale = us))
-        assertEquals("= ₹1,500", limitPreview("1000+500", decimalComma = false, locale = us))
-        assertEquals("= ₹1.500", limitPreview("1.500", decimalComma = true, locale = java.util.Locale.GERMANY))
+        fun preview(text: String, dc: Boolean = false, locale: java.util.Locale = us) =
+            AmountCalculator.previewText(text, parseLimitInput(text, dc), dc, locale)
+        assertEquals("= ₹50", preview("50,00"))
+        assertEquals("= ₹1.500", preview("1.500", dc = true, locale = java.util.Locale.GERMANY))
         // Plain numbers, no limit, and unreadable text show nothing extra.
-        listOf("5000", "", "0", "abc").forEach { assertNull("'$it'", limitPreview(it, decimalComma = false, locale = us)) }
+        listOf("5000", "", "0", "0,00", "abc").forEach { assertNull("'$it'", preview(it)) }
     }
 }

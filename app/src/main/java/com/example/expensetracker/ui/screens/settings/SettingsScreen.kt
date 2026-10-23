@@ -49,7 +49,7 @@ import com.example.expensetracker.ui.util.BiometricUtil
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
-import com.example.expensetracker.ui.util.limitPreview
+import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
@@ -471,7 +471,7 @@ private fun CategoryLimitDialog(
         mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
     val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
-    val limitShown = remember(limitText) { limitPreview(limitText) }
+    val limitShown = remember(limitText) { AmountCalculator.previewText(limitText, parsedLimit) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

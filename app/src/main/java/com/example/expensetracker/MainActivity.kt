@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,6 +52,8 @@ class MainActivity : FragmentActivity() {
     private var locked by mutableStateOf(false)
     private var lockMessage by mutableStateOf<String?>(null)
     private var showLockTurnedOff by mutableStateOf(false)
+    /** Bumped to ask for the unlock prompt; the lock window shows it (see onStart). */
+    private var unlockRequest by mutableStateOf(0)
     private var promptShowing = false
     private lateinit var prefs: PreferencesManager
     // null while checking whether this is a new install
@@ -114,14 +117,19 @@ class MainActivity : FragmentActivity() {
                     // A window of its own, not an overlay: dialogs the user had open (Add, Edit,
                     // filters) are separate windows and drew on top of an in-window overlay. A
                     // window added later sits above them. Back sends the app away rather than
-                    // dismissing the lock.
+                    // dismissing the lock. The unlock prompt is asked for from inside it, so the
+                    // prompt comes after it: on Android 7–8.1 the fingerprint prompt is an app dialog
+                    // too, and a lock window added after it would cover it (and its PIN fallback).
                     if (locked) Dialog(
                         onDismissRequest = { moveTaskToBack(true) },
                         properties = DialogProperties(
                             dismissOnBackPress = true, dismissOnClickOutside = false,
                             usePlatformDefaultWidth = false, decorFitsSystemWindows = false
                         )
-                    ) { LockedScreen(message = lockMessage, onUnlock = ::promptUnlock) }
+                    ) {
+                        LaunchedEffect(unlockRequest) { promptUnlock() }
+                        LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
+                    }
                     if (showLockTurnedOff) {
                         AlertDialog(
                             onDismissRequest = { showLockTurnedOff = false },
@@ -161,7 +169,7 @@ class MainActivity : FragmentActivity() {
             showLockTurnedOff = true
         } else {
             locked = true
-            promptUnlock()
+            unlockRequest++  // shown by the lock window once it's up, not here
         }
     }
 

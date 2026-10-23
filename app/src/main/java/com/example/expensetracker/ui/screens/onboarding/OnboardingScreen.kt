@@ -35,7 +35,7 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.theme.*
-import com.example.expensetracker.ui.util.limitPreview
+import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.NotificationAccessUtil
 import com.example.expensetracker.ui.util.SmsPermissionUtil
@@ -91,7 +91,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
 
     var incomeText by rememberSaveable { mutableStateOf("") }
     val parsedIncome = remember(incomeText) { parseLimitInput(incomeText) }
-    val incomeShown = remember(incomeText) { limitPreview(incomeText) }
+    val incomeShown = remember(incomeText) { AmountCalculator.previewText(incomeText, parsedIncome) }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)

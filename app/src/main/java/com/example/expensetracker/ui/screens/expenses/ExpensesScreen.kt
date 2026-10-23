@@ -73,10 +73,11 @@ fun ExpensesScreen(
     var showBulkCategorize by remember { mutableStateOf(false) }
     var showAdvancedFilters by remember { mutableStateOf(false) }
     // The widget's "+": a one-shot request, consumed here so it can't fire twice. It replaces any
-    // dialog left open (Edit, Delete, filters) so two dialogs never stack.
+    // dialog left open (Edit, Delete, filters) or selection, so two dialogs never stack.
     LaunchedEffect(openAdd) {
         if (openAdd) {
             editingExpense = null; expenseToDelete = null; showBulkCategorize = false; showAdvancedFilters = false
+            viewModel.clearSelection()
             showAddDialog = true
             onAddOpened()
         }
@@ -92,7 +93,7 @@ fun ExpensesScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.syncWeekStart()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.syncPrefs()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -1015,7 +1016,9 @@ private fun EditExpenseDialog(
         dismissButton = {
             // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
             // fix made here, like picking a category, isn't lost on the original.
-            val edited = expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
+            val edited = remember(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate) {
+                expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
+            }
             Row {
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton

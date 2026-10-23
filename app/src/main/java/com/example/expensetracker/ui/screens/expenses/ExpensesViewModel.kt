@@ -99,7 +99,11 @@ class ExpensesViewModel(
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
 
-    fun syncWeekStart() { _weekStartsOnMonday.value = prefs.weekStartsOnMonday }
+    /** Settings that can change while this screen is away (Settings, a backup restore). */
+    fun syncPrefs() {
+        _weekStartsOnMonday.value = prefs.weekStartsOnMonday
+        _lastManualCategoryId.value = prefs.lastManualCategoryId
+    }
 
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setCategoryFilter(id: Long?) { _categoryFilter.value = id }
@@ -162,8 +166,8 @@ class ExpensesViewModel(
             if (it.source != "Manual") {
                 mappingRepo.saveMapping(it.description, categoryId)
             }
-            alertIfOverBudget(categoryId)
         }
+        alertIfOverBudget(categoryId)
         _selectedIds.value = emptySet()
     }
 
