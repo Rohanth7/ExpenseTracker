@@ -53,6 +53,7 @@ import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.expensetracker.ui.components.AppAlertDialog
 
 private sealed class SettingsPage {
     object Bills : SettingsPage()
@@ -246,7 +247,7 @@ private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onCo
         count(d.savingsGoals?.size, "savings goal", "savings goals")
     ).joinToString(", ")
     val kept = d.missingSections
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
         title = { Text(if (pending.fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
@@ -473,7 +474,7 @@ private fun CategoryLimitDialog(
     val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
     val limitShown = remember(limitText) { AmountCalculator.previewText(limitText, parsedLimit) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("${category.emoji} ${category.name}", color = Ink) },
@@ -552,7 +553,7 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
             })
     }
     billToDelete?.let { bill ->
-        AlertDialog(onDismissRequest = { billToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        AppAlertDialog(onDismissRequest = { billToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Delete bill?") }, text = { Text("\"${bill.name}\" will be removed from your bill reminders.") },
             confirmButton = { TextButton(onClick = { viewModel.deleteBill(bill); billToDelete = null }) { Text("Delete", color = Coral) } },
             dismissButton = { TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = Muted) } })
@@ -600,7 +601,7 @@ private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifi
             })
     }
     loanToDelete?.let { loan ->
-        AlertDialog(onDismissRequest = { loanToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        AppAlertDialog(onDismissRequest = { loanToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Delete loan?") }, text = { Text("\"${loan.name}\" will be removed from your EMI tracker.") },
             confirmButton = { TextButton(onClick = { viewModel.deleteLoan(loan); loanToDelete = null }) { Text("Delete", color = Coral) } },
             dismissButton = { TextButton(onClick = { loanToDelete = null }) { Text("Cancel", color = Muted) } })
@@ -788,14 +789,14 @@ private fun DataSubPage(
     }
 
     if (showMockDataDialog) {
-        AlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        AppAlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
             text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, and savings goals.") },
             confirmButton = { TextButton(onClick = { onMockData(); showMockDataDialog = false }) { Text("Load", color = Jade) } },
             dismissButton = { TextButton(onClick = { showMockDataDialog = false }) { Text("Cancel", color = Muted) } })
     }
     if (showResetDialog) {
-        AlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        AppAlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
             text = { Text("This permanently deletes all expenses, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
             confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
@@ -913,7 +914,7 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
     var autoLog by remember { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Bill / Recurring") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1019,7 +1020,7 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
     var autoLog by remember { mutableStateOf(bill.autoLog) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Bill") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1110,7 +1111,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
     var monthsAgo by remember { mutableStateOf(initialMonthsAgo.toString()) }
     var dueDay by remember { mutableStateOf(loan.dueDayOfMonth.toString()) }
 
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Loan") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1177,7 +1178,7 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
     var monthsAgo by remember { mutableStateOf("0") }
     var dueDay by remember { mutableStateOf("5") }
 
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Loan / EMI") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -38,6 +38,7 @@ import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
+import com.example.expensetracker.ui.components.AppAlertDialog
 
 private fun fmtINR(amount: Double): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
@@ -753,7 +754,7 @@ private fun CategoryDetailDialog(
     subcategoryBreakdown: List<SubcategoryBreakdown>?,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = {
