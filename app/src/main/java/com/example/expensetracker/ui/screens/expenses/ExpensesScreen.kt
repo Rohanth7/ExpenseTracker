@@ -42,6 +42,8 @@ import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.AppDatePickerDialog
 
 private data class DayGroup(
     val dayLabel: String,
@@ -393,7 +395,7 @@ fun ExpensesScreen(
     }
 
     expenseToDelete?.let { expense ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { expenseToDelete = null },
             containerColor = Paper,
             titleContentColor = Ink,
@@ -447,7 +449,7 @@ private fun AdvancedFiltersDialog(
     var minText by remember { mutableStateOf(minAmount?.toString() ?: "") }
     var maxText by remember { mutableStateOf(maxAmount?.toString() ?: "") }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Advanced Filters", color = Ink) },
@@ -536,7 +538,7 @@ private fun BulkCategorizeDialog(
     val bulkParents = remember(categories) { categories.filter { it.parentId == null } }
     val bulkChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Move to Category", color = Ink) },
@@ -829,7 +831,7 @@ private fun AddExpenseDialog(
     var selectedPaymentMethod by remember { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Add Expense", color = Ink) },
@@ -939,7 +941,7 @@ private fun EditExpenseDialog(
     var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Edit Expense", color = Ink) },
@@ -1058,7 +1060,7 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
                 override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
             }
         )
-        DatePickerDialog(
+        AppDatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {

@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,13 +16,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import android.os.SystemClock
 import android.view.WindowManager
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.expensetracker.security.AppLock
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.LocalAppLocked
 import com.example.expensetracker.ui.screens.lock.LockedScreen
 import com.example.expensetracker.ui.theme.Ink
 import com.example.expensetracker.ui.theme.Jade
@@ -101,17 +103,20 @@ class MainActivity : FragmentActivity() {
                 Box(Modifier.fillMaxSize()) {
                     // The app stays composed under the lock screen, so a file picker or Google
                     // sign-in that was open when it locked can still deliver its result. While
-                    // locked it's hidden from screen readers too.
-                    Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics {} else Modifier)) {
-                        when (showOnboarding) {
-                            null -> Box(Modifier.fillMaxSize().background(Canvas))
-                            true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
-                            false -> AppNavGraph(
-                                // Held until unlocked: a dialog opened now (the widget's add dialog)
-                                // would be a newer window than the lock, so it would sit on top of it.
-                                launchAction = pendingAction.takeIf { !locked },
-                                onLaunchHandled = { pendingAction = null }
-                            )
+                    // locked it's hidden from screen readers too, and a dialog asked for now isn't
+                    // created until unlock (it would be a newer window, on top of the lock).
+                    CompositionLocalProvider(LocalAppLocked provides locked) {
+                        Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics {} else Modifier)) {
+                            when (showOnboarding) {
+                                null -> Box(Modifier.fillMaxSize().background(Canvas))
+                                true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
+                                false -> AppNavGraph(
+                                    // Held until unlocked, so what the tap opens (the widget's add
+                                    // dialog) isn't opened hidden behind the lock.
+                                    launchAction = pendingAction.takeIf { !locked },
+                                    onLaunchHandled = { pendingAction = null }
+                                )
+                            }
                         }
                     }
                     // A window of its own, not an overlay: dialogs the user had open (Add, Edit,
@@ -120,7 +125,7 @@ class MainActivity : FragmentActivity() {
                     // dismissing the lock. The unlock prompt is asked for from inside it, so the
                     // prompt comes after it: on Android 7–8.1 the fingerprint prompt is an app dialog
                     // too, and a lock window added after it would cover it (and its PIN fallback).
-                    if (locked) Dialog(
+                    if (locked) Dialog(  // the lock window itself
                         onDismissRequest = { moveTaskToBack(true) },
                         properties = DialogProperties(
                             dismissOnBackPress = true, dismissOnClickOutside = false,
@@ -131,7 +136,7 @@ class MainActivity : FragmentActivity() {
                         LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
                     }
                     if (showLockTurnedOff) {
-                        AlertDialog(
+                        AppAlertDialog(
                             onDismissRequest = { showLockTurnedOff = false },
                             containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
                             title = { Text("App lock turned off") },
