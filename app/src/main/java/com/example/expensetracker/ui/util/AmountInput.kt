@@ -21,8 +21,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.ui.theme.Muted
-import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * One amount field's state: the text with its cursor (so a chip's symbol lands at the cursor) and
@@ -52,7 +50,9 @@ fun rememberAmountInputState(initial: String = ""): AmountInputState = remember 
 fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: String = "Amount (₹)") {
     val text = state.value.text
     // Parsed once per text change, not on every recomposition.
-    val result = remember(text) { if (AmountCalculator.needsPreview(text)) AmountCalculator.evaluate(text) else null }
+    val result = remember(text) {
+        if (AmountCalculator.needsPreview(text)) AmountCalculator.evaluate(text)?.let(AmountCalculator::formatPreview) else null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         OutlinedTextField(
             value = state.value,
@@ -63,7 +63,7 @@ fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: S
             isError = state.error.isNotEmpty(),
             supportingText = when {
                 state.error.isNotEmpty() -> {{ Text(state.error) }}
-                result != null -> {{ Text("= ₹${PREVIEW_FORMAT.format(result)}", color = Muted, fontSize = 12.sp) }}
+                result != null -> {{ Text("= ₹$result", color = Muted, fontSize = 12.sp) }}
                 else -> null
             },
             modifier = Modifier.fillMaxWidth()
@@ -82,9 +82,4 @@ fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: S
             }
         }
     }
-}
-
-/** "1,65,000" or "33.33": Indian grouping, paise only when there are some. Main-thread only. */
-private val PREVIEW_FORMAT: NumberFormat = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-    maximumFractionDigits = 2; minimumFractionDigits = 0
 }

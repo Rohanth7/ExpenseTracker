@@ -89,7 +89,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
     }
 
     var incomeText by rememberSaveable { mutableStateOf("") }
-    val parsedIncome = parseLimitInput(incomeText)
+    val parsedIncome = remember(incomeText) { parseLimitInput(incomeText) }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)

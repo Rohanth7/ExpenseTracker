@@ -53,6 +53,16 @@ object AmountCalculator {
     fun forEditing(amount: Double): String =
         java.math.BigDecimal.valueOf(amount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
 
+    /**
+     * The "= ₹…" preview, written the way the phone writes numbers: Indian grouping ("1,65,000")
+     * on dot-decimal phones, "1.500" and "12,5" on comma-decimal ones, where an en-IN "1,500"
+     * would read as one and a half. Paise only when there are some.
+     */
+    fun formatPreview(amount: Double, locale: java.util.Locale = java.util.Locale.getDefault()): String =
+        java.text.NumberFormat.getNumberInstance(if (usesDecimalComma(locale)) locale else java.util.Locale.forLanguageTag("en-IN"))
+            .apply { maximumFractionDigits = 2; minimumFractionDigits = 0 }
+            .format(amount)
+
     /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
     private fun parseNumber(token: String, decimalComma: Boolean): Double? = when {
         ',' !in token ->

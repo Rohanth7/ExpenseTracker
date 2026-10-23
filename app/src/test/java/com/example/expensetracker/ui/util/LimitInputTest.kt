@@ -21,4 +21,12 @@ class LimitInputTest {
     @Test fun `anything else is refused`() {
         listOf("abc", "-5", "1,2,3", "12a").forEach { assertNull("'$it'", parse(it)) }
     }
+    @Test fun `a limit pre-filled for editing reads back as the same limit on any phone`() {
+        // "1.125" read as ₹1,125 on a comma-decimal phone (dots group thousands there).
+        listOf(1.125, 1500.0, 2500.5, 99.99, 0.5).forEach { limit ->
+            listOf(false, true).forEach { dc ->
+                assertEquals("$limit, decimalComma=$dc", Math.round(limit * 100) / 100.0, parse(formatLimitInput(limit), dc)!!, 0.0)
+            }
+        }
+    }
 }

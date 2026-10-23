@@ -169,8 +169,10 @@ class ExpensesViewModel(
 
     fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") = viewModelScope.launch {
         expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
-        // Remembered either way: choosing "Choose later" makes it the next default too.
-        prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
+        // Choosing "Choose later" makes it the next default too (see shouldRememberCategory).
+        if (shouldRememberCategory(categoryId, categoriesLoaded = categories.value.isNotEmpty())) {
+            prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
+        }
         alertIfOverBudget(categoryId)
     }
 

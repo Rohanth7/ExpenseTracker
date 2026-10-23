@@ -31,4 +31,10 @@ class LaunchActionTest {
             assertEquals(a, LaunchAction.from(action, id))
         }
     }
+    @Test fun `a plain tap doesn't drop an action still waiting`() {
+        // A notification tap held behind App Lock, then a tap on the widget's body (no action).
+        assertEquals(LaunchAction.Categorize(7), LaunchAction.onNewIntent(waiting = LaunchAction.Categorize(7), incoming = null))
+        assertEquals(LaunchAction.QuickAdd, LaunchAction.onNewIntent(waiting = LaunchAction.Categorize(7), incoming = LaunchAction.QuickAdd))
+        assertNull(LaunchAction.onNewIntent(waiting = null, incoming = null))
+    }
 }

@@ -192,7 +192,7 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingAction = launchActionOf(intent)
+        pendingAction = LaunchAction.onNewIntent(waiting = pendingAction, incoming = launchActionOf(intent))
     }
 
     private fun launchActionOf(intent: Intent?): LaunchAction? = LaunchAction.from(

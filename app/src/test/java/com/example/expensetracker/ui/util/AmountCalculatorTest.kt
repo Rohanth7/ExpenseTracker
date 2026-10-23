@@ -88,4 +88,10 @@ class AmountCalculatorTest {
         assertTrue(AmountCalculator.isExpression("120+45")); assertTrue(AmountCalculator.isExpression("3×40"))
         assertFalse(AmountCalculator.isExpression("250")); assertFalse(AmountCalculator.isExpression("1,200"))
     }
+    @Test fun `the preview is written the way the phone writes numbers`() {
+        // An en-IN "= ₹1,500" on a German phone reads as one and a half rupees.
+        assertEquals("1.500", AmountCalculator.formatPreview(1500.0, java.util.Locale.GERMANY))
+        assertEquals("12,5", AmountCalculator.formatPreview(12.5, java.util.Locale.GERMANY))
+        assertEquals("33.33", AmountCalculator.formatPreview(33.333, java.util.Locale.US))
+    }
 }

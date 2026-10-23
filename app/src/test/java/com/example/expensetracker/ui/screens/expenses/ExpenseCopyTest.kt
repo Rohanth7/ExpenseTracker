@@ -30,10 +30,25 @@ class ExpenseCopyTest {
         assertEquals(0L, copy.id); assertEquals(9_999L, copy.date); assertEquals("Manual", copy.source); assertNull(copy.rawSms)
     }
     @Test fun `the edit form knows when it has unsaved changes`() {
-        assertFalse(original.isEditedTo(180.0, "SWIGGY", 3, "lunch", "Credit Card", 1_000L))
-        assertTrue(original.isEditedTo(180.0, "SWIGGY", 1, "lunch", "Credit Card", 1_000L))   // category
-        assertTrue(original.isEditedTo(200.0, "SWIGGY", 3, "lunch", "Credit Card", 1_000L))   // amount
-        assertTrue(original.isEditedTo(180.0, "SWIGGY", 3, "lunch", "Credit Card", 9_000L))   // date
+        // The form starts with the amount as forEditing writes it ("180.00").
+        assertFalse(original.isEditedTo("180.00", "SWIGGY", 3, "lunch", "Credit Card", 1_000L))
+        assertFalse(original.isEditedTo("180", "SWIGGY", 3, "lunch", "Credit Card", 1_000L))   // retyped, same amount
+        assertTrue(original.isEditedTo("180.00", "SWIGGY", 1, "lunch", "Credit Card", 1_000L))   // category
+        assertTrue(original.isEditedTo("200", "SWIGGY", 3, "lunch", "Credit Card", 1_000L))   // amount
+        assertTrue(original.isEditedTo("180.00", "SWIGGY", 3, "lunch", "Credit Card", 9_000L))   // date
+        assertTrue(original.isEditedTo("180.00", "SWIGGY dinner", 3, "lunch", "Credit Card", 1_000L))   // notes
+    }
+    @Test fun `an untouched expense is not edited, even with stray spaces or paise beyond two places`() {
+        // Captured text can have padding, and old data three decimals; the form shows them as they are
+        // (amount rounded for display), so opening and duplicating must not rewrite the expense.
+        val captured = original.copy(amount = 123.456, description = " SWIGGY ", tags = "lunch, ")
+        assertFalse(captured.isEditedTo("123.46", " SWIGGY ", 3, "lunch, ", "Credit Card", 1_000L))
+    }
+    @Test fun `"Choose later" is remembered only when the user could see the categories`() {
+        assertTrue(shouldRememberCategory(categoryId = 4, categoriesLoaded = true))
+        assertTrue(shouldRememberCategory(categoryId = -1, categoriesLoaded = true))
+        // Confirmed before the list loaded: the dialog showed pending only because it had nothing else.
+        assertFalse(shouldRememberCategory(categoryId = -1, categoriesLoaded = false))
     }
     @Test fun `last used category is the default when it still exists`() {
         val cats = listOf(Category(id = 1, name = "Food"), Category(id = 2, name = "Travel"))

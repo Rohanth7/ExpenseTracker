@@ -39,5 +39,11 @@ sealed class LaunchAction {
             fromHistory -> null
             else -> from(action, expenseId)
         }
+
+        /**
+         * A tap arriving while the app is open. One with nothing to do (the widget's body) must not
+         * drop an action still waiting, such as a notification tap held behind App Lock.
+         */
+        fun onNewIntent(waiting: LaunchAction?, incoming: LaunchAction?): LaunchAction? = incoming ?: waiting
     }
 }

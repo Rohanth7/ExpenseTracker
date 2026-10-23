@@ -68,7 +68,6 @@ fun ExpensesScreen(
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
-    // The widget's "+": a one-shot request, consumed here so it can't fire twice.
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }
@@ -1016,10 +1015,7 @@ private fun EditExpenseDialog(
         dismissButton = {
             // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
             // fix made here, like picking a category, isn't lost on the original.
-            val edited = expense.isEditedTo(
-                AmountCalculator.evaluate(amount.value.text) ?: -1.0, description.trim(), selectedCategoryId,
-                tags.trim(), selectedPaymentMethod, formDate
-            )
+            val edited = expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
             Row {
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton

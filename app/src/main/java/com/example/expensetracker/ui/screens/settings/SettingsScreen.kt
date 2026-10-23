@@ -469,7 +469,7 @@ private fun CategoryLimitDialog(
     var limitText by remember {
         mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
-    val parsedLimit = parseLimitInput(limitText)
+    val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

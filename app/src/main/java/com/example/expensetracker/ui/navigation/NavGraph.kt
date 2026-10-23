@@ -125,9 +125,12 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         when (launchAction) {
             is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
             // Like the bottom nav's Expenses tab: the same screen (filters kept), never a pile of
-            // copies; the request then opens its add dialog.
+            // copies; the request then opens its add dialog. The tab's restored stack can have a
+            // screen on top of the list (Categorize, from a notification), where the dialog would
+            // wait unseen until the user came back; so back to the list itself.
             LaunchAction.QuickAdd -> {
                 navController.navigateToTab(Screen.Expenses.route)
+                navController.popBackStack(Screen.Expenses.pattern, inclusive = false)
                 quickAddRequested = true
             }
             LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route) {
