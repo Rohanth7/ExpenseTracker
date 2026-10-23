@@ -35,7 +35,25 @@ class AmountInputState(initial: String) {
     fun setText(text: String) { value = TextFieldValue(text, TextRange(text.length)); error = "" }
 
     /** The amount, or null after showing "Enter a valid amount" under the field. */
-    fun validated(): Double? = AmountCalculator.evaluate(value.text).also { if (it == null) error = "Enter a valid amount" }
+    fun validated(): Double? = AmountCalculator.evaluate(value.text).also { if (it == null) error = INVALID_AMOUNT }
+}
+
+const val INVALID_AMOUNT = "Enter a valid amount"
+
+/**
+ * The line under a plain amount field (bills, loans, goals, income, filters), given the [value]
+ * its text was read as: [INVALID_AMOUNT] for text that isn't an amount, else the "= ₹…" preview
+ * when the text is a sum or could be read two ways. Null when there's nothing to say, including
+ * before anything is typed.
+ */
+fun amountHint(
+    text: String, value: Double?,
+    decimalComma: Boolean = AmountCalculator.usesDecimalComma(), locale: java.util.Locale = java.util.Locale.getDefault()
+): String? = if (text.isNotBlank() && value == null) INVALID_AMOUNT else AmountCalculator.previewText(text, value, decimalComma, locale)
+
+/** [amountHint] as an OutlinedTextField supportingText: the error in the error colour, the preview muted. */
+fun amountSupportingText(hint: String?): (@Composable () -> Unit)? = hint?.let {
+    { if (it == INVALID_AMOUNT) Text(it) else Text(it, color = Muted, fontSize = 12.sp) }
 }
 
 @Composable
