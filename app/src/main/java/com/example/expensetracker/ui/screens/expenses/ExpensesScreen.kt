@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
@@ -1036,11 +1037,7 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
     if (showPicker) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = selectedUtcMidnight,
-            // Picker days are UTC midnights, so compare with today's (the current instant is still
-            // "yesterday" in UTC until 05:30 in India).
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= toUtcMidnight(System.currentTimeMillis())
-            }
+            selectableDates = PastOrTodayDates
         )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },

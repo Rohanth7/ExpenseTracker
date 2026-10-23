@@ -35,6 +35,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
+import com.example.expensetracker.ui.screens.settings.RestoreConfirmDialog
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.NotificationAccessUtil
@@ -55,7 +56,7 @@ private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
 fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: OnboardingViewModel = viewModel()) {
     val context = LocalContext.current
     val restored = viewModel.restored
-    val restoring = viewModel.restoring
+    val busy = viewModel.busy
     // A backup with an income needs nothing more; one without categories gets the starter set.
     val skipIncome = restored?.hasIncome == true
     val starterNote = "We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
@@ -99,7 +100,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
     }
 
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.restore(uri)
+        if (uri != null) viewModel.pick(uri)
     }
     LaunchedEffect(viewModel.justRestored) {
         if (!viewModel.justRestored) return@LaunchedEffect
@@ -200,10 +201,10 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
         // Buttons
         when (step) {
             Step.Welcome -> {
-                PrimaryButton("Get started", enabled = !restoring, onClick = next)
-                SecondaryButton(if (restoring) "Restoring…" else "Moving from another phone? Restore a backup") {
+                PrimaryButton("Get started", enabled = !busy, onClick = next)
+                SecondaryButton(if (busy) "Restoring…" else "Moving from another phone? Restore a backup") {
                     // Drive restore needs the app's Google sign-in client registered first (Play launch work).
-                    if (!restoring) restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                    if (!busy) restoreLauncher.launch(arrayOf("application/json", "*/*"))
                 }
             }
             Step.Sms -> if (tracking.status.sms) PrimaryButton("Continue", onClick = next) else {
@@ -230,6 +231,9 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
             }
         }
     }
+
+    // Nothing is replaced until the user has seen what the backup holds.
+    viewModel.pending?.let { RestoreConfirmDialog(data = it, fromDrive = false, onConfirm = viewModel::confirm, onDismiss = viewModel::cancel) }
 }
 
 @Composable

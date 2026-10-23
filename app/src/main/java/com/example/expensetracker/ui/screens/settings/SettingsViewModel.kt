@@ -2,6 +2,7 @@ package com.example.expensetracker.ui.screens.settings
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -199,6 +200,10 @@ class SettingsViewModel(
         } catch (e: Exception) {
             null
         }
+        // The picker already created the file; don't leave an empty or half-written one behind.
+        if (count == null) withContext(Dispatchers.IO) {
+            runCatching { DocumentsContract.deleteDocument(appContext.contentResolver, uri) }
+        }
         snackbarMessage = if (count != null) "Exported $count ${if (count == 1) "expense" else "expenses"} to CSV"
             else "Couldn't save the CSV"
     }
@@ -389,6 +394,8 @@ class SettingsViewModel(
         // Show first-run setup again on next launch, which recreates the starter categories.
         prefs.onboardingCompleted = false
         prefs.onboardingRestore = null
+        // Like a new install: next launch shows setup unless data was added again (e.g. a restore).
+        prefs.onboardingFirstLaunchChecked = false
         snackbarMessage = "All data deleted"
     }
 

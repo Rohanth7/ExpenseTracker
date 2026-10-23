@@ -44,8 +44,10 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.utcMidnightToLocalDayEnd
 import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
@@ -238,16 +240,18 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 
     if (pendingRestore != null) {
         RestoreConfirmDialog(
-            pending = pendingRestore,
+            data = pendingRestore.data,
+            fromDrive = pendingRestore.fromDrive,
             onConfirm = { viewModel.confirmRestore() },
             onDismiss = { viewModel.cancelRestore() }
         )
     }
 }
 
+/** Shows what a backup contains before it replaces anything. Used by Settings and first-run setup. */
 @Composable
-private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val d = pending.data
+internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val d = data
     val date = remember(d.exportedAt) {
         java.text.SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()).format(java.util.Date(d.exportedAt))
     }
@@ -263,7 +267,7 @@ private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onCo
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-        title = { Text(if (pending.fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
+        title = { Text(if (fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
         text = {
             Text(buildString {
                 append("Backup from $date: $contents.\n\n")
@@ -1296,14 +1300,10 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     )
 
     if (showPicker) {
-        // Picker days are UTC midnights, so compare with today's, not with the current instant.
-        val today = remember { toUtcMidnight(System.currentTimeMillis()) }
         val state = rememberDateRangePickerState(
             initialSelectedStartDateMillis = custom?.first?.let(::toUtcMidnight),
             initialSelectedEndDateMillis = custom?.second?.let(::toUtcMidnight),
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= today
-            }
+            selectableDates = PastOrTodayDates
         )
         DatePickerDialog(
             onDismissRequest = closePicker,

@@ -24,10 +24,12 @@ import com.example.expensetracker.ui.theme.Ink
 import com.example.expensetracker.ui.theme.Jade
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.theme.Paper
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.screens.onboarding.OnboardingScreen
+import com.example.expensetracker.ui.screens.onboarding.OnboardingViewModel
 import com.example.expensetracker.ui.screens.onboarding.SetupGate
 import com.example.expensetracker.ui.theme.Canvas
 import kotlinx.coroutines.Dispatchers
@@ -193,6 +195,8 @@ class MainActivity : FragmentActivity() {
                 prefs.onboardingRestore = null
             }
             showOnboarding = false
+            // The setup ViewModel outlives its screen; drop the restore it remembers.
+            ViewModelProvider(this@MainActivity)[OnboardingViewModel::class.java].finished()
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.util
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SelectableDates
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -13,6 +15,12 @@ fun toUtcMidnight(localMillis: Long): Long {
         clear()
         set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
     }.timeInMillis
+}
+
+/** For pickers that only allow past days and today. Compares UTC midnights, never the current instant. */
+@OptIn(ExperimentalMaterial3Api::class)
+object PastOrTodayDates : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= toUtcMidnight(System.currentTimeMillis())
 }
 
 /** The picker's day, at the local time of day of [referenceMillis] (used when editing an expense's date). */
