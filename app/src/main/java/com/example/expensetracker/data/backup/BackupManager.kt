@@ -105,7 +105,8 @@ class BackupManager(
             s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
             s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
         }
-        if (database == null) WidgetUpdateHelper.update(context)
+        // Best effort: the data is already restored, so a widget that can't refresh mustn't fail it.
+        if (database == null) runCatching { WidgetUpdateHelper.update(context) }
     }
 
     suspend fun exportToUri(uri: Uri, data: BackupData): Boolean = withContext(Dispatchers.IO) {

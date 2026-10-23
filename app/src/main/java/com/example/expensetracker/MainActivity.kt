@@ -27,10 +27,13 @@ import com.example.expensetracker.ui.theme.Ink
 import com.example.expensetracker.ui.theme.Jade
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.theme.Paper
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.screens.onboarding.OnboardingScreen
+import com.example.expensetracker.ui.screens.onboarding.OnboardingViewModel
+import com.example.expensetracker.ui.screens.onboarding.SetupGate
 import com.example.expensetracker.ui.theme.Canvas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -209,27 +212,34 @@ class MainActivity : FragmentActivity() {
     )
 
     /**
-     * A new install gets first-run setup. An existing install that already has data (upgrading
-     * from a version without onboarding) skips it, but still gets the starter categories if it
-     * has none, so auto-captured payments can be sorted.
+     * A new install gets first-run setup. An install from before setup existed (data, but no
+     * "finished" flag) skips it, but still gets the starter categories if it has none, so
+     * auto-captured payments can be sorted. That check runs only once; see [SetupGate].
      */
     private suspend fun needsOnboarding(prefs: PreferencesManager): Boolean {
         val db = AppDatabase.getInstance(applicationContext)
         val hasData = db.categoryDao().getCount() > 0 || db.expenseDao().count() > 0
-        if (!hasData) return true
-        DefaultCategories.seedIfEmpty(db)
-        prefs.onboardingCompleted = true
-        return false
+        val decision = SetupGate.decide(prefs.onboardingCompleted, prefs.onboardingFirstLaunchChecked, hasData)
+        prefs.onboardingFirstLaunchChecked = true
+        if (decision == SetupGate.Decision.SkipForUpgrade) {
+            DefaultCategories.seedIfEmpty(db)
+            prefs.onboardingCompleted = true
+        }
+        return decision == SetupGate.Decision.Setup
     }
 
+    /** Starter categories are added only if there are none, so a restored backup's stay as they were. */
     private fun finishOnboarding(prefs: PreferencesManager, monthlyIncome: Double?) {
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 DefaultCategories.seedIfEmpty(AppDatabase.getInstance(applicationContext))
                 if (monthlyIncome != null) prefs.monthlyIncome = monthlyIncome
                 prefs.onboardingCompleted = true
+                prefs.onboardingRestore = null
             }
             showOnboarding = false
+            // The setup ViewModel outlives its screen; drop the restore it remembers.
+            ViewModelProvider(this@MainActivity)[OnboardingViewModel::class.java].finished()
         }
     }
 

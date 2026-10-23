@@ -30,10 +30,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
+import com.example.expensetracker.ui.screens.settings.RestoreConfirmDialog
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
@@ -47,11 +49,19 @@ private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
  * First-run setup: explains each permission before Android asks for it, then takes an optional
  * monthly income. Every step can be skipped; Settings → Auto-tracking can turn things on later.
  *
- * [onFinish] receives the monthly income, or null if the user skipped it.
+ * [onFinish] receives the monthly income, or null if the user skipped it (or it came from a backup).
+ * The Welcome step can restore a backup file for people moving phones; setup then carries on with
+ * the permission steps, which a new phone still needs.
  */
 @Composable
-fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
+fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: OnboardingViewModel = viewModel()) {
     val context = LocalContext.current
+    val restored = viewModel.restored
+    val busy = viewModel.busy
+    // A backup with an income needs nothing more; one without categories gets the starter set.
+    val skipIncome = restored?.hasIncome == true
+    val starterNote = "We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
+        DefaultCategories.STARTER.take(4).joinToString { it.name } + ". You can edit or delete them."
     val activity = context as? Activity
     val steps = remember {
         buildList {
@@ -61,7 +71,8 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
             add(Step.Income)
         }
     }
-    var index by rememberSaveable { mutableIntStateOf(0) }
+    // Reopened after a restore: the restore is done, so start at the first permission step.
+    var index by rememberSaveable { mutableIntStateOf(if (restored != null) 1 else 0) }
     val step = steps[index]
     val next = { if (index < steps.lastIndex) index++ }
     BackHandler(enabled = index > 0) { index-- }
@@ -89,6 +100,15 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
         next()
     }
 
+    val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.pick(uri)
+    }
+    LaunchedEffect(viewModel.justRestored) {
+        if (!viewModel.justRestored) return@LaunchedEffect
+        if (step == Step.Welcome) next()
+        viewModel.restoreShown()
+    }
+
     var incomeText by rememberSaveable { mutableStateOf("") }
     val parsedIncome = remember(incomeText) { parseLimitInput(incomeText) }
     val incomeShown = remember(incomeText) { AmountCalculator.previewText(incomeText, parsedIncome) }
@@ -100,17 +120,20 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
         Spacer(Modifier.height(32.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             when (step) {
-                Step.Welcome -> StepBody(
-                    eyebrow = "WELCOME",
-                    title = "Your spending, tracked automatically",
-                    body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
-                        "Everything stays on this phone. There's no account, no ads and no loans.",
-                    points = listOf(
-                        "📩  Reads bank SMS and GPay, PhonePe and Paytm alerts",
-                        "🗂  Sorts payments into categories, and learns as you go",
-                        "🔒  Your data never leaves your phone unless you back it up"
+                Step.Welcome -> {
+                    StepBody(
+                        eyebrow = "WELCOME",
+                        title = "Your spending, tracked automatically",
+                        body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
+                            "Everything stays on this phone. There's no account, no ads and no loans.",
+                        points = listOf(
+                            "📩  Reads bank SMS and GPay, PhonePe and Paytm alerts",
+                            "🗂  Sorts payments into categories, and learns as you go",
+                            "🔒  Your data never leaves your phone unless you back it up"
+                        )
                     )
-                )
+                    viewModel.restoreError?.let { Text(it, color = Coral, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+                }
                 Step.Sms -> StepBody(
                     eyebrow = "STEP 1 · BANK SMS",
                     title = "Log payments from bank SMS",
@@ -136,14 +159,24 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
                         "It also warns you when a category is close to its budget.",
                     status = if (alertsGranted) "Alerts are on" else null
                 )
-                Step.Income -> {
+                Step.Income -> if (restored != null && skipIncome) {
+                    StepBody(
+                        eyebrow = "LAST STEP",
+                        title = "You're all set",
+                        body = "Restored from your backup: ${restored.summary}.\n\nYou can change anything later in Settings.",
+                        points = if (restored.hadCategories) emptyList() else listOf(starterNote)
+                    )
+                } else {
                     StepBody(
                         eyebrow = "LAST STEP",
                         title = "What's your monthly income?",
                         body = "This is optional. It lets the Overview show how much is still free to spend this month. " +
                             "You can change it any time from the Overview screen.",
-                        points = listOf("We'll also add ${DefaultCategories.STARTER.size} starter categories, like " +
-                            DefaultCategories.STARTER.take(4).joinToString { it.name } + ". You can edit or delete them.")
+                        points = when {
+                            restored == null -> listOf(starterNote)
+                            restored.hadCategories -> listOf("Restored from your backup: ${restored.summary}.")
+                            else -> listOf("Restored from your backup: ${restored.summary}.", starterNote)
+                        }
                     )
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
@@ -172,7 +205,13 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
 
         // Buttons
         when (step) {
-            Step.Welcome -> PrimaryButton("Get started", onClick = next)
+            Step.Welcome -> {
+                PrimaryButton("Get started", enabled = !busy, onClick = next)
+                SecondaryButton(if (busy) "Restoring…" else "Moving from another phone? Restore a backup") {
+                    // Drive restore needs the app's Google sign-in client registered first (Play launch work).
+                    if (!busy) restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                }
+            }
             Step.Sms -> if (tracking.status.sms) PrimaryButton("Continue", onClick = next) else {
                 PrimaryButton(if (smsDeniedForGood) "Open app settings" else "Allow SMS access") {
                     if (smsDeniedForGood) SmsPermissionUtil.openSettings(context)
@@ -188,13 +227,18 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
                 PrimaryButton("Allow alerts") { alertsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 SecondaryButton("Not now", onClick = next)
             }
-            Step.Income -> {
+            Step.Income -> if (skipIncome) {
+                PrimaryButton("Finish") { onFinish(null) }
+            } else {
                 val incomeInvalid = incomeText.isNotBlank() && parsedIncome == null
                 PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }) }
                 SecondaryButton("Skip") { onFinish(null) }
             }
         }
     }
+
+    // Nothing is replaced until the user has seen what the backup holds.
+    viewModel.pending?.let { RestoreConfirmDialog(data = it, fromDrive = false, onConfirm = viewModel::confirm, onDismiss = viewModel::cancel) }
 }
 
 @Composable

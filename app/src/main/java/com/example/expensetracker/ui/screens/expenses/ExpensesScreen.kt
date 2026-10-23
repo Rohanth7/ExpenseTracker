@@ -37,7 +37,10 @@ import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.ui.util.PastOrTodayDates
+import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
+import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -1054,9 +1057,7 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
     if (showPicker) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = selectedUtcMidnight,
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
-            }
+            selectableDates = PastOrTodayDates
         )
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
@@ -1120,28 +1121,6 @@ private fun weekStart(startsOnMonday: Boolean = true): Long {
     cal.add(Calendar.DAY_OF_YEAR, -diff)
     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
     return cal.timeInMillis
-}
-
-private fun toUtcMidnight(localMillis: Long): Long {
-    val local = Calendar.getInstance().apply { timeInMillis = localMillis }
-    return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-        set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-}
-
-private fun buildTimestamp(utcMidnight: Long, referenceMillis: Long): Long {
-    val dateCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMidnight }
-    val timeCal = Calendar.getInstance().apply { timeInMillis = referenceMillis }
-    return Calendar.getInstance().apply {
-        set(Calendar.YEAR, dateCal.get(Calendar.YEAR))
-        set(Calendar.MONTH, dateCal.get(Calendar.MONTH))
-        set(Calendar.DAY_OF_MONTH, dateCal.get(Calendar.DAY_OF_MONTH))
-        set(Calendar.HOUR_OF_DAY, timeCal.get(Calendar.HOUR_OF_DAY))
-        set(Calendar.MINUTE, timeCal.get(Calendar.MINUTE))
-        set(Calendar.SECOND, timeCal.get(Calendar.SECOND))
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
 }
 
 private fun fmtINR(n: Double): String {
