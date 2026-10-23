@@ -1,8 +1,5 @@
 package com.example.expensetracker.ui.components
 
-import android.view.View
-import android.view.ViewParent
-import android.view.Window
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
@@ -13,66 +10,56 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.window.DialogProperties
 
 /*
- * The app's dialogs. Each is a window of its own, so one that opens while the app is locked (a
- * restore preview arriving after the file picker, say) would sit on top of the lock window. These
- * hide their window while [LocalAppLocked] is true: it stays open, keeps what was typed, and is back
- * on unlock. Screens use these, not the Material ones (checked by AppDialogsUsageTest).
+ * The app's dialogs. Each is a window of its own, and a window added after the lock window sits on
+ * top of it: a restore preview arriving after the file picker covered the lock screen, and its
+ * Restore button worked without unlocking. So a dialog asked for while the app is locked isn't
+ * created until it's unlocked. One that was already open stays open under the lock (an older
+ * window), with whatever was typed in it. Screens use these, not the Material ones (checked by
+ * AppDialogsUsageTest).
  */
 
 /** True while the App Lock screen is up. Provided by MainActivity around the app's screens. */
 val LocalAppLocked = compositionLocalOf { false }
 
-/** Hides the dialog window this is composed in while locked: no drawing, focus, dimming or TalkBack. */
+/** Shows [dialog] unless it would first appear while the app is locked; then it waits for unlock. */
 @Composable
-private fun HideWhileLocked() {
-    val locked = LocalAppLocked.current
-    val view = LocalView.current
-    DisposableEffect(locked, view) {
-        view.dialogWindow()?.decorView?.visibility = if (locked) View.INVISIBLE else View.VISIBLE
-        onDispose {}
-    }
-}
-
-/** The window is only hidden once the content has composed; this keeps the first frame blank too. */
-@Composable
-private fun lockedAlpha(): Modifier = if (LocalAppLocked.current) Modifier.alpha(0f) else Modifier
-
-private fun View.dialogWindow(): Window? {
-    var parent: ViewParent? = parent
-    while (parent != null) {
-        if (parent is DialogWindowProvider) return parent.window
-        parent = parent.parent
-    }
-    return null
+private fun NotOverTheLock(dialog: @Composable () -> Unit) {
+    var opened by remember { mutableStateOf(false) }
+    if (LocalAppLocked.current && !opened) return
+    SideEffect { opened = true }
+    dialog()
 }
 
 @Composable
 fun AppAlertDialog(
     onDismissRequest: () -> Unit,
     confirmButton: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
     dismissButton: @Composable (() -> Unit)? = null,
+    icon: @Composable (() -> Unit)? = null,
     title: @Composable (() -> Unit)? = null,
     text: @Composable (() -> Unit)? = null,
     containerColor: Color = AlertDialogDefaults.containerColor,
     titleContentColor: Color = AlertDialogDefaults.titleContentColor,
-    textContentColor: Color = AlertDialogDefaults.textContentColor
-) {
+    textContentColor: Color = AlertDialogDefaults.textContentColor,
+    properties: DialogProperties = DialogProperties()
+) = NotOverTheLock {
     AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = { HideWhileLocked(); confirmButton() },
-        modifier = lockedAlpha(),
-        dismissButton = dismissButton,
-        title = title, text = text,
-        containerColor = containerColor, titleContentColor = titleContentColor, textContentColor = textContentColor
+        onDismissRequest = onDismissRequest, confirmButton = confirmButton, modifier = modifier,
+        dismissButton = dismissButton, icon = icon, title = title, text = text,
+        containerColor = containerColor, titleContentColor = titleContentColor, textContentColor = textContentColor,
+        properties = properties
     )
 }
 
@@ -83,13 +70,8 @@ fun AppDatePickerDialog(
     confirmButton: @Composable () -> Unit,
     dismissButton: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
-) {
-    DatePickerDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = { HideWhileLocked(); confirmButton() },
-        modifier = lockedAlpha(),
-        dismissButton = dismissButton, content = content
-    )
+) = NotOverTheLock {
+    DatePickerDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton, dismissButton = dismissButton, content = content)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,9 +82,9 @@ fun AppModalBottomSheet(
     containerColor: Color = BottomSheetDefaults.ContainerColor,
     dragHandle: @Composable (() -> Unit)? = { BottomSheetDefaults.DragHandle() },
     content: @Composable ColumnScope.() -> Unit
-) {
+) = NotOverTheLock {
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest, modifier = lockedAlpha(), sheetState = sheetState,
-        containerColor = containerColor, dragHandle = dragHandle
-    ) { HideWhileLocked(); content() }
+        onDismissRequest = onDismissRequest, sheetState = sheetState,
+        containerColor = containerColor, dragHandle = dragHandle, content = content
+    )
 }

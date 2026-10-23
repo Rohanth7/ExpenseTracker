@@ -54,6 +54,7 @@ import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.LocalAppLocked
 
 private sealed class SettingsPage {
     object Bills : SettingsPage()
@@ -137,8 +138,10 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val driveAuthLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         viewModel.onDriveAuthResult(result.resultCode == Activity.RESULT_OK)
     }
-    LaunchedEffect(viewModel.driveAuthIntent) {
-        viewModel.driveAuthIntent?.let { driveAuthLauncher.launch(it) }
+    // Google's consent screen would open over the lock if the Drive request finishes while locked.
+    val locked = LocalAppLocked.current
+    LaunchedEffect(viewModel.driveAuthIntent, locked) {
+        if (!locked) viewModel.driveAuthIntent?.let { driveAuthLauncher.launch(it) }
     }
 
     LaunchedEffect(snackbarMessage) {

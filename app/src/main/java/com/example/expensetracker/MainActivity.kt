@@ -16,13 +16,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import android.os.SystemClock
 import android.view.WindowManager
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.expensetracker.security.AppLock
+import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.LocalAppLocked
 import com.example.expensetracker.ui.screens.lock.LockedScreen
 import com.example.expensetracker.ui.theme.Ink
@@ -125,7 +125,7 @@ class MainActivity : FragmentActivity() {
                     // dismissing the lock. The unlock prompt is asked for from inside it, so the
                     // prompt comes after it: on Android 7–8.1 the fingerprint prompt is an app dialog
                     // too, and a lock window added after it would cover it (and its PIN fallback).
-                    if (locked) Dialog(
+                    if (locked) Dialog(  // the lock window itself
                         onDismissRequest = { moveTaskToBack(true) },
                         properties = DialogProperties(
                             dismissOnBackPress = true, dismissOnClickOutside = false,
@@ -136,7 +136,7 @@ class MainActivity : FragmentActivity() {
                         LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
                     }
                     if (showLockTurnedOff) {
-                        AlertDialog(
+                        AppAlertDialog(
                             onDismissRequest = { showLockTurnedOff = false },
                             containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
                             title = { Text("App lock turned off") },

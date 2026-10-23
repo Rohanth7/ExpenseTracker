@@ -13,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -25,9 +24,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * App dialogs are separate windows, so one that opens while the app is locked (a restore preview
- * arriving after the file picker) would sit on top of the lock window. While [LocalAppLocked] is
- * true they're hidden, and they come back unchanged on unlock.
+ * App dialogs are separate windows, so one that first opens while the app is locked (a restore
+ * preview arriving after the file picker) would sit on top of the lock window and take taps. While
+ * [LocalAppLocked] is true such a dialog isn't created at all; it appears on unlock. One that was
+ * already open stays open (under the lock) and keeps what was typed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @RunWith(AndroidJUnit4::class)
@@ -39,18 +39,40 @@ class AppDialogsTest {
         CompositionLocalProvider(LocalAppLocked provides locked) { dialog() }
     }
 
-    private fun checkHiddenWhileLocked(text: String) {
-        compose.onNodeWithText(text).assertIsDisplayed()
+    /** Asked for while locked: no window until unlock, then shown as normal. */
+    private fun checkWaitsForUnlock(text: String, dialog: @Composable () -> Unit) {
         locked = true
-        compose.waitForIdle()
-        compose.onNodeWithText(text).assertExists().assertIsNotDisplayed()
+        show(dialog)
+        compose.onNodeWithText(text).assertDoesNotExist()
         locked = false
         compose.waitForIdle()
         compose.onNodeWithText(text).assertIsDisplayed()
     }
 
     @Test
-    fun alertDialogHidesWhileLockedAndKeepsWhatWasTyped() {
+    fun alertDialogAskedForWhileLockedWaitsForUnlock() = checkWaitsForUnlock("Restore this backup?") {
+        AppAlertDialog(
+            onDismissRequest = {},
+            confirmButton = { TextButton(onClick = {}) { Text("Restore") } },
+            title = { Text("Restore this backup?") }
+        )
+    }
+
+    @Test
+    fun datePickerAskedForWhileLockedWaitsForUnlock() = checkWaitsForUnlock("Pick") {
+        AppDatePickerDialog(
+            onDismissRequest = {},
+            confirmButton = { TextButton(onClick = {}) { Text("Pick") } }
+        ) { DatePicker(state = rememberDatePickerState()) }
+    }
+
+    @Test
+    fun bottomSheetAskedForWhileLockedWaitsForUnlock() = checkWaitsForUnlock("Notifications") {
+        AppModalBottomSheet(onDismissRequest = {}) { Text("Notifications") }
+    }
+
+    @Test
+    fun dialogOpenBeforeTheLockStaysOpenAndKeepsWhatWasTyped() {
         show {
             var amount by rememberSaveable { mutableStateOf("") }
             AppAlertDialog(
@@ -61,42 +83,11 @@ class AppDialogsTest {
             )
         }
         compose.onNode(hasSetTextAction()).performTextInput("250")
-        checkHiddenWhileLocked("Add Expense")
-        compose.onNode(hasSetTextAction() and hasText("250")).assertIsDisplayed()
-    }
-
-    @Test
-    fun dialogOpenedWhileLockedStaysHiddenUntilUnlock() {
         locked = true
-        show {
-            AppAlertDialog(
-                onDismissRequest = {},
-                confirmButton = { TextButton(onClick = {}) { Text("Restore") } },
-                title = { Text("Restore this backup?") }
-            )
-        }
-        compose.onNodeWithText("Restore this backup?").assertExists().assertIsNotDisplayed()
+        compose.waitForIdle()
+        compose.onNodeWithText("Add Expense").assertExists()
         locked = false
         compose.waitForIdle()
-        compose.onNodeWithText("Restore this backup?").assertIsDisplayed()
-    }
-
-    @Test
-    fun datePickerHidesWhileLocked() {
-        show {
-            AppDatePickerDialog(
-                onDismissRequest = {},
-                confirmButton = { TextButton(onClick = {}) { Text("Pick") } }
-            ) { DatePicker(state = rememberDatePickerState()) }
-        }
-        checkHiddenWhileLocked("Pick")
-    }
-
-    @Test
-    fun bottomSheetHidesWhileLocked() {
-        show {
-            AppModalBottomSheet(onDismissRequest = {}) { Text("Notifications") }
-        }
-        checkHiddenWhileLocked("Notifications")
+        compose.onNode(hasSetTextAction() and hasText("250")).assertIsDisplayed()
     }
 }
