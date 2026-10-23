@@ -138,14 +138,15 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val driveAuthLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         viewModel.onDriveAuthResult(result.resultCode == Activity.RESULT_OK)
     }
-    // Google's consent screen would open over the lock if the Drive request finishes while locked.
+    // Results of Drive requests and file reads can arrive while the app is locked. Google's consent
+    // screen would open over the lock, and a message would show under it and be gone by unlock.
     val locked = LocalAppLocked.current
     LaunchedEffect(viewModel.driveAuthIntent, locked) {
-        if (!locked) viewModel.driveAuthIntent?.let { driveAuthLauncher.launch(it) }
+        if (!locked) viewModel.takeDriveAuthIntent()?.let { driveAuthLauncher.launch(it) }
     }
 
-    LaunchedEffect(snackbarMessage) {
-        snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
+    LaunchedEffect(snackbarMessage, locked) {
+        if (!locked) snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
     }
 
     Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->

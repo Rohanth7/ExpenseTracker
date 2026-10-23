@@ -223,6 +223,9 @@ class SettingsViewModel(
         }
     }
 
+    /** The consent screen to launch, once: unlocking again mustn't stack a second one. */
+    fun takeDriveAuthIntent(): Intent? = driveAuthIntent.also { driveAuthIntent = null }
+
     /** Called by the screen after the Google consent screen closes. */
     fun onDriveAuthResult(granted: Boolean) {
         driveAuthIntent = null

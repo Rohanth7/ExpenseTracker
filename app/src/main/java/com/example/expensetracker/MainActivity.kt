@@ -103,8 +103,8 @@ class MainActivity : FragmentActivity() {
                 Box(Modifier.fillMaxSize()) {
                     // The app stays composed under the lock screen, so a file picker or Google
                     // sign-in that was open when it locked can still deliver its result. While
-                    // locked it's hidden from screen readers too, and its dialogs hide themselves
-                    // (one opened after the lock would be a newer window on top of it).
+                    // locked it's hidden from screen readers too, and a dialog asked for now isn't
+                    // created until unlock (it would be a newer window, on top of the lock).
                     CompositionLocalProvider(LocalAppLocked provides locked) {
                         Box(Modifier.fillMaxSize().then(if (locked) Modifier.clearAndSetSemantics {} else Modifier)) {
                             when (showOnboarding) {

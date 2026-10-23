@@ -11,14 +11,17 @@ import java.io.File
  * The lock window itself is the one exception, marked with [ALLOWED].
  */
 class AppDialogsUsageTest {
-    // Also catches fully qualified calls and a line break before "(".
-    private val direct = Regex("""(?<!\w)(AlertDialog|BasicAlertDialog|DatePickerDialog|TimePickerDialog|ModalBottomSheet|Dialog)\s*\(""")
+    private val names = "AlertDialog|BasicAlertDialog|DatePickerDialog|TimePickerDialog|ModalBottomSheet|Dialog|" +
+        "BottomSheetDialog|DialogFragment|MaterialAlertDialogBuilder"
+    // A call (also fully qualified, or with a line break before "("), the View-system builder, or an
+    // import that renames one of them.
+    private val direct = Regex("""(?<!\w)($names)\s*\(|(?<!\w)AlertDialog\s*\.\s*Builder|^import\s+\S*\.($names)\s+as\s""", RegexOption.MULTILINE)
 
-    /** Every non-test source set (main, debug, release, …), Java and Kotlin dirs. */
+    /** Kotlin and Java files in every non-test source set (main, debug, release, …). */
     private fun appSources(): List<File> =
         (File("src").listFiles() ?: emptyArray())
-            .filter { it.isDirectory && it.name != "test" && !it.name.startsWith("androidTest") }
-            .flatMap { dir -> dir.walk().filter { it.extension == "kt" }.toList() }
+            .filter { it.isDirectory && !it.name.startsWith("test") && !it.name.startsWith("androidTest") }
+            .flatMap { dir -> dir.walk().filter { it.extension == "kt" || it.extension == "java" }.toList() }
 
     private fun offenders(name: String, text: String): List<String> {
         val lines = text.lines()
@@ -46,12 +49,16 @@ class AppDialogsUsageTest {
             Dialog(onDismissRequest = {}) { }
             ModalBottomSheet
                 (onDismissRequest = {}) { }
+            AlertDialog.Builder(context).show()
+            class Picker : DialogFragment()
+            import androidx.compose.material3.AlertDialog as Confirm
             AppAlertDialog(onDismissRequest = {})
             RestoreConfirmDialog(pending)
+            val p = DialogProperties()
             // AlertDialog( in a comment
             Dialog(onDismissRequest = {}) { }  $ALLOWED
         """.trimIndent()
-        assertEquals(listOf("x:1", "x:2", "x:3", "x:4"), offenders("x", code))
+        assertEquals(listOf("x:1", "x:2", "x:3", "x:4", "x:6", "x:7", "x:8"), offenders("x", code))
     }
 
     companion object { const val ALLOWED = "// the lock window itself" }
