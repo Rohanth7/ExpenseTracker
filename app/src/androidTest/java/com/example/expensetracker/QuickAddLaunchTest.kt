@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
  * The widget's "+" end to end, from a cold start: the launch opens the add dialog, and the same
  * intent re-delivered from Recents (FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) doesn't open it again.
  * Also from Categorize, opened by a notification while on the Expenses tab. Uses the app's real
- * preferences and database; the expense it adds is deleted afterwards.
+ * preferences and database, and puts both back afterwards.
  */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -34,14 +34,24 @@ class QuickAddLaunchTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
+    private val prefs = PreferencesManager(context)
+    private var hadOnboarded = false
+    private var hadLock = false
+
+    // These are the app's real preferences (the device tests can run without reinstalling), so put
+    // them back afterwards: a developer's App Lock must not be left off.
     @Before fun skipOnboardingAndLock() {
-        PreferencesManager(context).apply { onboardingCompleted = true; biometricLockEnabled = false }
+        hadOnboarded = prefs.onboardingCompleted; hadLock = prefs.biometricLockEnabled
+        prefs.onboardingCompleted = true; prefs.biometricLockEnabled = false
     }
 
     private val db = AppDatabase.getInstance(context)
     private var pendingExpense: Expense? = null
 
-    @After fun deleteTestExpense() = runBlocking { pendingExpense?.let { db.expenseDao().delete(it) }; Unit }
+    @After fun cleanUp() = runBlocking {
+        pendingExpense?.let { db.expenseDao().delete(it) }
+        prefs.onboardingCompleted = hadOnboarded; prefs.biometricLockEnabled = hadLock
+    }
 
     private fun quickAddIntent(extraFlags: Int = 0) = Intent(context, MainActivity::class.java).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or extraFlags)

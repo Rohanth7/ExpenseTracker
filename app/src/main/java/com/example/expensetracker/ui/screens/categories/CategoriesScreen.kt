@@ -29,6 +29,7 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.util.limitPreview
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
@@ -620,6 +621,7 @@ private fun CategoryDialog(
         mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }
     val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
+    val limitShown = remember(limitText) { limitPreview(limitText) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -687,7 +689,11 @@ private fun CategoryDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     isError = parsedLimit == null,
-                    supportingText = if (parsedLimit == null) {{ Text("Enter a valid amount") }} else null,
+                    supportingText = when {
+                        parsedLimit == null -> {{ Text("Enter a valid amount") }}
+                        limitShown != null -> {{ Text(limitShown, color = Muted, fontSize = 12.sp) }}
+                        else -> null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,

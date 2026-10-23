@@ -167,31 +167,44 @@ class ExpensesViewModel(
         _selectedIds.value = emptySet()
     }
 
-    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") = viewModelScope.launch {
-        expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
-        // Choosing "Choose later" makes it the next default too (see shouldRememberCategory).
-        if (shouldRememberCategory(categoryId, categoriesLoaded = categories.value.isNotEmpty())) {
-            prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
+    fun addExpense(amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = "UPI") {
+        // Read at the tap, as the dialog showed them: by the time the insert returns they may have loaded.
+        val categoriesLoaded = categories.value.isNotEmpty()
+        viewModelScope.launch {
+            expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
+            // Choosing "Choose later" makes it the next default too (see shouldRememberCategory).
+            if (shouldRememberCategory(categoryId, categoriesLoaded)) {
+                prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
+            }
+            alertIfOverBudget(categoryId)
         }
-        alertIfOverBudget(categoryId)
     }
 
     /** The add dialog's starting category (see [defaultCategoryId]). Read from prefs once, not per frame. */
     private val _lastManualCategoryId = MutableStateFlow(prefs.lastManualCategoryId)
     val lastManualCategoryId: StateFlow<Long> = _lastManualCategoryId.asStateFlow()
 
-    /** Saves [copy] (from [duplicateWithEdits]) as a new expense. */
-    fun duplicateExpense(copy: Expense) = viewModelScope.launch {
-        expenseRepo.insert(copy)
-        alertIfOverBudget(copy.categoryId)
+    /**
+     * Edit's Duplicate: a copy of the form dated now (see [duplicateWithEdits]); with [saveEdits],
+     * the form is saved to [original] first. One coroutine and one alert check, so the two writes
+     * can't race each other into a warning and an "exceeded" alert at once.
+     */
+    fun duplicateExpense(original: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String, saveEdits: Boolean) = viewModelScope.launch {
+        if (saveEdits) saveEdit(original, amount, description, categoryId, date, tags, paymentMethod)
+        expenseRepo.insert(original.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis()))
+        alertIfOverBudget(categoryId)
     }
 
     fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = expense.paymentMethod) = viewModelScope.launch {
+        saveEdit(expense, amount, description, categoryId, date, tags, paymentMethod)
+        alertIfOverBudget(categoryId)
+    }
+
+    private suspend fun saveEdit(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String) {
         expenseRepo.update(expense.copy(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
         if (expense.source != "Manual" && categoryId != -1L) {
             mappingRepo.saveMapping(description, categoryId)
         }
-        alertIfOverBudget(categoryId)
     }
 
     /** The one budget-alert check after an expense is added, copied, edited or categorized. */

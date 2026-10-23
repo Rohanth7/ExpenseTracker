@@ -2,6 +2,7 @@ package com.example.expensetracker.ui.util
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.Locale
 
 // Shared by every monthly-limit field (Categories dialog, Settings → Category Budgets) so they
 // pre-fill and parse identically.
@@ -24,4 +25,18 @@ fun parseLimitInput(text: String, decimalComma: Boolean = AmountCalculator.usesD
     val trimmed = text.trim()
     if (trimmed.isEmpty() || ZERO.matches(trimmed)) return 0.0
     return AmountCalculator.evaluate(trimmed, decimalComma)
+}
+
+/**
+ * "= ₹50" under a limit field when its text could be read two ways or is a sum, as the amount field
+ * shows: "50,00" is ₹50 (a decimal comma), and a misread limit would otherwise be saved unseen.
+ */
+fun limitPreview(
+    text: String,
+    decimalComma: Boolean = AmountCalculator.usesDecimalComma(),
+    locale: Locale = Locale.getDefault()
+): String? {
+    if (!AmountCalculator.needsPreview(text.trim(), decimalComma)) return null
+    val limit = parseLimitInput(text, decimalComma)?.takeIf { it > 0 } ?: return null
+    return "= ₹" + AmountCalculator.formatPreview(limit, locale)
 }

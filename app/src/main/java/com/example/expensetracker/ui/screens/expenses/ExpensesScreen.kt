@@ -382,8 +382,8 @@ fun ExpensesScreen(
                 viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
             },
-            onDuplicate = { amount, description, categoryId, tags, paymentMethod, alsoSaved ->
-                viewModel.duplicateExpense(expense.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis()))
+            onDuplicate = { amount, description, categoryId, date, tags, paymentMethod, alsoSaved ->
+                viewModel.duplicateExpense(expense, amount, description, categoryId, date, tags, paymentMethod, saveEdits = alsoSaved)
                 editingExpense = null
                 val msg = if (alsoSaved) "Saved, and duplicated — the copy is dated today" else "Duplicated — dated today"
                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
@@ -922,7 +922,7 @@ private fun EditExpenseDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit,
-    onDuplicate: (amount: Double, description: String, categoryId: Long, tags: String, paymentMethod: String, alsoSaved: Boolean) -> Unit
+    onDuplicate: (amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String, alsoSaved: Boolean) -> Unit
 ) {
     // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
     val amount = rememberAmountInputState(AmountCalculator.forEditing(expense.amount))
@@ -1019,8 +1019,7 @@ private fun EditExpenseDialog(
             Row {
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton
-                    if (edited) onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
-                    onDuplicate(amt, description.trim(), selectedCategoryId, tags.trim(), selectedPaymentMethod, edited)
+                    onDuplicate(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod, edited)
                 }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Jade) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
             }
