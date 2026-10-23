@@ -114,4 +114,13 @@ class BackupRestoreTest {
         assertTrue("restore should fail", failed)
         assertEquals(before, Triple(target.categoryDao().getAllOnce(), target.expenseDao().getAll().first(), target.billDao().getAll().first()))
     }
+
+    @Test fun restoringCategoriesForgetsTheLastUsedOne() = runBlocking {
+        // Category ids come from the backup, so id 10 may now be a different category; the add
+        // dialog must not start on it.
+        seedSource(); seedTargetWithOtherData()
+        targetPrefs.lastManualCategoryId = 10
+        manager(target, targetPrefs).restore(manager(source, sourcePrefs).snapshot())
+        assertEquals(-1L, targetPrefs.lastManualCategoryId)
+    }
 }

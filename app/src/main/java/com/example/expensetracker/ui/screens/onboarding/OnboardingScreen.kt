@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.NotificationAccessUtil
 import com.example.expensetracker.ui.util.SmsPermissionUtil
@@ -89,7 +90,8 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
     }
 
     var incomeText by rememberSaveable { mutableStateOf("") }
-    val parsedIncome = parseLimitInput(incomeText)
+    val parsedIncome = remember(incomeText) { parseLimitInput(incomeText) }
+    val incomeShown = remember(incomeText) { AmountCalculator.previewText(incomeText, parsedIncome) }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)
@@ -150,9 +152,12 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit) {
                         label = { Text("Monthly income (₹)") },
                         singleLine = true,
                         isError = incomeText.isNotBlank() && parsedIncome == null,
-                        supportingText = if (incomeText.isNotBlank() && parsedIncome == null) {
-                            { Text("Enter an amount like 50,000") }
-                        } else null,
+                        // "50000", not "50,000": on a comma-decimal phone that's ₹50.
+                        supportingText = when {
+                            incomeText.isNotBlank() && parsedIncome == null -> {{ Text("Enter an amount like 50000") }}
+                            incomeShown != null -> {{ Text(incomeShown, color = Muted, fontSize = 12.sp) }}
+                            else -> null
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Ink, unfocusedTextColor = Ink,

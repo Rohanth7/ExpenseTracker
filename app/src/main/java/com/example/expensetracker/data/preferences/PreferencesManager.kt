@@ -49,4 +49,9 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
     var driveAccountEmail: String
         get() = prefs.getString("drive_account_email", "") ?: ""
         set(value) = prefs.edit().putString("drive_account_email", value).apply()
+
+    /** The category last picked when adding an expense by hand; the add dialog starts on it. */
+    var lastManualCategoryId: Long
+        get() = prefs.getLong("last_manual_category_id", -1L)
+        set(value) = prefs.edit().putLong("last_manual_category_id", value).apply()
 }
