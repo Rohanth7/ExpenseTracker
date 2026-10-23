@@ -1,0 +1,136 @@
+package com.example.expensetracker.ui.util
+
+/**
+ * Evaluates simple amount expressions typed into the amount field ("120+45", "1,200 - 50", "3×40").
+ * A tiny recursive-descent parser: no eval, no scripting engine. + − × ÷, normal precedence.
+ */
+object AmountCalculator {
+    private const val OPERATORS = "+-*/×÷−xX"
+
+    /** ₹1 lakh crore. Anything above is a typo, and it keeps rounding clear of Long overflow. */
+    private const val MAX_AMOUNT = 1e12
+
+    /** "1,200", "1,20,000" (Indian) or "1,234,567" (Western), optionally with decimals. */
+    private val GROUPED = Regex("""^(\d{1,3}(,\d{3})+|\d{1,2}(,\d{2})*,\d{3})(\.\d+)?$""")
+
+    /** "12,50" or "99,9": a comma typed as the decimal point (comma-decimal keyboards and locales). */
+    private val DECIMAL_COMMA = Regex("""^\d+,\d{1,2}$""")
+
+    /** "1.500" or "1.234.567": dots grouping thousands, as comma-decimal phones write them. */
+    private val DOT_GROUPED = Regex("""^\d{1,3}(\.\d{3})+$""")
+
+    /** "1.234,50": dots grouping thousands, then a decimal comma (comma-decimal phones). */
+    private val DOT_GROUPED_DECIMAL_COMMA = Regex("""^\d{1,3}(\.\d{3})+,\d+$""")
+
+    /** True where the phone's language writes 1,5 for one and a half (German, French, Indonesian…). */
+    fun usesDecimalComma(locale: java.util.Locale = java.util.Locale.getDefault()): Boolean =
+        java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator == ','
+
+    /**
+     * Show "= ₹…" for sums and whenever a separator could be read two ways: any comma, and on a
+     * comma-decimal phone any dot ("1.500" is 1500 there). A misread amount is then visible.
+     */
+    fun needsPreview(text: String, decimalComma: Boolean = usesDecimalComma()): Boolean =
+        isExpression(text) || ',' in text || (decimalComma && '.' in text)
+
+    /**
+     * Positive, finite result rounded to 2 decimals, or null if the text isn't a valid amount.
+     * On a comma-decimal phone ([decimalComma]) a comma is the decimal point; elsewhere it groups thousands.
+     */
+    fun evaluate(text: String, decimalComma: Boolean = usesDecimalComma()): Double? {
+        val s = text.replace("₹", "").replace(" ", "")
+            .replace('×', '*').replace('x', '*').replace('X', '*').replace('÷', '/').replace('−', '-')
+        if (s.isEmpty()) return null
+        val parser = Parser(s, decimalComma)
+        val value = parser.expression() ?: return null
+        if (!parser.atEnd() || !value.isFinite() || value > MAX_AMOUNT) return null
+        // Round before the zero check, so "0.004" is refused rather than saved as ₹0. Rounded like
+        // forEditing (Math.round(1.005 * 100) gave 1.00, as 1.005 * 100 is 100.4999… in a double).
+        val rounded = java.math.BigDecimal.valueOf(value).setScale(2, java.math.RoundingMode.HALF_UP).toDouble()
+        return if (rounded > 0) rounded else null
+    }
+
+    /** The amount as the edit dialog shows it: "180.00", never "180,00" whatever the phone's language. */
+    fun forEditing(amount: Double): String =
+        java.math.BigDecimal.valueOf(amount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+
+    /**
+     * The "= ₹…" preview, written the way the phone writes numbers: Indian grouping ("1,65,000")
+     * on dot-decimal phones, "1.500" and "12,5" on comma-decimal ones, where an en-IN "1,500"
+     * would read as one and a half. Paise only when there are some.
+     */
+    fun formatPreview(amount: Double, locale: java.util.Locale = java.util.Locale.getDefault()): String =
+        java.text.NumberFormat.getNumberInstance(if (usesDecimalComma(locale)) locale else java.util.Locale.forLanguageTag("en-IN"))
+            .apply { maximumFractionDigits = 2; minimumFractionDigits = 0 }
+            .format(amount)
+
+    /**
+     * "= ₹165" under an amount or limit field for [text] read as [value]: only for sums and text
+     * whose separators could be read two ways (see [needsPreview]), and only for a positive amount.
+     */
+    fun previewText(
+        text: String, value: Double?,
+        decimalComma: Boolean = usesDecimalComma(), locale: java.util.Locale = java.util.Locale.getDefault()
+    ): String? =
+        if (value == null || value <= 0 || !needsPreview(text.trim(), decimalComma)) null
+        else "= ₹" + formatPreview(value, locale)
+
+    /** A number as typed, with its commas resolved; null if the commas make it ambiguous. */
+    private fun parseNumber(token: String, decimalComma: Boolean): Double? = when {
+        ',' !in token ->
+            if (decimalComma && DOT_GROUPED.matches(token)) token.replace(".", "").toDoubleOrNull() else token.toDoubleOrNull()
+        decimalComma -> when {
+            '.' in token -> if (DOT_GROUPED_DECIMAL_COMMA.matches(token)) token.replace(".", "").replace(',', '.').toDoubleOrNull() else null
+            token.count { it == ',' } == 1 && !token.endsWith(',') && !token.startsWith(',') -> token.replace(',', '.').toDoubleOrNull()
+            else -> null
+        }
+        GROUPED.matches(token) -> token.replace(",", "").toDoubleOrNull()
+        DECIMAL_COMMA.matches(token) -> token.replace(',', '.').toDoubleOrNull()
+        else -> null
+    }
+
+    /** True when the text contains an operator, so the UI can show "= ₹165" under the field. */
+    fun isExpression(text: String): Boolean = text.trim().drop(1).any { it in OPERATORS }
+
+    /**
+     * Puts [symbol] where the cursor is (replacing any selection) and returns the new text and the
+     * cursor position just after the symbol, so the next digit typed lands after it.
+     */
+    fun insertAt(text: String, selectionStart: Int, selectionEnd: Int, symbol: String): Pair<String, Int> {
+        val start = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val end = maxOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        return text.replaceRange(start, end, symbol) to start + symbol.length
+    }
+
+    private class Parser(private val s: String, private val decimalComma: Boolean) {
+        private var i = 0
+        fun atEnd() = i == s.length
+
+        fun expression(): Double? {
+            var left = term() ?: return null
+            while (i < s.length && (s[i] == '+' || s[i] == '-')) {
+                val op = s[i++]
+                val right = term() ?: return null
+                left = if (op == '+') left + right else left - right
+            }
+            return left
+        }
+
+        private fun term(): Double? {
+            var left = number() ?: return null
+            while (i < s.length && (s[i] == '*' || s[i] == '/')) {
+                val op = s[i++]
+                val right = number() ?: return null
+                if (op == '/' && right == 0.0) return null
+                left = if (op == '*') left * right else left / right
+            }
+            return left
+        }
+
+        private fun number(): Double? {
+            val start = i
+            while (i < s.length && (s[i].isDigit() || s[i] == '.' || s[i] == ',')) i++
+            return parseNumber(s.substring(start, i), decimalComma)
+        }
+    }
+}

@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,6 +19,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.screens.lock.LockedScreen
 import com.example.expensetracker.ui.theme.Ink
@@ -46,11 +49,14 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
 
-    private var pendingExpenseId by mutableStateOf<Long?>(null)
+    /** A notification or widget tap waiting to be handled once the app's screens are up. */
+    private var pendingAction by mutableStateOf<LaunchAction?>(null)
     // App lock. The lock state itself is process-wide (AppLock), so a rotation doesn't ask again.
     private var locked by mutableStateOf(false)
     private var lockMessage by mutableStateOf<String?>(null)
     private var showLockTurnedOff by mutableStateOf(false)
+    /** Bumped to ask for the unlock prompt; the lock window shows it (see onStart). */
+    private var unlockRequest by mutableStateOf(0)
     private var promptShowing = false
     private lateinit var prefs: PreferencesManager
     // null while checking whether this is a new install
@@ -83,8 +89,15 @@ class MainActivity : FragmentActivity() {
             WidgetUpdateHelper.update(applicationContext)
         }
 
-        pendingExpenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L)
-            ?.takeIf { it != -1L }
+        pendingAction = LaunchAction.onCreate(
+            recreated = savedInstanceState != null,
+            action = intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
+            expenseId = intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L,
+            fromHistory = ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0,
+            stillPending = savedInstanceState?.takeIf { it.containsKey(SAVED_PENDING_EXPENSE_ID) }?.let {
+                LaunchAction.from(it.getString(SAVED_PENDING_ACTION), it.getLong(SAVED_PENDING_EXPENSE_ID, -1L))
+            }
+        )
 
         setContent {
             ExpenseTrackerTheme {
@@ -97,12 +110,29 @@ class MainActivity : FragmentActivity() {
                             null -> Box(Modifier.fillMaxSize().background(Canvas))
                             true -> OnboardingScreen(onFinish = { income -> finishOnboarding(prefs, income) })
                             false -> AppNavGraph(
-                                initialExpenseId = pendingExpenseId,
-                                onExpenseNavigated = { pendingExpenseId = null }
+                                // Held until unlocked: a dialog opened now (the widget's add dialog)
+                                // would be a newer window than the lock, so it would sit on top of it.
+                                launchAction = pendingAction.takeIf { !locked },
+                                onLaunchHandled = { pendingAction = null }
                             )
                         }
                     }
-                    if (locked) LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
+                    // A window of its own, not an overlay: dialogs the user had open (Add, Edit,
+                    // filters) are separate windows and drew on top of an in-window overlay. A
+                    // window added later sits above them. Back sends the app away rather than
+                    // dismissing the lock. The unlock prompt is asked for from inside it, so the
+                    // prompt comes after it: on Android 7–8.1 the fingerprint prompt is an app dialog
+                    // too, and a lock window added after it would cover it (and its PIN fallback).
+                    if (locked) Dialog(
+                        onDismissRequest = { moveTaskToBack(true) },
+                        properties = DialogProperties(
+                            dismissOnBackPress = true, dismissOnClickOutside = false,
+                            usePlatformDefaultWidth = false, decorFitsSystemWindows = false
+                        )
+                    ) {
+                        LaunchedEffect(unlockRequest) { promptUnlock() }
+                        LockedScreen(message = lockMessage, onUnlock = ::promptUnlock)
+                    }
                     if (showLockTurnedOff) {
                         AlertDialog(
                             onDismissRequest = { showLockTurnedOff = false },
@@ -119,6 +149,15 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /** An action that hasn't been handled yet (still onboarding, say) must survive a rotation. */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val pending = pendingAction ?: return
+        val (action, expenseId) = pending.toExtras()
+        outState.putString(SAVED_PENDING_ACTION, action)
+        outState.putLong(SAVED_PENDING_EXPENSE_ID, expenseId)
+    }
+
     override fun onStart() {
         super.onStart()
         val mustLock = AppLock.state.onForeground(prefs.biometricLockEnabled, SystemClock.elapsedRealtime())
@@ -133,7 +172,7 @@ class MainActivity : FragmentActivity() {
             showLockTurnedOff = true
         } else {
             locked = true
-            promptUnlock()
+            unlockRequest++  // shown by the lock window once it's up, not here
         }
     }
 
@@ -164,9 +203,13 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingExpenseId = intent.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L)
-            .takeIf { it != -1L }
+        pendingAction = LaunchAction.onNewIntent(waiting = pendingAction, incoming = launchActionOf(intent))
     }
+
+    private fun launchActionOf(intent: Intent?): LaunchAction? = LaunchAction.from(
+        intent?.getStringExtra(LaunchAction.EXTRA_ACTION),
+        intent?.getLongExtra(NotificationHelper.EXTRA_EXPENSE_ID, -1L) ?: -1L
+    )
 
     /**
      * A new install gets first-run setup. An install from before setup existed (data, but no
@@ -198,5 +241,10 @@ class MainActivity : FragmentActivity() {
             // The setup ViewModel outlives its screen; drop the restore it remembers.
             ViewModelProvider(this@MainActivity)[OnboardingViewModel::class.java].finished()
         }
+    }
+
+    private companion object {
+        const val SAVED_PENDING_ACTION = "pending_launch_action"
+        const val SAVED_PENDING_EXPENSE_ID = "pending_launch_expense_id"
     }
 }

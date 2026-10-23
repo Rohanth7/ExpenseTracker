@@ -35,8 +35,11 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.buildTimestamp
+import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
@@ -50,7 +53,12 @@ private data class DayGroup(
 )
 
 @Composable
-fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
+fun ExpensesScreen(
+    viewModel: ExpensesViewModel,
+    onCategorize: (Long) -> Unit,
+    openAdd: Boolean = false,
+    onAddOpened: () -> Unit = {}
+) {
     val context = LocalContext.current
     val expenses by viewModel.expenses.collectAsState()
     val categories by viewModel.categories.collectAsState()
@@ -61,11 +69,22 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
+    val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var showBulkCategorize by remember { mutableStateOf(false) }
     var showAdvancedFilters by remember { mutableStateOf(false) }
+    // The widget's "+": a one-shot request, consumed here so it can't fire twice. It replaces any
+    // dialog left open (Edit, Delete, filters) or selection, so two dialogs never stack.
+    LaunchedEffect(openAdd) {
+        if (openAdd) {
+            editingExpense = null; expenseToDelete = null; showBulkCategorize = false; showAdvancedFilters = false
+            viewModel.clearSelection()
+            showAddDialog = true
+            onAddOpened()
+        }
+    }
 
     val isSelectionMode = selectedIds.isNotEmpty()
     BackHandler(isSelectionMode) { viewModel.clearSelection() }
@@ -77,7 +96,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.syncWeekStart()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.syncPrefs()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -92,21 +111,19 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
         containerColor = Canvas,
         floatingActionButton = {
             if (!isSelectionMode) {
-                Box(
+                Row(
                     modifier = Modifier
-                        .size(58.dp)
+                        .height(58.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (categories.isEmpty()) Muted else Jade)
-                        .clickable {
-                            if (categories.isEmpty()) {
-                                android.widget.Toast.makeText(context, "Please add a category first", android.widget.Toast.LENGTH_SHORT).show()
-                            } else {
-                                showAddDialog = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center
+                        .background(Jade)
+                        .clickable { showAddDialog = true }
+                        .padding(horizontal = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add expense", tint = Deep, modifier = Modifier.size(26.dp))
+                    // The text labels the button, so the icon needs no description of its own.
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Deep, modifier = Modifier.size(26.dp))
+                    Text("Add expense", color = Deep, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -351,6 +368,7 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
     if (showAddDialog) {
         AddExpenseDialog(
             categories = categories,
+            lastUsedCategoryId = lastManualCategoryId,
             onDismiss = { showAddDialog = false },
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
@@ -367,6 +385,12 @@ fun ExpensesScreen(viewModel: ExpensesViewModel, onCategorize: (Long) -> Unit) {
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.updateExpense(expense, amount, description, categoryId, date, tags, paymentMethod)
                 editingExpense = null
+            },
+            onDuplicate = { amount, description, categoryId, date, tags, paymentMethod, alsoSaved ->
+                viewModel.duplicateExpense(expense, amount, description, categoryId, date, tags, paymentMethod, saveEdits = alsoSaved)
+                editingExpense = null
+                val msg = if (alsoSaved) "Saved, and duplicated — the copy is dated today" else "Duplicated — dated today"
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -766,10 +790,10 @@ private fun ExpenseRowItem(
             if (!isSelectionMode) {
                 Row {
                     IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -793,15 +817,17 @@ private fun categoryDisplayText(category: Category?, allCategories: List<Categor
 @Composable
 private fun AddExpenseDialog(
     categories: List<Category>,
+    lastUsedCategoryId: Long,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Long, Long, String, String) -> Unit
 ) {
-    var amount by remember { mutableStateOf("") }
+    val amount = rememberAmountInputState()
     var description by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
-    var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    // null until the user picks one, so the last-used default can appear once categories load.
+    var userCategoryChoice by remember { mutableStateOf<Long?>(null) }
+    val selectedCategoryId = startingCategoryId(userCategoryChoice, categories, lastUsedCategoryId)
     var expanded by remember { mutableStateOf(false) }
-    var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
     var selectedPaymentMethod by remember { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
@@ -812,23 +838,7 @@ private fun AddExpenseDialog(
         title = { Text("Add Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (categories.isEmpty()) {
-                    Text(
-                        "⚠️ No categories yet. Go to the Categories tab to create one first.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Coral
-                    )
-                }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it; amountError = "" },
-                    label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = amountError.isNotEmpty(),
-                    supportingText = if (amountError.isNotEmpty()) {{ Text(amountError) }} else null,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(amount)
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -853,12 +863,12 @@ private fun AddExpenseDialog(
                         )
                     }
                 }
-                if (categories.isNotEmpty()) {
+                run {
                     val parents = remember(categories) { categories.filter { it.parentId == null } }
                     val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                         OutlinedTextField(
-                            value = categoryDisplayText(selectedCategory, categories),
+                            value = categoryDisplayText(selectedCategory, categories, CHOOSE_LATER),
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Category") },
@@ -866,10 +876,15 @@ private fun AddExpenseDialog(
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                         )
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            // Saving without a category files it as pending, sorted later from the list.
+                            DropdownMenuItem(
+                                text = { Text(CHOOSE_LATER, color = Muted) },
+                                onClick = { userCategoryChoice = -1L; expanded = false }
+                            )
                             parents.forEach { parent ->
                                 DropdownMenuItem(
                                     text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
-                                    onClick = { selectedCategoryId = parent.id; expanded = false }
+                                    onClick = { userCategoryChoice = parent.id; expanded = false }
                                 )
                                 childrenMap[parent.id]?.forEach { child ->
                                     DropdownMenuItem(
@@ -879,7 +894,7 @@ private fun AddExpenseDialog(
                                                 Text("↳ ${child.emoji} ${child.name}")
                                             }
                                         },
-                                        onClick = { selectedCategoryId = child.id; expanded = false }
+                                        onClick = { userCategoryChoice = child.id; expanded = false }
                                     )
                                 }
                             }
@@ -894,16 +909,11 @@ private fun AddExpenseDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = categories.isNotEmpty(),
                 onClick = {
-                    val amt = amount.toDoubleOrNull()
-                    if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
-                    if (selectedCategoryId == -1L && categories.isNotEmpty()) {
-                        selectedCategoryId = categories.first().id
-                    }
+                    val amt = amount.validated() ?: return@TextButton
                     onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim(), selectedPaymentMethod)
                 }
-            ) { Text("Add", color = if (categories.isNotEmpty()) Jade else Muted) }
+            ) { Text("Add", color = Jade) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -915,15 +925,20 @@ private fun EditExpenseDialog(
     expense: Expense,
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onConfirm: (Double, String, Long, Long, String, String) -> Unit
+    onConfirm: (Double, String, Long, Long, String, String) -> Unit,
+    onDuplicate: (amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String, alsoSaved: Boolean) -> Unit
 ) {
-    var amount by remember { mutableStateOf("%.2f".format(expense.amount)) }
+    // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
+    val amount = rememberAmountInputState(AmountCalculator.forEditing(expense.amount))
     var description by remember { mutableStateOf(expense.description) }
     var tags by remember { mutableStateOf(expense.tags) }
     var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
     var expanded by remember { mutableStateOf(false) }
-    var amountError by remember { mutableStateOf("") }
     var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(expense.date)) }
+    // Same day: keep the exact original time (buildTimestamp drops milliseconds, which made an
+    // untouched SMS expense look edited). Another day: that day at the original time of day.
+    val formDate = if (selectedDateUtcMidnight == toUtcMidnight(expense.date)) expense.date
+        else buildTimestamp(selectedDateUtcMidnight, expense.date)
     var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
@@ -933,16 +948,7 @@ private fun EditExpenseDialog(
         title = { Text("Edit Expense", color = Ink) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it; amountError = "" },
-                    label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = amountError.isNotEmpty(),
-                    supportingText = if (amountError.isNotEmpty()) {{ Text(amountError) }} else null,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                AmountField(amount)
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -1006,14 +1012,28 @@ private fun EditExpenseDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = amount.toDoubleOrNull()
-                if (amt == null || amt <= 0) { amountError = "Enter a valid amount"; return@TextButton }
-                onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, expense.date), tags.trim(), selectedPaymentMethod)
+                val amt = amount.validated() ?: return@TextButton
+                onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
             }) { Text("Save", color = Jade) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+        dismissButton = {
+            // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
+            // fix made here, like picking a category, isn't lost on the original.
+            val edited = remember(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate) {
+                expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
+            }
+            Row {
+                TextButton(onClick = {
+                    val amt = amount.validated() ?: return@TextButton
+                    onDuplicate(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod, edited)
+                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Jade) }
+                TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
+            }
+        }
     )
 }
+
+private const val CHOOSE_LATER = "Choose later (pending)"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

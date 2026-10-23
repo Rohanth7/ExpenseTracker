@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -17,6 +18,7 @@ import com.example.expensetracker.ui.theme.Ink
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.theme.Paper
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -25,6 +27,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.expensetracker.LaunchAction
 import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
@@ -54,6 +57,7 @@ import com.example.expensetracker.ui.screens.statistics.StatisticsViewModel
 import com.example.expensetracker.ui.screens.rules.MessageRulesScreen
 import com.example.expensetracker.ui.screens.rules.MessageRulesViewModel
 import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
+import kotlinx.coroutines.flow.first
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
@@ -75,10 +79,20 @@ sealed class Screen(val route: String, val label: String, val pattern: String = 
     }
 }
 
+/**
+ * Go to a top-level tab the way the bottom nav does: back to Overview first (so screens don't pile
+ * up), one copy of the tab, and its saved state (filters, scroll) restored unless [restore] is false.
+ */
+private fun NavController.navigateToTab(route: String, restore: Boolean = true) = navigate(route) {
+    popUpTo(graph.findStartDestination().id) { saveState = true }
+    launchSingleTop = true
+    restoreState = restore
+}
+
 private val bottomNavItems = listOf(Screen.Dashboard, Screen.Expenses, Screen.Categories, Screen.Statistics, Screen.Settings)
 
 @Composable
-fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit = {}) {
+fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit = {}) {
     val context = LocalContext.current
     val db = remember { AppDatabase.getInstance(context) }
     val categoryRepo = remember { CategoryRepository(db.categoryDao(), db.expenseDao()) }
@@ -92,6 +106,10 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
     val backupManager = remember { BackupManager(context.applicationContext) }
 
     val navController = rememberNavController()
+    // The widget's "+", waiting for the Expenses screen to open its add dialog. Saveable only so a
+    // rotation in the moment between the tap and the dialog opening doesn't lose the request; the
+    // open dialog itself closes on rotation, as every dialog in the app does.
+    var quickAddRequested by rememberSaveable { mutableStateOf(false) }
 
     // Apply recurring expenses if it's a new month; schedule bill reminders
     LaunchedEffect(Unit) {
@@ -99,11 +117,27 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
         BillReminderHelper.schedule(context)
     }
 
-    LaunchedEffect(initialExpenseId) {
-        if (initialExpenseId != null && initialExpenseId != -1L) {
-            navController.navigate(Screen.Categorize.createRoute(initialExpenseId))
-            onExpenseNavigated()
+    LaunchedEffect(launchAction) {
+        if (launchAction == null) return@LaunchedEffect
+        // On a cold start this runs before NavHost has set its graph; navigating then crashed
+        // ("You must call setGraph() before calling getGraph()"). Wait for the first screen.
+        navController.currentBackStackEntryFlow.first()
+        when (launchAction) {
+            is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
+            // Like the bottom nav's Expenses tab: the same screen (filters kept), never a pile of
+            // copies; the request then opens its add dialog. The tab's restored stack can have a
+            // screen on top of the list (Categorize, from a notification), where the dialog would
+            // wait unseen until the user came back; so back to the list itself.
+            LaunchAction.QuickAdd -> {
+                navController.navigateToTab(Screen.Expenses.route)
+                navController.popBackStack(Screen.Expenses.pattern, inclusive = false)
+                quickAddRequested = true
+            }
+            LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route) {
+                popUpTo(navController.graph.findStartDestination().id)
+            }
         }
+        onLaunchHandled()
     }
 
     Scaffold(
@@ -124,13 +158,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                         } == true
                         NavigationBarItem(
                             selected = selected,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { navController.navigateToTab(screen.route) },
                             icon = {
                                 when (screen) {
                                     Screen.Dashboard -> Icon(Icons.Default.Home, screen.label)
@@ -166,28 +194,11 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                 )
                 DashboardScreen(
                     viewModel = vm,
-                    onViewPending = { 
-                        navController.navigate(Screen.Expenses.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    onViewAllSpending = { 
-                        navController.navigate(Screen.Statistics.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onViewPending = { navController.navigateToTab(Screen.Expenses.route) },
+                    onViewAllSpending = { navController.navigateToTab(Screen.Statistics.route) },
                     onViewSubscriptions = { navController.navigate(Screen.Subscriptions.route) },
                     // The Auto-tracking card is the first thing in Settings.
-                    onEnableTracking = {
-                        navController.navigate(Screen.Settings.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                        }
-                    }
+                    onEnableTracking = { navController.navigateToTab(Screen.Settings.route, restore = false) }
                 )
             }
             composable(
@@ -214,6 +225,8 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
 
                 ExpensesScreen(
                     viewModel = vm,
+                    openAdd = quickAddRequested,
+                    onAddOpened = { quickAddRequested = false },
                     onCategorize = { id -> navController.navigate(Screen.Categorize.createRoute(id)) }
                 )
             }
@@ -229,13 +242,7 @@ fun AppNavGraph(initialExpenseId: Long? = null, onExpenseNavigated: () -> Unit =
                 )
                 StatisticsScreen(
                     viewModel = vm,
-                    onMonthClick = { start, end ->
-                        navController.navigate(Screen.Expenses.createRoute(start, end)) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
+                    onMonthClick = { start, end -> navController.navigateToTab(Screen.Expenses.createRoute(start, end)) }
                 )
             }
             composable(Screen.Settings.pattern) {

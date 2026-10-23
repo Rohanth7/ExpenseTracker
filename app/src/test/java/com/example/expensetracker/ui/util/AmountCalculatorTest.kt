@@ -1,0 +1,109 @@
+package com.example.expensetracker.ui.util
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class AmountCalculatorTest {
+    /** Dot-decimal (India, US, UK), whatever the machine running the tests uses. */
+    private fun eval(s: String) = AmountCalculator.evaluate(s, decimalComma = false)
+
+    @Test fun `plain numbers still work`() { assertEquals(250.0, eval("250")!!, 0.0); assertEquals(99.5, eval("99.50")!!, 0.0) }
+    @Test fun `adds and subtracts`() { assertEquals(165.0, eval("120+45")!!, 0.0); assertEquals(70.0, eval("100-30")!!, 0.0) }
+    @Test fun `multiplication before addition`() = assertEquals(60.0, eval("100-20*2")!!, 0.0)
+    @Test fun `accepts × ÷ and the minus sign`() {
+        assertEquals(120.0, eval("3×40")!!, 0.0); assertEquals(22.5, eval("90÷4")!!, 0.0); assertEquals(80.0, eval("100−20")!!, 0.0)
+    }
+    @Test fun `ignores rupee sign, Indian commas and spaces`() {
+        assertEquals(1500.0, eval("1,200 + 300")!!, 0.0); assertEquals(250.0, eval("₹ 250")!!, 0.0)
+    }
+    @Test fun `rounds to paise`() { assertEquals(0.3, eval("0.1+0.2")!!, 0.0); assertEquals(33.33, eval("100/3")!!, 0.0) }
+    @Test fun `rejects invalid input`() {
+        listOf("", "abc", "120+", "+", "10/0", "50-80", "1..2", "12a").forEach { assertNull("'$it'", eval(it)) }
+    }
+    @Test fun `commas in Indian and Western grouping are thousands separators`() {
+        assertEquals(120000.0, eval("1,20,000")!!, 0.0); assertEquals(1234567.0, eval("12,34,567")!!, 0.0)
+        assertEquals(1234567.0, eval("1,234,567")!!, 0.0); assertEquals(1200.5, eval("1,200.50")!!, 0.0)
+    }
+    @Test fun `a comma used as the decimal point is read as one, not dropped`() {
+        // Comma-decimal keyboards: "12,50" used to become 1250.
+        assertEquals(12.5, eval("12,50")!!, 0.0); assertEquals(99.9, eval("99,9")!!, 0.0); assertEquals(180.0, eval("180,00")!!, 0.0)
+        assertEquals(22.5, eval("10,5+12")!!, 0.0)
+    }
+    @Test fun `on a comma-decimal phone a comma is the decimal point`() {
+        // German, French, Indonesian… keyboards: "1,500" means 1.5, not 1500.
+        assertEquals(1.5, AmountCalculator.evaluate("1,500", decimalComma = true)!!, 0.0)
+        assertEquals(2.25, AmountCalculator.evaluate("2,250", decimalComma = true)!!, 0.0)
+        assertEquals(1234.5, AmountCalculator.evaluate("1.234,50", decimalComma = true)!!, 0.0)  // dots group there
+        assertEquals(12.5, AmountCalculator.evaluate("12.50", decimalComma = true)!!, 0.0)       // a lone dot is still a decimal point
+        assertEquals(22.5, AmountCalculator.evaluate("10,5+12", decimalComma = true)!!, 0.0)
+        listOf("1,2,3", "1.23,4", "1,").forEach { assertNull("'$it'", AmountCalculator.evaluate(it, decimalComma = true)) }
+    }
+    @Test fun `on a comma-decimal phone dots group thousands`() {
+        // "1.500" is how a German writes fifteen hundred; it was saved as 1.50.
+        assertEquals(1500.0, AmountCalculator.evaluate("1.500", decimalComma = true)!!, 0.0)
+        assertEquals(1234567.0, AmountCalculator.evaluate("1.234.567", decimalComma = true)!!, 0.0)
+        assertEquals(1.5, AmountCalculator.evaluate("1.5", decimalComma = true)!!, 0.0)  // not a grouping, so a decimal point
+    }
+    @Test fun `on a comma-decimal phone a dot always gets the preview`() {
+        assertTrue(AmountCalculator.needsPreview("1.500", decimalComma = true))
+        assertFalse(AmountCalculator.needsPreview("1.500", decimalComma = false))
+    }
+    @Test fun `on a dot-decimal phone the same text is grouping`() =
+        assertEquals(1500.0, AmountCalculator.evaluate("1,500", decimalComma = false)!!, 0.0)
+    @Test fun `the phone's language decides which one it is`() {
+        assertTrue(AmountCalculator.usesDecimalComma(java.util.Locale.GERMANY))
+        assertFalse(AmountCalculator.usesDecimalComma(java.util.Locale.forLanguageTag("en-IN")))
+    }
+    @Test fun `a comma always gets the preview, so a misread amount is visible`() {
+        assertTrue(AmountCalculator.needsPreview("1,500", decimalComma = false)); assertTrue(AmountCalculator.needsPreview("120+45", decimalComma = false))
+        assertFalse(AmountCalculator.needsPreview("250", decimalComma = false)); assertFalse(AmountCalculator.needsPreview("99.50", decimalComma = false))
+    }
+    @Test fun `commas that are neither grouping nor a decimal point are refused`() {
+        listOf("1,2,3", "1,2345", "12,5.5", "1,,000", ",5", "5,").forEach { assertNull("'$it'", eval(it)) }
+    }
+    @Test fun `amounts that round to zero paise are refused`() {
+        assertNull(eval("0.004")); assertNull(eval("1/1000")); assertEquals(0.01, eval("0.005")!!, 0.0)
+    }
+    @Test fun `absurdly large amounts are refused instead of overflowing`() {
+        assertNull(eval("99999999999999999")); assertNull(eval("1000000000*1000000000"))
+        assertEquals(1_00_00_00_000.0, eval("1000000000")!!, 0.0)  // ₹100 crore still fine
+    }
+    @Test fun `amounts are written for editing without the phone's locale`() {
+        val saved = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.GERMANY)  // "%.2f" would give "180,00"
+            assertEquals("180.00", AmountCalculator.forEditing(180.0)); assertEquals("1234.50", AmountCalculator.forEditing(1234.5))
+        } finally { java.util.Locale.setDefault(saved) }
+    }
+    @Test fun `an operator chip inserts at the cursor and moves the cursor after it`() {
+        assertEquals("3×" to 2, AmountCalculator.insertAt("3", 1, 1, "×"))
+        assertEquals("12+3" to 3, AmountCalculator.insertAt("123", 2, 2, "+"))
+        assertEquals("1÷4" to 2, AmountCalculator.insertAt("1234", 1, 3, "÷"))  // replaces a selection
+    }
+    @Test fun `a cursor outside the text is clamped`() = assertEquals("5−" to 2, AmountCalculator.insertAt("5", 9, 9, "−"))
+    @Test fun `knows when text is an expression`() {
+        assertTrue(AmountCalculator.isExpression("120+45")); assertTrue(AmountCalculator.isExpression("3×40"))
+        assertFalse(AmountCalculator.isExpression("250")); assertFalse(AmountCalculator.isExpression("1,200"))
+    }
+    @Test fun `the preview is written the way the phone writes numbers`() {
+        // An en-IN "= ₹1,500" on a German phone reads as one and a half rupees.
+        assertEquals("1.500", AmountCalculator.formatPreview(1500.0, java.util.Locale.GERMANY))
+        assertEquals("12,5", AmountCalculator.formatPreview(12.5, java.util.Locale.GERMANY))
+        assertEquals("33.33", AmountCalculator.formatPreview(33.333, java.util.Locale.US))
+    }
+    @Test fun `half a paisa rounds up, as the edit field shows it`() {
+        // Math.round(1.005 * 100) gave 1.00: 1.005 * 100 is 100.49999… in floating point.
+        assertEquals(1.01, eval("1.005")!!, 0.0); assertEquals(0.29, eval("0.285")!!, 0.0)
+        assertEquals("1.01", AmountCalculator.forEditing(1.005))
+    }
+    @Test fun `the preview shows only when the text could be read two ways or is a sum`() {
+        val us = java.util.Locale.US
+        assertEquals("= ₹50", AmountCalculator.previewText("50,00", 50.0, decimalComma = false, locale = us))
+        assertEquals("= ₹1,500", AmountCalculator.previewText("1000+500", 1500.0, decimalComma = false, locale = us))
+        assertNull(AmountCalculator.previewText("5000", 5000.0, decimalComma = false, locale = us))
+        assertNull(AmountCalculator.previewText("1+x", null, decimalComma = false, locale = us))
+    }
+}

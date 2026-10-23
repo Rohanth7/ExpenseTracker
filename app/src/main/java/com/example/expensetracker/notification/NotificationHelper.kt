@@ -27,6 +27,16 @@ object NotificationHelper {
         }
     }
 
+    /** Opens Categorize for [expenseId]. One per expense: the request code is the masked id. */
+    internal fun categorizeIntent(context: Context, expenseId: Long): PendingIntent = PendingIntent.getActivity(
+        context, (expenseId and 0x7FFFFFFF).toInt(),
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_EXPENSE_ID, expenseId)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
     fun showCategorizationNotification(
         context: Context,
         expenseId: Long,
@@ -34,14 +44,7 @@ object NotificationHelper {
         description: String,
         categories: List<com.example.expensetracker.data.db.entity.Category> = emptyList()
     ) {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_EXPENSE_ID, expenseId)
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            context, (expenseId and 0x7FFFFFFF).toInt(), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = categorizeIntent(context, expenseId)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)

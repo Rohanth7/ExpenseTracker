@@ -53,6 +53,20 @@
             android:textStyle="bold"
             android:fontFamily="monospace" />
 
+        <!-- Quick add: a 36dp touch target; the negative margins keep the header row its old height. -->
+        <ImageView
+            android:id="@+id/widget_add"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:layout_marginTop="-9dp"
+            android:layout_marginBottom="-9dp"
+            android:layout_marginEnd="-8dp"
+            android:padding="7dp"
+            android:src="@android:drawable/ic_input_add"
+            android:tint="#7DC9A5"
+            android:contentDescription="Add expense" />
+
     </LinearLayout>
 
     <!-- Body row -->

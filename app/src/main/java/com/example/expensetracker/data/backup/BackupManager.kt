@@ -94,7 +94,9 @@ class BackupManager(
             data.savingsGoals?.let { list -> db.savingsGoalDao().deleteAll(); list.forEach { db.savingsGoalDao().insert(it) } }
             data.merchantMappings?.let { list -> db.merchantMappingDao().deleteAll(); list.forEach { db.merchantMappingDao().insert(it) } }
         }
-        // Settings are applied only after the database commit succeeded.
+        // Settings are applied only after the database commit succeeded. Category ids now come
+        // from the backup, so the add dialog's last-used id may point at another category.
+        if (data.categories != null) prefs.lastManualCategoryId = -1L
         data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs
