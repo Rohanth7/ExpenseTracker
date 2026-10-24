@@ -7,6 +7,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
@@ -157,11 +158,10 @@ class DashboardViewModel(
         val totalMonthlyEmi = activeLoans.sumOf { it.loan.monthlyEmi }
         // Forecast counts only EMIs/bills not yet due — earlier ones are assumed paid and already in `total`.
         // Loans starting after this month (startDate > end) have no EMI due yet.
-        val emiStillDue = if (offset == 0)
-            activeLoans.filter { it.loan.startDate <= end && it.loan.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }
-                .sumOf { it.loan.monthlyEmi }
-        else 0.0
-        val billsStillDue = if (offset == 0) CashFlow.billsStillDue(bills, today, daysInMonth) else 0.0
+        val nowMs = System.currentTimeMillis()
+        val thisCycle = BudgetPeriod.current(nowMs, 1)
+        val emiStillDue = if (offset == 0) CashFlow.emiStillDue(activeLoans.map { it.loan }, nowMs, thisCycle) else 0.0
+        val billsStillDue = if (offset == 0) CashFlow.billsStillDue(bills, nowMs, thisCycle) else 0.0
 
         val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
         val insightPool = if (offset != 0 || total == 0.0 || dayOfMonth < 3) emptyList()
