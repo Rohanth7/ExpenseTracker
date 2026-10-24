@@ -47,6 +47,7 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.export.ExportRange
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.toUtcMidnight
@@ -1311,6 +1312,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
     var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var showPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val dateFmt = remember { java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
     val select = { p: ExportPreset -> preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
     // Closing the picker without dates goes back to the default, since "Choose dates" needs some.
@@ -1341,7 +1343,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
         confirmButton = {
             val ready = preset != ExportPreset.CUSTOM || custom != null
             TextButton(enabled = ready, onClick = {
-                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom))
+                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, MonthStartDay.get(context)))
             }) { Text("Export", color = if (ready) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
