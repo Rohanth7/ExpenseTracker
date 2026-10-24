@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -37,7 +39,12 @@ import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.ui.components.DateRangePickerDialog
 import com.example.expensetracker.ui.util.PastOrTodayDates
+import com.example.expensetracker.ui.util.dayRangeLabel
 import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.toUtcMidnight
@@ -68,6 +75,7 @@ fun ExpensesScreen(
     val selectedIds by viewModel.selectedIds.collectAsState()
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
+    val dateRange by viewModel.dateRange.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
@@ -208,7 +216,7 @@ fun ExpensesScreen(
                         onValueChange = { viewModel.setSearchQuery(it) },
                         modifier = Modifier.weight(1f)
                     )
-                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null) {
+                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null || dateRange != null) {
                         Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.clearAllFilters() })
                     } else {
                         Icon(
@@ -225,9 +233,25 @@ fun ExpensesScreen(
                     Icon(
                         Icons.Default.Tune,
                         null,
-                        tint = if (minAmount != null || maxAmount != null) Jade else Muted,
+                        tint = if (minAmount != null || maxAmount != null || dateRange != null) Jade else Muted,
                         modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
                     )
+                }
+
+                // ── Active date filter (from the filters dialog or a Statistics "View all") ──
+                dateRange?.let { (from, to) ->
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp)
+                            .clip(RoundedCornerShape(100.dp)).background(JadeSoft)
+                            .clickable { viewModel.clearDateRange() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.CalendarToday, null, tint = Jade, modifier = Modifier.size(13.dp))
+                        Text(dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
+                        Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(13.dp))
+                    }
                 }
 
                 // ── Filter chips ────────────────────────────────────
@@ -430,10 +454,12 @@ fun ExpensesScreen(
         AdvancedFiltersDialog(
             minAmount = minAmount,
             maxAmount = maxAmount,
+            dateRange = dateRange,
             onDismiss = { showAdvancedFilters = false },
-            onConfirm = { min, max ->
+            onConfirm = { min, max, range ->
                 viewModel.setMinAmount(min)
                 viewModel.setMaxAmount(max)
+                if (range == null) viewModel.clearDateRange() else viewModel.setDateRange(range.first, range.second)
                 showAdvancedFilters = false
             }
         )
@@ -444,18 +470,39 @@ fun ExpensesScreen(
 private fun AdvancedFiltersDialog(
     minAmount: Double?,
     maxAmount: Double?,
+    dateRange: Pair<Long, Long>?,
     onDismiss: () -> Unit,
-    onConfirm: (Double?, Double?) -> Unit
+    onConfirm: (Double?, Double?, Pair<Long, Long>?) -> Unit
 ) {
     var minText by remember { mutableStateOf(minAmount?.toString() ?: "") }
     var maxText by remember { mutableStateOf(maxAmount?.toString() ?: "") }
+    // Dates: ALL means no date filter. An existing filter shows as its dates.
+    var preset by remember { mutableStateOf(if (dateRange == null) ExportPreset.ALL else ExportPreset.CUSTOM) }
+    var custom by remember { mutableStateOf(dateRange) }
+    var showPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Advanced Filters", color = Ink) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("Dates", style = MaterialTheme.typography.labelSmall, color = Muted)
+                Column {
+                    ExportPreset.entries.forEach { p ->
+                        val select = { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
+                        Row(Modifier.fillMaxWidth().clickable(onClick = select), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = preset == p, onClick = select,
+                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                            Text(when {
+                                p == ExportPreset.ALL -> "Any time"
+                                p == ExportPreset.CUSTOM && custom != null -> dayRangeLabel(custom!!.first, custom!!.second)
+                                else -> p.label
+                            }, color = Ink, fontSize = 14.sp)
+                        }
+                    }
+                }
                 Text("Amount Range", style = MaterialTheme.typography.labelSmall, color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -478,16 +525,24 @@ private fun AdvancedFiltersDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onConfirm(minText.toDoubleOrNull(), maxText.toDoubleOrNull())
-            }) { Text("Apply", color = Jade) }
+            val ready = preset != ExportPreset.CUSTOM || custom != null
+            TextButton(enabled = ready, onClick = {
+                // "This month" and "Last month" are budget months, like the Overview.
+                onConfirm(minText.toDoubleOrNull(), maxText.toDoubleOrNull(),
+                    ExportRange.forPreset(preset, System.currentTimeMillis(), custom, MonthStartDay.get(context)))
+            }) { Text("Apply", color = if (ready) Jade else Muted) }
         },
         dismissButton = {
             TextButton(onClick = {
-                minText = ""; maxText = ""; onConfirm(null, null)
+                minText = ""; maxText = ""; onConfirm(null, null, null)
             }) { Text("Clear", color = Coral) }
         }
     )
+
+    if (showPicker) DateRangePickerDialog("Dates to show", initial = custom,
+        onDismiss = { showPicker = false; if (custom == null) preset = ExportPreset.ALL }) {
+        custom = it; showPicker = false
+    }
 }
 
 @Composable

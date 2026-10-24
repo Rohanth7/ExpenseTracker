@@ -55,12 +55,29 @@ object BudgetPeriod {
     fun dayOfCycle(now: Long, monthStartDay: Int): Int =
         (Math.round((startOfDay(now) - current(now, monthStartDay).start).toDouble() / DAY_MS) + 1).toInt()
 
+    /** From the start of [from]'s day to the end (23:59:59.999) of [to]'s day. */
+    fun dayRange(from: Long, to: Long): DateRange {
+        val end = Calendar.getInstance().apply { timeInMillis = startOfDay(to); add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis - 1
+        return DateRange(startOfDay(from), end)
+    }
+
+    /** The same number of days as [range], ending the day before it starts (for "vs previous" comparisons). */
+    fun previousOfSameLength(range: DateRange): DateRange {
+        val start = Calendar.getInstance().apply { timeInMillis = startOfDay(range.start); add(Calendar.DAY_OF_YEAR, -daysInCycle(range)) }
+        return DateRange(start.timeInMillis, startOfDay(range.start) - 1)
+    }
+
     fun daysInCycle(range: DateRange): Int =
         (Math.round((startOfDay(range.endInclusive) - range.start).toDouble() / DAY_MS) + 1).toInt()
 
-    fun label(range: DateRange, monthStartDay: Int, locale: Locale = Locale.ENGLISH): String =
-        if (clampStartDay(monthStartDay) == 1) SimpleDateFormat("MMM yyyy", locale).format(range.start)
-        else SimpleDateFormat("d MMM", locale).let { "${it.format(range.start)} – ${it.format(range.endInclusive)}" }
+    /** "Oct 2026" for calendar months; "25 Sep – 24 Oct" for cycles, with years unless it's all in [now]'s year. */
+    fun label(range: DateRange, monthStartDay: Int, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String {
+        if (clampStartDay(monthStartDay) == 1) return SimpleDateFormat("MMM yyyy", locale).format(range.start)
+        val year = SimpleDateFormat("yyyy", locale)
+        val thisYear = year.format(range.start) == year.format(range.endInclusive) && year.format(range.start) == year.format(now)
+        val fmt = SimpleDateFormat(if (thisYear) "d MMM" else "d MMM yyyy", locale)
+        return "${fmt.format(range.start)} – ${fmt.format(range.endInclusive)}"
+    }
 
     private fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
         timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)

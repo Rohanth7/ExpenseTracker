@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandLess
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.ui.components.DateRangePickerDialog
 import com.example.expensetracker.ui.util.categoryIcon
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
@@ -70,6 +72,12 @@ private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
 fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) -> Unit) {
     val state by viewModel.uiState.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
+    var showRangeSheet by remember { mutableStateOf(false) }
+    val headerLabel = when (viewMode) {
+        ViewMode.MONTHLY -> state.month.label
+        ViewMode.RANGE -> state.range.label
+        ViewMode.ANNUAL -> state.yearLabel
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Canvas)) {
         // Header
@@ -87,14 +95,17 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 verticalAlignment = Alignment.Bottom
             ) {
                 Text(
-                    text = if (viewMode == ViewMode.MONTHLY) state.monthLabel else state.yearLabel,
+                    text = headerLabel,
                     fontFamily = FontFamily.Serif,
-                    fontSize = 36.sp,
+                    // Date spans ("25 Sep – 24 Oct") are longer than "Oct 2026"
+                    fontSize = if (headerLabel.length > 10) 26.sp else 36.sp,
                     fontStyle = FontStyle.Italic,
                     color = Ink,
-                    lineHeight = 36.sp
+                    lineHeight = 36.sp,
+                    modifier = Modifier.weight(1f, fill = false)
+                        .then(if (viewMode == ViewMode.RANGE) Modifier.clickable { showRangeSheet = true } else Modifier)
                 )
-                Row(
+                if (viewMode != ViewMode.RANGE) Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(bottom = 4.dp)
                 ) {
@@ -131,7 +142,9 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 }
             }
             Spacer(Modifier.height(14.dp))
-            ViewModeToggle(viewMode = viewMode, onModeChange = viewModel::setViewMode)
+            ViewModeToggle(viewMode = viewMode, onModeChange = { mode ->
+                if (mode == ViewMode.RANGE) showRangeSheet = true else viewModel.setViewMode(mode)
+            })
         }
 
         LazyColumn(
@@ -139,19 +152,23 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (viewMode == ViewMode.MONTHLY) {
-                if (state.monthTotal == 0.0) {
+            if (viewMode != ViewMode.ANNUAL) {
+                val view = if (viewMode == ViewMode.MONTHLY) state.month else state.range
+                if (view.stats.total == 0.0) {
                     item {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("No expenses for ${state.monthLabel}.", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Muted)
+                            Text("No expenses for ${view.label}.", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Muted)
                         }
                     }
                 } else {
-                    item { MonthlyTotalCard(monthTotal = state.monthTotal, monthVsLastPct = state.monthVsLastPct, onViewAll = { onMonthClick(state.monthStart, state.monthEnd) }) }
-                    if (state.monthCategories.isNotEmpty()) {
+                    item {
+                        MonthlyTotalCard(monthTotal = view.stats.total, monthVsLastPct = view.stats.vsPreviousPct.takeIf { view.comparedWith != null },
+                            comparedWith = view.comparedWith, onViewAll = { onMonthClick(view.start, view.end) })
+                    }
+                    if (view.stats.categories.isNotEmpty()) {
                         item {
                             Text("ALL CATEGORIES", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
@@ -163,26 +180,26 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                                     .background(Paper)
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
                             ) {
-                                state.monthCategories.forEachIndexed { index, stat ->
+                                view.stats.categories.forEachIndexed { index, stat ->
                                     if (index > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                    CategoryAccordionRow(stat = stat, grandTotal = state.monthTotal, onTap = { viewModel.selectCategory(stat.category.id) })
+                                    CategoryAccordionRow(stat = stat, grandTotal = view.stats.total, onTap = { viewModel.selectCategory(stat.category.id) })
                                 }
                             }
                         }
                     }
-                    if (state.monthPaymentSplit.total > 0) {
+                    if (view.stats.paymentSplit.total > 0) {
                         item {
                             Text("HOW YOU PAY", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
-                        item { PaymentSplitCard(split = state.monthPaymentSplit) }
+                        item { PaymentSplitCard(split = view.stats.paymentSplit) }
                     }
-                    if (state.monthDetectionSplit.total > 0) {
+                    if (view.stats.detectionSplit.total > 0) {
                         item {
                             Text("HOW IT WAS TRACKED", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
-                        item { DetectionSplitCard(split = state.monthDetectionSplit) }
+                        item { DetectionSplitCard(split = view.stats.detectionSplit) }
                     }
-                    state.monthInsight?.let { insight ->
+                    view.stats.insight?.let { insight ->
                         item {
                             Spacer(Modifier.height(4.dp))
                             Row(
@@ -489,6 +506,44 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             onDismiss = { viewModel.selectCategory(null) }
         )
     }
+
+    if (showRangeSheet) RangeSheet(
+        current = viewModel.selectedRange.collectAsState().value.takeIf { viewMode == ViewMode.RANGE },
+        onDismiss = { showRangeSheet = false },
+        onPick = { viewModel.setRange(it); showRangeSheet = false }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (StatsRange) -> Unit) {
+    var showPicker by remember { mutableStateOf(false) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
+            Text("SHOW", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+            listOf(StatsRange.LastMonths(3) to "Last 3 months", StatsRange.LastMonths(6) to "Last 6 months", StatsRange.AllTime to "All time")
+                .forEach { (range, label) ->
+                    RangeOption(label, selected = current == range) { onPick(range) }
+                }
+            RangeOption("Choose dates", selected = current is StatsRange.Custom) { showPicker = true }
+        }
+    }
+    if (showPicker) {
+        val custom = current as? StatsRange.Custom
+        DateRangePickerDialog("Dates to show", initial = custom?.let { it.start to it.end }, onDismiss = { showPicker = false }) {
+            showPicker = false
+            onPick(StatsRange.Custom(it.first, it.second))
+        }
+    }
+}
+
+@Composable
+private fun RangeOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontSize = 15.sp, color = Ink, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = Jade, modifier = Modifier.size(18.dp))
+    }
 }
 
 @Composable
@@ -507,11 +562,11 @@ private fun ViewModeToggle(viewMode: ViewMode, onModeChange: (ViewMode) -> Unit)
                     .clip(RoundedCornerShape(100.dp))
                     .background(if (selected) Ink else Color.Transparent)
                     .clickable { onModeChange(mode) }
-                    .padding(horizontal = 22.dp, vertical = 7.dp),
+                    .padding(horizontal = 18.dp, vertical = 7.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (mode == ViewMode.MONTHLY) "Monthly" else "Annual",
+                    text = when (mode) { ViewMode.MONTHLY -> "Monthly"; ViewMode.ANNUAL -> "Annual"; ViewMode.RANGE -> "Range" },
                     fontSize = 12.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (selected) Canvas else Muted
@@ -522,7 +577,7 @@ private fun ViewModeToggle(viewMode: ViewMode, onModeChange: (ViewMode) -> Unit)
 }
 
 @Composable
-private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, onViewAll: () -> Unit) {
+private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedWith: String?, onViewAll: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -567,7 +622,7 @@ private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, onViewAll
         if (monthVsLastPct != null) {
             Spacer(Modifier.height(5.dp))
             Text(
-                text = "vs last month",
+                text = "vs $comparedWith",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 color = Ink.copy(alpha = 0.5f)

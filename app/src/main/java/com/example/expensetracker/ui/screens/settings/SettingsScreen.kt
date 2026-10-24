@@ -47,12 +47,9 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.components.DateRangePickerDialog
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.export.ExportRange
-import com.example.expensetracker.ui.util.PastOrTodayDates
-import com.example.expensetracker.ui.util.toUtcMidnight
-import com.example.expensetracker.ui.util.utcMidnightToLocalDayEnd
-import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
 import androidx.fragment.app.FragmentActivity
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.util.BiometricUtil
@@ -1349,25 +1346,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
 
-    if (showPicker) {
-        val state = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = custom?.first?.let(::toUtcMidnight),
-            initialSelectedEndDateMillis = custom?.second?.let(::toUtcMidnight),
-            selectableDates = PastOrTodayDates
-        )
-        DatePickerDialog(
-            onDismissRequest = closePicker,
-            confirmButton = {
-                val start = state.selectedStartDateMillis
-                val end = state.selectedEndDateMillis ?: start
-                TextButton(enabled = start != null, onClick = {
-                    custom = utcMidnightToLocalDayStart(start!!) to utcMidnightToLocalDayEnd(end!!)
-                    showPicker = false
-                }) { Text("OK", color = Jade) }
-            },
-            dismissButton = { TextButton(onClick = closePicker) { Text("Cancel", color = Muted) } }
-        ) {
-            DateRangePicker(state = state, modifier = Modifier.weight(1f), title = { Text("Dates to export", modifier = Modifier.padding(16.dp)) })
-        }
+    if (showPicker) DateRangePickerDialog("Dates to export", initial = custom, onDismiss = closePicker) {
+        custom = it; showPicker = false
     }
 }

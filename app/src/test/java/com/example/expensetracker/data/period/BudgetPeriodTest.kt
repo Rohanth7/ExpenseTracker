@@ -36,8 +36,11 @@ class BudgetPeriodTest {
     @Test fun `last three months ends with the current cycle`() =
         assertEquals(DateRange(start(2026, 8, 1), end(2026, 10, 31)), BudgetPeriod.lastNMonths(at(2026, 10, 16), 1, 3))
     @Test fun `labels`() {
-        assertEquals("Oct 2026", BudgetPeriod.label(BudgetPeriod.current(at(2026, 10, 16), 1), 1))
-        assertEquals("25 Sep – 24 Oct", BudgetPeriod.label(BudgetPeriod.current(at(2026, 10, 16), 25), 25))
+        val now = at(2026, 10, 16)
+        assertEquals("Oct 2026", BudgetPeriod.label(BudgetPeriod.current(now, 1), 1, now))
+        assertEquals("25 Sep – 24 Oct", BudgetPeriod.label(BudgetPeriod.current(now, 25), 25, now))
+        // An older cycle says which year it's from
+        assertEquals("25 Dec 2025 – 24 Jan 2026", BudgetPeriod.label(BudgetPeriod.current(at(2026, 1, 3), 25), 25, now))
     }
     @Test fun `the last day of a long month with start day 28`() =
         assertEquals(DateRange(start(2027, 3, 28), end(2027, 4, 27)), BudgetPeriod.current(at(2027, 3, 31), 28))
@@ -48,4 +51,9 @@ class BudgetPeriodTest {
     @Test fun `start days read as ordinals`() =
         assertEquals(listOf("1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "28th"),
             listOf(1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 28).map { BudgetPeriod.ordinal(it) })
+    @Test fun `the previous range has the same number of days and ends the day before`() {
+        assertEquals(DateRange(start(2026, 9, 18), end(2026, 9, 30)), BudgetPeriod.previousOfSameLength(DateRange(start(2026, 10, 1), end(2026, 10, 13))))
+        // Three 25th-to-24th months (25 Jul – 24 Oct, 92 days) → the 92 days before
+        assertEquals(DateRange(start(2026, 4, 24), end(2026, 7, 24)), BudgetPeriod.previousOfSameLength(DateRange(start(2026, 7, 25), end(2026, 10, 24))))
+    }
 }

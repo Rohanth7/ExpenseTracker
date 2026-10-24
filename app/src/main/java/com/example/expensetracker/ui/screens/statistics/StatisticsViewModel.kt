@@ -7,6 +7,7 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.DateRange
+import com.example.expensetracker.ui.util.dayRangeLabel
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import kotlinx.coroutines.flow.*
@@ -15,7 +16,14 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
 
-enum class ViewMode { MONTHLY, ANNUAL }
+enum class ViewMode { MONTHLY, ANNUAL, RANGE }
+
+/** What the Range view covers. Months are budget months (see BudgetPeriod). */
+sealed class StatsRange {
+    data class LastMonths(val n: Int) : StatsRange()
+    object AllTime : StatsRange()
+    data class Custom(val start: Long, val end: Long) : StatsRange()
+}
 
 data class MonthStat(val label: String, val total: Double, val start: Long, val end: Long)
 data class SubcategoryRow(val category: Category, val amount: Double)
@@ -73,17 +81,19 @@ data class StatisticsUiState(
     val detectionSplit: DetectionSplit = DetectionSplit(),
     val subcategoryBreakdown: List<SubcategoryBreakdown>? = null,
     val autoTrackStats: AutoTrackStats = AutoTrackStats(),
-    // Monthly view
-    val monthLabel: String = "",
-    val monthTotal: Double = 0.0,
-    val monthCategories: List<CategoryYearlyStat> = emptyList(),
-    val monthVsLastPct: Int? = null,
-    val monthPaymentSplit: PaymentSplit = PaymentSplit(),
-    val monthDetectionSplit: DetectionSplit = DetectionSplit(),
-    val monthInsight: MonthlyInsight? = null,
+    val month: PeriodView = PeriodView(),
     val canGoForwardMonth: Boolean = false,
-    val monthStart: Long = 0L,
-    val monthEnd: Long = 0L
+    val range: PeriodView = PeriodView()
+)
+
+/** One stretch of days as the Monthly and Range views show it. */
+data class PeriodView(
+    val label: String = "",
+    val start: Long = 0L,
+    val end: Long = 0L,
+    val stats: PeriodStats = PeriodStats(0.0, emptyList(), null, PaymentSplit(), DetectionSplit(), null),
+    /** What the percentage compares with ("last month"), or null when there's nothing before it. */
+    val comparedWith: String? = null
 )
 
 /** What the monthly view (and a chosen range) shows for one stretch of days. */
@@ -108,9 +118,12 @@ class StatisticsViewModel(
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     private val _monthOffset = MutableStateFlow(0)
     private val _viewMode = MutableStateFlow(ViewMode.MONTHLY)
+    private val _range = MutableStateFlow<StatsRange>(StatsRange.LastMonths(3))
 
     val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+    val selectedRange: StateFlow<StatsRange> = _range.asStateFlow()
     fun setViewMode(mode: ViewMode) { _viewMode.value = mode }
+    fun setRange(range: StatsRange) { _range.value = range; _viewMode.value = ViewMode.RANGE }
     fun goToPreviousMonthStats() { _monthOffset.value-- }
     fun goToNextMonthStats() { if (_monthOffset.value < 0) _monthOffset.value++ }
 
@@ -119,8 +132,8 @@ class StatisticsViewModel(
         categoryRepo.allCategories,
         _yearOffset,
         _selectedCategoryId,
-        combine(_monthOffset, monthStartDay) { o, d -> o to d }
-    ) { expenses, categories, offset, selectedId, (monthOffset, startDay) ->
+        combine(_monthOffset, monthStartDay, _range) { o, d, r -> Triple(o, d, r) }
+    ) { expenses, categories, offset, selectedId, (monthOffset, startDay, statsRange) ->
         val year = Calendar.getInstance().get(Calendar.YEAR) + offset
 
         val yearStart = Calendar.getInstance().apply {
@@ -262,6 +275,7 @@ class StatisticsViewModel(
         // ── Monthly stats: one budget month, from the user's start day ──
         val mRange = BudgetPeriod.forOffset(nowMs, startDay, monthOffset)
         val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month")
+        val range = rangeView(statsRange, expenses, categories, nowMs, startDay)
 
         StatisticsUiState(
             yearLabel = year.toString(),
@@ -279,16 +293,9 @@ class StatisticsViewModel(
             detectionSplit = detectionSplit,
             subcategoryBreakdown = subcategoryBreakdown,
             autoTrackStats = autoStats,
-            monthLabel = BudgetPeriod.label(mRange, startDay),
-            monthTotal = month.total,
-            monthCategories = month.categories,
-            monthVsLastPct = month.vsPreviousPct,
-            monthPaymentSplit = month.paymentSplit,
-            monthDetectionSplit = month.detectionSplit,
-            monthInsight = month.insight,
+            month = PeriodView(BudgetPeriod.label(mRange, startDay), mRange.start, mRange.endInclusive, month, "last month"),
             canGoForwardMonth = monthOffset < 0,
-            monthStart = mRange.start,
-            monthEnd = mRange.endInclusive
+            range = range
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatisticsUiState())
 
@@ -298,6 +305,22 @@ class StatisticsViewModel(
     fun selectCategory(id: Long?) { _selectedCategoryId.value = id }
 
     private fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
+
+    private fun rangeView(r: StatsRange, expenses: List<Expense>, categories: List<Category>, now: Long, startDay: Int): PeriodView {
+        val (range, label, comparedWith) = when (r) {
+            is StatsRange.LastMonths -> Triple(BudgetPeriod.lastNMonths(now, startDay, r.n), "Last ${r.n} months", "the previous ${r.n} months")
+            StatsRange.AllTime -> Triple(
+                BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now)),
+                "All time", null)
+            is StatsRange.Custom -> {
+                val dr = DateRange(r.start, r.end)
+                val days = BudgetPeriod.daysInCycle(dr)
+                Triple(dr, dayRangeLabel(dr.start, dr.endInclusive, now), if (days == 1) "the day before" else "the $days days before")
+            }
+        }
+        val previous = if (comparedWith == null) null else BudgetPeriod.previousOfSameLength(range)
+        return PeriodView(label, range.start, range.endInclusive, periodStats(expenses, categories, range, previous, now, "period"), comparedWith)
+    }
 
     /**
      * Totals, categories, splits and an insight for [range], compared with [previous] (null = no
