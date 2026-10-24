@@ -18,10 +18,21 @@ object BudgetPeriod {
     const val MAX_START_DAY = 28
     private const val DAY_MS = 24 * 60 * 60 * 1000L
 
+    fun clampStartDay(day: Int): Int = day.coerceIn(MIN_START_DAY, MAX_START_DAY)
+
+    /** "1st", "2nd", "23rd", "28th". */
+    fun ordinal(day: Int): String = day.toString() + when {
+        day % 100 in 11..13 -> "th"
+        day % 10 == 1 -> "st"
+        day % 10 == 2 -> "nd"
+        day % 10 == 3 -> "rd"
+        else -> "th"
+    }
+
     fun current(now: Long, monthStartDay: Int): DateRange = forOffset(now, monthStartDay, 0)
 
     fun forOffset(now: Long, monthStartDay: Int, offset: Int): DateRange {
-        val day = monthStartDay.coerceIn(MIN_START_DAY, MAX_START_DAY)
+        val day = clampStartDay(monthStartDay)
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         if (cal.get(Calendar.DAY_OF_MONTH) < day) cal.add(Calendar.MONTH, -1)
         cal.set(Calendar.DAY_OF_MONTH, day)
@@ -48,7 +59,7 @@ object BudgetPeriod {
         (Math.round((startOfDay(range.endInclusive) - range.start).toDouble() / DAY_MS) + 1).toInt()
 
     fun label(range: DateRange, monthStartDay: Int, locale: Locale = Locale.ENGLISH): String =
-        if (monthStartDay.coerceIn(MIN_START_DAY, MAX_START_DAY) == 1) SimpleDateFormat("MMM yyyy", locale).format(range.start)
+        if (clampStartDay(monthStartDay) == 1) SimpleDateFormat("MMM yyyy", locale).format(range.start)
         else SimpleDateFormat("d MMM", locale).let { "${it.format(range.start)} – ${it.format(range.endInclusive)}" }
 
     private fun startOfDay(t: Long): Long = Calendar.getInstance().apply {

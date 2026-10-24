@@ -45,4 +45,7 @@ class BudgetPeriodTest {
         assertEquals(28, BudgetPeriod.daysInCycle(BudgetPeriod.current(at(2027, 3, 1), 28)))  // 28 Feb – 27 Mar
     @Test fun `the first moment of the start day is in the new cycle`() =
         assertEquals(start(2026, 10, 25), BudgetPeriod.current(start(2026, 10, 25), 25).start)
+    @Test fun `start days read as ordinals`() =
+        assertEquals(listOf("1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "28th"),
+            listOf(1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 28).map { BudgetPeriod.ordinal(it) })
 }

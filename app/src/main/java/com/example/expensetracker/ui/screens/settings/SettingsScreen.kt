@@ -46,6 +46,7 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.export.ExportRange
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.toUtcMidnight
@@ -89,6 +90,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
+    val monthStartDay by viewModel.monthStartDay.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
     val pendingRestore = viewModel.pendingRestore
     val snackbarHostState = remember { SnackbarHostState() }
@@ -198,6 +200,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 budgetAlertsEnabled = budgetAlertsEnabled,
                 budgetAlertThreshold = budgetAlertThreshold,
                 weekStartsOnMonday = weekStartsOnMonday,
+                monthStartDay = monthStartDay,
                 privacyMode = privacyMode,
                 biometricLockEnabled = biometricLockEnabled,
                 widgetEnabled = widgetEnabled,
@@ -206,6 +209,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onSetBudgetAlerts = { viewModel.setBudgetAlertsEnabled(it) },
                 onSetBudgetThreshold = { viewModel.setBudgetAlertThreshold(it) },
                 onSetWeekStart = { viewModel.setWeekStartsOnMonday(it) },
+                onSetMonthStart = { viewModel.setMonthStartDay(it) },
                 onSetPrivacyMode = { viewModel.setPrivacyMode(it) },
                 onSetBiometricLock = { enable ->
                     when {
@@ -247,6 +251,30 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
             onDismiss = { viewModel.cancelRestore() }
         )
     }
+}
+
+@Composable
+private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text("Month starts on") },
+        text = {
+            Column {
+                Text("Pick the day your salary usually arrives. Budgets, the forecast and monthly statistics will run from that day. Bills keep their own due dates.",
+                    fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 8.dp))
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items((BudgetPeriod.MIN_START_DAY..BudgetPeriod.MAX_START_DAY).toList()) { day ->
+                        Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = day == current, onClick = { onPick(day) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
 }
 
 /** Shows what a backup contains before it replaces anything. Used by Settings and first-run setup. */
@@ -692,10 +720,10 @@ private fun CloudSubPage(
 @Composable
 private fun PreferencesSubPage(
     budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int,
-    weekStartsOnMonday: Boolean, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
+    weekStartsOnMonday: Boolean, monthStartDay: Int, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
     onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit,
-    onSetWeekStart: (Boolean) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
+    onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -749,6 +777,20 @@ private fun PreferencesSubPage(
                     Text("Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
                         fontSize = 11.5.sp, color = Muted,
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
+                }
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                var showMonthStart by remember { mutableStateOf(false) }
+                Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Month starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
+                    }
+                    Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
+                        fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                }
+                if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
+                    onSetMonthStart(it); showMonthStart = false
                 }
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)

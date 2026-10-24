@@ -16,6 +16,7 @@ import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.backup.DriveBackupClient
 import com.example.expensetracker.data.backup.ParseResult
 import com.example.expensetracker.data.export.CsvExporter
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.google.android.gms.auth.UserRecoverableAuthException
 import kotlinx.coroutines.CancellationException
@@ -108,6 +109,12 @@ class SettingsViewModel(
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
     fun setWeekStartsOnMonday(monday: Boolean) { prefs.weekStartsOnMonday = monday; _weekStartsOnMonday.value = monday }
+
+    val monthStartDay: StateFlow<Int> = MonthStartDay.flow(appContext)
+    fun setMonthStartDay(day: Int) {
+        MonthStartDay.set(appContext, day)
+        com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
+    }
 
     private val _biometricLockEnabled = MutableStateFlow(prefs.biometricLockEnabled)
     val biometricLockEnabled: StateFlow<Boolean> = _biometricLockEnabled.asStateFlow()
@@ -391,6 +398,7 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         prefs.monthlyIncome = 0.0
         _monthlyIncome.value = 0.0
+        setMonthStartDay(1)
         // Show first-run setup again on next launch, which recreates the starter categories.
         prefs.onboardingCompleted = false
         prefs.onboardingRestore = null
