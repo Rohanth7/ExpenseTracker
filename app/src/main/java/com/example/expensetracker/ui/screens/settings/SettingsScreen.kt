@@ -46,11 +46,10 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.components.DateRangePickerDialog
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.export.ExportRange
-import com.example.expensetracker.ui.util.PastOrTodayDates
-import com.example.expensetracker.ui.util.toUtcMidnight
-import com.example.expensetracker.ui.util.utcMidnightToLocalDayEnd
-import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
 import androidx.fragment.app.FragmentActivity
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.util.BiometricUtil
@@ -89,6 +88,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
+    val monthStartDay by viewModel.monthStartDay.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
     val pendingRestore = viewModel.pendingRestore
     val snackbarHostState = remember { SnackbarHostState() }
@@ -198,6 +198,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 budgetAlertsEnabled = budgetAlertsEnabled,
                 budgetAlertThreshold = budgetAlertThreshold,
                 weekStartsOnMonday = weekStartsOnMonday,
+                monthStartDay = monthStartDay,
                 privacyMode = privacyMode,
                 biometricLockEnabled = biometricLockEnabled,
                 widgetEnabled = widgetEnabled,
@@ -206,6 +207,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onSetBudgetAlerts = { viewModel.setBudgetAlertsEnabled(it) },
                 onSetBudgetThreshold = { viewModel.setBudgetAlertThreshold(it) },
                 onSetWeekStart = { viewModel.setWeekStartsOnMonday(it) },
+                onSetMonthStart = { viewModel.setMonthStartDay(it) },
                 onSetPrivacyMode = { viewModel.setPrivacyMode(it) },
                 onSetBiometricLock = { enable ->
                     when {
@@ -247,6 +249,30 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
             onDismiss = { viewModel.cancelRestore() }
         )
     }
+}
+
+@Composable
+private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text("Month starts on") },
+        text = {
+            Column {
+                Text("Pick the day your salary usually arrives. Budgets, the forecast and monthly statistics will run from that day. Bills keep their own due dates.",
+                    fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 8.dp))
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items((BudgetPeriod.MIN_START_DAY..BudgetPeriod.MAX_START_DAY).toList()) { day ->
+                        Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = day == current, onClick = { onPick(day) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
 }
 
 /** Shows what a backup contains before it replaces anything. Used by Settings and first-run setup. */
@@ -692,10 +718,10 @@ private fun CloudSubPage(
 @Composable
 private fun PreferencesSubPage(
     budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int,
-    weekStartsOnMonday: Boolean, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
+    weekStartsOnMonday: Boolean, monthStartDay: Int, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
     onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit,
-    onSetWeekStart: (Boolean) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
+    onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -749,6 +775,20 @@ private fun PreferencesSubPage(
                     Text("Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
                         fontSize = 11.5.sp, color = Muted,
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
+                }
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                var showMonthStart by remember { mutableStateOf(false) }
+                Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Month starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
+                    }
+                    Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
+                        fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                }
+                if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
+                    onSetMonthStart(it); showMonthStart = false
                 }
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)
@@ -1269,6 +1309,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
     var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
     var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var showPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val dateFmt = remember { java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
     val select = { p: ExportPreset -> preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
     // Closing the picker without dates goes back to the default, since "Choose dates" needs some.
@@ -1299,31 +1340,13 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
         confirmButton = {
             val ready = preset != ExportPreset.CUSTOM || custom != null
             TextButton(enabled = ready, onClick = {
-                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom))
+                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, MonthStartDay.get(context)))
             }) { Text("Export", color = if (ready) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
 
-    if (showPicker) {
-        val state = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = custom?.first?.let(::toUtcMidnight),
-            initialSelectedEndDateMillis = custom?.second?.let(::toUtcMidnight),
-            selectableDates = PastOrTodayDates
-        )
-        DatePickerDialog(
-            onDismissRequest = closePicker,
-            confirmButton = {
-                val start = state.selectedStartDateMillis
-                val end = state.selectedEndDateMillis ?: start
-                TextButton(enabled = start != null, onClick = {
-                    custom = utcMidnightToLocalDayStart(start!!) to utcMidnightToLocalDayEnd(end!!)
-                    showPicker = false
-                }) { Text("OK", color = Jade) }
-            },
-            dismissButton = { TextButton(onClick = closePicker) { Text("Cancel", color = Muted) } }
-        ) {
-            DateRangePicker(state = state, modifier = Modifier.weight(1f), title = { Text("Dates to export", modifier = Modifier.padding(16.dp)) })
-        }
+    if (showPicker) DateRangePickerDialog("Dates to export", initial = custom, onDismiss = closePicker) {
+        custom = it; showPicker = false
     }
 }

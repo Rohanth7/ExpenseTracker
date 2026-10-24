@@ -31,6 +31,7 @@ import com.example.expensetracker.LaunchAction
 import com.example.expensetracker.data.backup.BackupManager
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -238,7 +239,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
             }
             composable(Screen.Statistics.pattern) {
                 val vm: StatisticsViewModel = viewModel(
-                    factory = StatisticsViewModel.factory(expenseRepo, categoryRepo)
+                    factory = StatisticsViewModel.factory(expenseRepo, categoryRepo, MonthStartDay.flow(context))
                 )
                 StatisticsScreen(
                     viewModel = vm,

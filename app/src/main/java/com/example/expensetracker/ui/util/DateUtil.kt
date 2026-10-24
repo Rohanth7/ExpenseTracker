@@ -2,7 +2,9 @@ package com.example.expensetracker.ui.util
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SelectableDates
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 import java.util.TimeZone
 
 // Material 3 date pickers work in UTC midnights: each day is shown and returned as 00:00 UTC.
@@ -41,4 +43,13 @@ private fun localDay(utcMillis: Long, h: Int, m: Int, s: Int, ms: Int): Long {
         set(utc.get(Calendar.YEAR), utc.get(Calendar.MONTH), utc.get(Calendar.DAY_OF_MONTH), h, m, s)
         set(Calendar.MILLISECOND, ms)
     }.timeInMillis
+}
+
+/** "1 Oct – 13 Oct", one day as "13 Oct"; with years unless the whole range is in [now]'s year. */
+fun dayRangeLabel(start: Long, end: Long, now: Long = System.currentTimeMillis()): String {
+    val year = SimpleDateFormat("yyyy", Locale.ENGLISH)
+    val thisYear = year.format(start) == year.format(end) && year.format(start) == year.format(now)
+    val fmt = SimpleDateFormat(if (thisYear) "d MMM" else "d MMM yyyy", Locale.ENGLISH)
+    val a = fmt.format(start); val b = fmt.format(end)
+    return if (a == b) a else "$a – $b"
 }

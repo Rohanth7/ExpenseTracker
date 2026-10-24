@@ -3,6 +3,8 @@ package com.example.expensetracker.notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.MonthStartDay
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -40,15 +42,11 @@ object BudgetAlertHelper {
 
         if (budgetCategory.monthlyLimit <= 0) return
 
-        val cal = Calendar.getInstance()
-        val start = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val end = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
+        // The budget month follows the user's start day (see BudgetPeriod).
+        val startDay = MonthStartDay.get(context)
+        val cycle = BudgetPeriod.current(System.currentTimeMillis(), startDay)
+        val start = cycle.start
+        val end = cycle.endInclusive
 
         // Sum spend across parent + all its subcategories
         val allCategories = categoryRepo.getAll()
@@ -58,8 +56,11 @@ object BudgetAlertHelper {
         val spent = expenseRepo.getSpentForCategories(relatedIds, start, end)
 
         val pct = spent / budgetCategory.monthlyLimit
-        // Limit is part of the key so editing the limit re-arms this month's alerts
-        val monthKey = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}_${budgetCategory.id}_${budgetCategory.monthlyLimit}"
+        // One alert per budget month. The limit is part of the key so editing it re-arms the alerts.
+        // Calendar months keep the old key, so alerts already sent this month aren't repeated.
+        val startCal = Calendar.getInstance().apply { timeInMillis = start }
+        val cycleKey = "${startCal.get(Calendar.YEAR)}_${startCal.get(Calendar.MONTH)}" + if (startDay == 1) "" else "_d$startDay"
+        val monthKey = "${cycleKey}_${budgetCategory.id}_${budgetCategory.monthlyLimit}"
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
         val warningRatio = alertThreshold / 100.0

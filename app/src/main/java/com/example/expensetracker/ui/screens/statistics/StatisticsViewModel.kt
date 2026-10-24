@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.DateRange
+import com.example.expensetracker.ui.util.dayRangeLabel
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import kotlinx.coroutines.flow.*
@@ -12,7 +16,14 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
 
-enum class ViewMode { MONTHLY, ANNUAL }
+enum class ViewMode { MONTHLY, ANNUAL, RANGE }
+
+/** What the Range view covers. Months are budget months (see BudgetPeriod). */
+sealed class StatsRange {
+    data class LastMonths(val n: Int) : StatsRange()
+    object AllTime : StatsRange()
+    data class Custom(val start: Long, val end: Long) : StatsRange()
+}
 
 data class MonthStat(val label: String, val total: Double, val start: Long, val end: Long)
 data class SubcategoryRow(val category: Category, val amount: Double)
@@ -70,22 +81,36 @@ data class StatisticsUiState(
     val detectionSplit: DetectionSplit = DetectionSplit(),
     val subcategoryBreakdown: List<SubcategoryBreakdown>? = null,
     val autoTrackStats: AutoTrackStats = AutoTrackStats(),
-    // Monthly view
-    val monthLabel: String = "",
-    val monthTotal: Double = 0.0,
-    val monthCategories: List<CategoryYearlyStat> = emptyList(),
-    val monthVsLastPct: Int? = null,
-    val monthPaymentSplit: PaymentSplit = PaymentSplit(),
-    val monthDetectionSplit: DetectionSplit = DetectionSplit(),
-    val monthInsight: MonthlyInsight? = null,
+    val month: PeriodView = PeriodView(),
     val canGoForwardMonth: Boolean = false,
-    val monthStart: Long = 0L,
-    val monthEnd: Long = 0L
+    val range: PeriodView = PeriodView()
+)
+
+/** One stretch of days as the Monthly and Range views show it. */
+data class PeriodView(
+    val label: String = "",
+    val start: Long = 0L,
+    val end: Long = 0L,
+    val stats: PeriodStats = PeriodStats(0.0, emptyList(), null, PaymentSplit(), DetectionSplit(), null),
+    /** What the percentage compares with ("last month"), or null when there's nothing before it. */
+    val comparedWith: String? = null
+)
+
+/** What the monthly view (and a chosen range) shows for one stretch of days. */
+data class PeriodStats(
+    val total: Double,
+    val categories: List<CategoryYearlyStat>,
+    val vsPreviousPct: Int?,
+    val paymentSplit: PaymentSplit,
+    val detectionSplit: DetectionSplit,
+    val insight: MonthlyInsight?
 )
 
 class StatisticsViewModel(
     private val expenseRepo: ExpenseRepository,
-    private val categoryRepo: CategoryRepository
+    private val categoryRepo: CategoryRepository,
+    /** Day the budget month starts (see `BudgetPeriod`); the monthly view follows it. */
+    monthStartDay: Flow<Int>
 ) : ViewModel() {
 
     private val MONTHS = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
@@ -93,9 +118,12 @@ class StatisticsViewModel(
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     private val _monthOffset = MutableStateFlow(0)
     private val _viewMode = MutableStateFlow(ViewMode.MONTHLY)
+    private val _range = MutableStateFlow<StatsRange>(StatsRange.LastMonths(3))
 
     val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+    val selectedRange: StateFlow<StatsRange> = _range.asStateFlow()
     fun setViewMode(mode: ViewMode) { _viewMode.value = mode }
+    fun setRange(range: StatsRange) { _range.value = range; _viewMode.value = ViewMode.RANGE }
     fun goToPreviousMonthStats() { _monthOffset.value-- }
     fun goToNextMonthStats() { if (_monthOffset.value < 0) _monthOffset.value++ }
 
@@ -104,8 +132,8 @@ class StatisticsViewModel(
         categoryRepo.allCategories,
         _yearOffset,
         _selectedCategoryId,
-        _monthOffset
-    ) { expenses, categories, offset, selectedId, monthOffset ->
+        combine(_monthOffset, monthStartDay, _range) { o, d, r -> Triple(o, d, r) }
+    ) { expenses, categories, offset, selectedId, (monthOffset, startDay, statsRange) ->
         val year = Calendar.getInstance().get(Calendar.YEAR) + offset
 
         val yearStart = Calendar.getInstance().apply {
@@ -197,7 +225,6 @@ class StatisticsViewModel(
             }
         }
 
-        fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
         val split = PaymentSplit(
             upiAmount = yearExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
             creditCardAmount = yearExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
@@ -215,10 +242,8 @@ class StatisticsViewModel(
         val todayStartMs = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        val thisMonthStartMs = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+        val nowMs = System.currentTimeMillis()
+        val thisMonthStartMs = BudgetPeriod.current(nowMs, startDay).start
         val allAutoExpenses = expenses.filter { isAutoSource(it.source) }
         val autoStats = AutoTrackStats(
             autoCount = yearExpenses.count { isAutoSource(it.source) },
@@ -247,60 +272,10 @@ class StatisticsViewModel(
             }
         }
 
-        // ── Monthly stats ────────────────────────────────────────
-        val mCal = Calendar.getInstance().apply { add(Calendar.MONTH, monthOffset) }
-        val mYear = mCal.get(Calendar.YEAR)
-        val mMonth = mCal.get(Calendar.MONTH)
-        val mStart = Calendar.getInstance().apply {
-            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val mEnd = Calendar.getInstance().apply {
-            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
-            set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
-        val monthExpenses = expenses.filter { it.date in mStart..mEnd }
-        val mTotal = monthExpenses.sumOf { it.amount }
-        val prevCal = Calendar.getInstance().apply {
-            set(mYear, mMonth, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0); add(Calendar.MONTH, -1)
-        }
-        val prevStart = Calendar.getInstance().apply {
-            set(prevCal.get(Calendar.YEAR), prevCal.get(Calendar.MONTH), 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val prevEnd = Calendar.getInstance().apply {
-            set(prevCal.get(Calendar.YEAR), prevCal.get(Calendar.MONTH), 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
-            set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
-        val prevTotal = expenses.filter { it.date in prevStart..prevEnd }.sumOf { it.amount }
-        val mVsLastPct = if (prevTotal > 0) ((mTotal - prevTotal) / prevTotal * 100).toInt() else null
-        val mLabel = "${MONTHS[mMonth]} $mYear"
-        val mCategories = parentCategories.map { parent ->
-            val children = categories.filter { it.parentId == parent.id }
-            val childIds = children.map { it.id }.toSet()
-            val total = monthExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
-            val subcats = children.map { child ->
-                SubcategoryRow(child, monthExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
-            }.filter { it.amount > 0 }.sortedByDescending { it.amount }
-            CategoryYearlyStat(parent, total, subcats)
-        }.filter { it.total > 0 }.sortedByDescending { it.total }
-        val mPaymentSplit = PaymentSplit(
-            upiAmount = monthExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
-            creditCardAmount = monthExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
-            cashAmount = monthExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
-        )
-        val mDetectionSplit = DetectionSplit(
-            autoAmount = monthExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
-            autoCount = monthExpenses.count { isAutoSource(it.source) },
-            manualAmount = monthExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
-            manualCount = monthExpenses.count { it.source == "Manual" },
-            recurringAmount = monthExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
-            recurringCount = monthExpenses.count { it.source == "Recurring" }
-        )
-
-        val mInsight = buildMonthlyInsight(monthExpenses, prevTotal, categories, mYear, mMonth, monthOffset == 0)
+        // ── Monthly stats: one budget month, from the user's start day ──
+        val mRange = BudgetPeriod.forOffset(nowMs, startDay, monthOffset)
+        val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month")
+        val range = rangeView(statsRange, expenses, categories, nowMs, startDay)
 
         StatisticsUiState(
             yearLabel = year.toString(),
@@ -318,16 +293,9 @@ class StatisticsViewModel(
             detectionSplit = detectionSplit,
             subcategoryBreakdown = subcategoryBreakdown,
             autoTrackStats = autoStats,
-            monthLabel = mLabel,
-            monthTotal = mTotal,
-            monthCategories = mCategories,
-            monthVsLastPct = mVsLastPct,
-            monthPaymentSplit = mPaymentSplit,
-            monthDetectionSplit = mDetectionSplit,
-            monthInsight = mInsight,
+            month = PeriodView(BudgetPeriod.label(mRange, startDay), mRange.start, mRange.endInclusive, month, "last month"),
             canGoForwardMonth = monthOffset < 0,
-            monthStart = mStart,
-            monthEnd = mEnd
+            range = range
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatisticsUiState())
 
@@ -336,63 +304,124 @@ class StatisticsViewModel(
 
     fun selectCategory(id: Long?) { _selectedCategoryId.value = id }
 
-    private fun buildMonthlyInsight(
-        monthExpenses: List<com.example.expensetracker.data.db.entity.Expense>,
+    private fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
+
+    private fun rangeView(r: StatsRange, expenses: List<Expense>, categories: List<Category>, now: Long, startDay: Int): PeriodView {
+        val (range, label, comparedWith) = when (r) {
+            is StatsRange.LastMonths -> Triple(BudgetPeriod.lastNMonths(now, startDay, r.n), "Last ${r.n} months", "the previous ${r.n} months")
+            StatsRange.AllTime -> Triple(
+                BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now)),
+                "All time", null)
+            is StatsRange.Custom -> {
+                val dr = DateRange(r.start, r.end)
+                val days = BudgetPeriod.daysInCycle(dr)
+                Triple(dr, dayRangeLabel(dr.start, dr.endInclusive, now), if (days == 1) "the day before" else "the $days days before")
+            }
+        }
+        val previous = if (comparedWith == null) null else BudgetPeriod.previousOfSameLength(range)
+        return PeriodView(label, range.start, range.endInclusive, periodStats(expenses, categories, range, previous, now, "period"), comparedWith)
+    }
+
+    /**
+     * Totals, categories, splits and an insight for [range], compared with [previous] (null = no
+     * comparison). [word] names the period in the insight text ("month", or "period" for a range).
+     */
+    private fun periodStats(
+        expenses: List<Expense>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long, word: String
+    ): PeriodStats {
+        val periodExpenses = expenses.filter { it.date in range }
+        val total = periodExpenses.sumOf { it.amount }
+        val prevTotal = previous?.let { p -> expenses.filter { it.date in p }.sumOf { it.amount } } ?: 0.0
+        val parentCategories = categories.filter { it.parentId == null }
+        val cats = parentCategories.map { parent ->
+            val children = categories.filter { it.parentId == parent.id }
+            val childIds = children.map { it.id }.toSet()
+            val catTotal = periodExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
+            val subcats = children.map { child ->
+                SubcategoryRow(child, periodExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
+            }.filter { it.amount > 0 }.sortedByDescending { it.amount }
+            CategoryYearlyStat(parent, catTotal, subcats)
+        }.filter { it.total > 0 }.sortedByDescending { it.total }
+        return PeriodStats(
+            total = total,
+            categories = cats,
+            vsPreviousPct = if (prevTotal > 0) ((total - prevTotal) / prevTotal * 100).toInt() else null,
+            paymentSplit = PaymentSplit(
+                upiAmount = periodExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
+                creditCardAmount = periodExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
+                cashAmount = periodExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
+            ),
+            detectionSplit = DetectionSplit(
+                autoAmount = periodExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
+                autoCount = periodExpenses.count { isAutoSource(it.source) },
+                manualAmount = periodExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
+                manualCount = periodExpenses.count { it.source == "Manual" },
+                recurringAmount = periodExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
+                recurringCount = periodExpenses.count { it.source == "Recurring" }
+            ),
+            insight = buildPeriodInsight(periodExpenses, prevTotal, previous, categories, range, now, word)
+        )
+    }
+
+    private fun buildPeriodInsight(
+        periodExpenses: List<Expense>,
         prevTotal: Double,
+        previous: DateRange?,
         categories: List<Category>,
-        mYear: Int,
-        mMonth: Int,
-        isCurrentMonth: Boolean
+        range: DateRange,
+        now: Long,
+        word: String
     ): MonthlyInsight? {
-        if (monthExpenses.isEmpty()) return null
-        val total = monthExpenses.sumOf { it.amount }
+        if (periodExpenses.isEmpty()) return null
+        val total = periodExpenses.sumOf { it.amount }
         val numFmt = NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }
         fun fmt(v: Double) = numFmt.format(v)
 
-        val lastDayOfMonth = Calendar.getInstance().apply { set(mYear, mMonth, 1) }.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val effectiveDay = if (isCurrentMonth) Calendar.getInstance().get(Calendar.DAY_OF_MONTH) else lastDayOfMonth
-        // Previous month's day count for accurate pace calculation
-        val prevCal = Calendar.getInstance().apply { set(mYear, mMonth, 1); add(Calendar.MONTH, -1) }
-        val prevLastDay = prevCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val isCurrent = now in range
+        // Days so far (the period may start mid-month): through today if it's still running.
+        val effectiveDays = if (isCurrent) BudgetPeriod.daysInCycle(DateRange(range.start, now)) else BudgetPeriod.daysInCycle(range)
+        val days = (0 until effectiveDays).map { i -> Calendar.getInstance().apply { timeInMillis = range.start; add(Calendar.DAY_OF_YEAR, i) } }
+        fun dayKey(c: Calendar) = c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR)
+        val prevDays = previous?.let { BudgetPeriod.daysInCycle(it) } ?: 0
 
         val pool = mutableListOf<MonthlyInsight>()
 
-        // vs previous month
-        if (prevTotal > 0) {
-            val pct = if (isCurrentMonth) {
-                val prevPaced = prevTotal / prevLastDay * effectiveDay
+        // vs the previous period, paced to the same day while this one is still running
+        if (prevTotal > 0 && prevDays > 0) {
+            val pct = if (isCurrent) {
+                val prevPaced = prevTotal / prevDays * effectiveDays
                 if (prevPaced > 0) ((total - prevPaced) / prevPaced * 100).roundToInt() else null
             } else {
                 ((total - prevTotal) / prevTotal * 100).roundToInt()
             }
             if (pct != null) when {
-                pct > 20 -> pool.add(MonthlyInsight("📈", "${pct}% up on last month", "₹${fmt(kotlin.math.abs(total - prevTotal))} more than ${if (isCurrentMonth) "at this point last month" else "last month"}"))
-                pct < -15 -> pool.add(MonthlyInsight("📉", "${-pct}% under last month", "₹${fmt(kotlin.math.abs(total - prevTotal))} less than last month — great job!"))
+                pct > 20 -> pool.add(MonthlyInsight("📈", "${pct}% up on last $word", "₹${fmt(kotlin.math.abs(total - prevTotal))} more than ${if (isCurrent) "at this point last $word" else "last $word"}"))
+                pct < -15 -> pool.add(MonthlyInsight("📉", "${-pct}% under last $word", "₹${fmt(kotlin.math.abs(total - prevTotal))} less than last $word — great job!"))
             }
         }
 
         // Most-visited merchant (≥ 2 times)
-        val topMerchant = monthExpenses.groupBy { it.description.trim().lowercase() }
+        val topMerchant = periodExpenses.groupBy { it.description.trim().lowercase() }
             .entries.filter { it.value.size >= 2 }.maxByOrNull { it.value.size }
         if (topMerchant != null) {
-            val name = monthExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
+            val name = periodExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
             pool.add(MonthlyInsight("🛒", "$name · ${topMerchant.value.size}×", "₹${fmt(topMerchant.value.sumOf { it.amount })} across ${topMerchant.value.size} transactions"))
         }
 
         // No-spend days
-        val daysWithSpend = monthExpenses.map { Calendar.getInstance().apply { timeInMillis = it.date }.get(Calendar.DAY_OF_MONTH) }.toSet()
-        val noSpendDays = (1..effectiveDay).count { it !in daysWithSpend }
-        if (noSpendDays >= 3) pool.add(MonthlyInsight("✨", "$noSpendDays no-spend days", "You went $noSpendDays day${if (noSpendDays != 1) "s" else ""} without spending this month"))
+        val daysWithSpend = periodExpenses.map { dayKey(Calendar.getInstance().apply { timeInMillis = it.date }) }.toSet()
+        val noSpendDays = days.count { dayKey(it) !in daysWithSpend }
+        if (noSpendDays >= 3) pool.add(MonthlyInsight("✨", "$noSpendDays no-spend days", "You went $noSpendDays day${if (noSpendDays != 1) "s" else ""} without spending this $word"))
 
         // Weekend vs weekday daily spend
         var wkendTotal = 0.0; var wkdayTotal = 0.0
-        monthExpenses.forEach { exp ->
+        periodExpenses.forEach { exp ->
             val dow = Calendar.getInstance().apply { timeInMillis = exp.date }.get(Calendar.DAY_OF_WEEK)
             if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendTotal += exp.amount else wkdayTotal += exp.amount
         }
         var wkendDays = 0; var wkdayDays = 0
-        for (d in 1..effectiveDay) {
-            val dow = Calendar.getInstance().apply { set(mYear, mMonth, d) }.get(Calendar.DAY_OF_WEEK)
+        days.forEach { d ->
+            val dow = d.get(Calendar.DAY_OF_WEEK)
             if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendDays++ else wkdayDays++
         }
         val wkendPerDay = if (wkendDays > 0) wkendTotal / wkendDays else 0.0
@@ -406,27 +435,27 @@ class StatisticsViewModel(
         val parentCats = categories.filter { it.parentId == null }
         val topCat = parentCats.map { parent ->
             val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
-            val catTotal = monthExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
+            val catTotal = periodExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
             parent to catTotal
         }.filter { it.second > 0 }.maxByOrNull { it.second }
         if (topCat != null && (topCat.second / total * 100) > 38) {
             val pct = (topCat.second / total * 100).roundToInt()
-            pool.add(MonthlyInsight(topCat.first.emoji, "${topCat.first.name} takes the most", "$pct% of this month — ₹${fmt(topCat.second)}"))
+            pool.add(MonthlyInsight(topCat.first.emoji, "${topCat.first.name} takes the most", "$pct% of this $word — ₹${fmt(topCat.second)}"))
         }
 
         // Biggest expense (fallback)
-        val biggest = monthExpenses.maxByOrNull { it.amount }
+        val biggest = periodExpenses.maxByOrNull { it.amount }
         if (biggest != null) pool.add(MonthlyInsight("💸", "Biggest expense", "${biggest.description} · ₹${fmt(biggest.amount)}"))
 
         return pool.firstOrNull()
     }
 
     companion object {
-        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository) =
+        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, monthStartDay: Flow<Int>) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    StatisticsViewModel(expenseRepo, categoryRepo) as T
+                    StatisticsViewModel(expenseRepo, categoryRepo, monthStartDay) as T
             }
     }
 }

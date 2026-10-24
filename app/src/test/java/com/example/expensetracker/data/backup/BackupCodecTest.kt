@@ -31,12 +31,18 @@ class BackupCodecTest {
             loans = listOf(Loan(id = 2, name = "Car", totalAmount = 500000.0, monthlyEmi = 12000.0, tenureMonths = 48, startDate = 1L)),
             savingsGoals = listOf(SavingsGoal(id = 4, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0)),
             merchantMappings = listOf(MerchantMapping("Swiggy", 1)),
-            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true),
+            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true, monthStartDay = 25),
             parsingRules = listOf(com.example.expensetracker.sms.ParsingRule("r1", com.example.expensetracker.sms.ParsingRule.Kind.PAYMENT,
                 "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L))
         )
         assertEquals(data, ok(BackupCodec.toJson(data)))
         assertTrue(data.missingSections.isEmpty())
+    }
+
+    @Test fun `version 2 backups from before the month start day leave it unset`() {
+        val v2 = """{"version":2,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],
+            "settings":{"monthlyIncome":50000.0,"weekStartsOnMonday":true}}"""
+        assertEquals(null, ok(v2).settings!!.monthStartDay)
     }
 
     @Test fun `backups never contain the captured SMS or notification text`() {

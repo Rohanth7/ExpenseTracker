@@ -16,7 +16,9 @@ data class BackupSettings(
     val monthlyIncome: Double? = null,
     val budgetAlertsEnabled: Boolean? = null,
     val budgetAlertThreshold: Int? = null,
-    val weekStartsOnMonday: Boolean? = null
+    val weekStartsOnMonday: Boolean? = null,
+    /** Day the budget month starts (1–28). Optional, so older v2 files still read; null leaves it unchanged. */
+    val monthStartDay: Int? = null
 )
 
 /**

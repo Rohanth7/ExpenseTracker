@@ -1,6 +1,7 @@
 package com.example.expensetracker.data.preferences
 
 import android.content.Context
+import com.example.expensetracker.data.period.BudgetPeriod
 
 class PreferencesManager(context: Context, fileName: String = "expense_tracker_prefs") {
     private val prefs = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
@@ -24,6 +25,11 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
     var weekStartsOnMonday: Boolean
         get() = prefs.getBoolean("week_starts_monday", true)
         set(value) = prefs.edit().putBoolean("week_starts_monday", value).apply()
+
+    /** Day the budget month starts, 1–28 (1 = calendar month). Read it live through `MonthStartDay`. */
+    var monthStartDay: Int
+        get() = BudgetPeriod.clampStartDay(prefs.getInt("month_start_day", 1))
+        set(value) = prefs.edit().putInt("month_start_day", BudgetPeriod.clampStartDay(value)).apply()
 
     /** Set once the first-run setup has been finished or skipped for an existing install. */
     var onboardingCompleted: Boolean

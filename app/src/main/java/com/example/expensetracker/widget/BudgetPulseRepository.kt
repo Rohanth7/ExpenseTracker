@@ -1,15 +1,17 @@
 package com.example.expensetracker.widget
 
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.DateRange
 import com.example.expensetracker.data.preferences.PreferencesManager
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Locale
 
 data class WidgetData(
     val spent: Double,
     val income: Double,
     val monthLabel: String,
+    /** Day of the budget month (1 on its first day) and its length; see BudgetPeriod. */
     val dayOfMonth: Int,
     val daysInMonth: Int,
     val prevMonthSpent: Double,
@@ -20,37 +22,25 @@ data class WidgetData(
 class BudgetPulseRepository(private val db: AppDatabase, private val prefs: PreferencesManager) {
 
     suspend fun load(): WidgetData {
-        val now = Calendar.getInstance()
-        val prevCal = (now.clone() as Calendar).apply { add(Calendar.MONTH, -1) }
-
-        val (curStart, curEnd) = monthRange(now)
-        val (prevStart, prevEnd) = monthRange(prevCal)
-
-        val fmt = SimpleDateFormat("MMM", Locale.getDefault())
+        val now = System.currentTimeMillis()
+        // Budget months follow the user's start day (see BudgetPeriod); bills don't affect the widget.
+        val startDay = prefs.monthStartDay
+        val cur = BudgetPeriod.current(now, startDay)
+        val prev = BudgetPeriod.forOffset(now, startDay, -1)
+        val month = SimpleDateFormat("MMM", Locale.getDefault())
+        val day = SimpleDateFormat("d MMM", Locale.getDefault())
+        fun label(r: DateRange) = (if (startDay == 1) month.format(r.start)
+            else "${day.format(r.start)}–${day.format(r.endInclusive)}").uppercase(Locale.getDefault())
 
         return WidgetData(
-            spent = db.expenseDao().getTotalSpentInRange(curStart, curEnd),
+            spent = db.expenseDao().getTotalSpentInRange(cur.start, cur.endInclusive),
             income = prefs.monthlyIncome,
-            monthLabel = fmt.format(now.time).uppercase(Locale.getDefault()),
-            dayOfMonth = now.get(Calendar.DAY_OF_MONTH),
-            daysInMonth = now.getActualMaximum(Calendar.DAY_OF_MONTH),
-            prevMonthSpent = db.expenseDao().getTotalSpentInRange(prevStart, prevEnd),
-            prevMonthLabel = fmt.format(prevCal.time).uppercase(Locale.getDefault()),
+            monthLabel = label(cur),
+            dayOfMonth = BudgetPeriod.dayOfCycle(now, startDay),
+            daysInMonth = BudgetPeriod.daysInCycle(cur),
+            prevMonthSpent = db.expenseDao().getTotalSpentInRange(prev.start, prev.endInclusive),
+            prevMonthLabel = if (startDay == 1) label(prev) else "LAST MONTH",
             widgetEnabled = prefs.widgetEnabled
         )
-    }
-
-    private fun monthRange(cal: Calendar): Pair<Long, Long> {
-        val start = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val end = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59)
-            set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
-        return start to end
     }
 }
