@@ -106,6 +106,15 @@ data class PeriodStats(
     val insight: MonthlyInsight?
 )
 
+/**
+ * [previous]'s total to compare [range]'s with: while [range] is still running, scaled to the
+ * days of it gone so far; once it's over, the whole total.
+ */
+internal fun comparableTotal(prevTotal: Double, previous: DateRange, range: DateRange, now: Long): Double {
+    if (now !in range) return prevTotal
+    return prevTotal / BudgetPeriod.daysInCycle(previous) * BudgetPeriod.daysInCycle(DateRange(range.start, now))
+}
+
 class StatisticsViewModel(
     private val expenseRepo: ExpenseRepository,
     private val categoryRepo: CategoryRepository,
@@ -239,10 +248,8 @@ class StatisticsViewModel(
             recurringCount = yearExpenses.count { it.source == "Recurring" }
         )
 
-        val todayStartMs = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
         val nowMs = System.currentTimeMillis()
+        val todayStartMs = BudgetPeriod.startOfDay(nowMs)
         val thisMonthStartMs = BudgetPeriod.current(nowMs, startDay).start
         val allAutoExpenses = expenses.filter { isAutoSource(it.source) }
         val autoStats = AutoTrackStats(
@@ -274,7 +281,7 @@ class StatisticsViewModel(
 
         // ── Monthly stats: one budget month, from the user's start day ──
         val mRange = BudgetPeriod.forOffset(nowMs, startDay, monthOffset)
-        val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month")
+        val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month", MONTH_VS, paceCard = false)
         val range = rangeView(statsRange, expenses, categories, nowMs, startDay)
 
         StatisticsUiState(
@@ -293,7 +300,7 @@ class StatisticsViewModel(
             detectionSplit = detectionSplit,
             subcategoryBreakdown = subcategoryBreakdown,
             autoTrackStats = autoStats,
-            month = PeriodView(BudgetPeriod.label(mRange, startDay), mRange.start, mRange.endInclusive, month, "last month"),
+            month = PeriodView(BudgetPeriod.label(mRange, startDay), mRange.start, mRange.endInclusive, month, MONTH_VS),
             canGoForwardMonth = monthOffset < 0,
             range = range
         )
@@ -319,19 +326,26 @@ class StatisticsViewModel(
             }
         }
         val previous = if (comparedWith == null) null else BudgetPeriod.previousOfSameLength(range)
-        return PeriodView(label, range.start, range.endInclusive, periodStats(expenses, categories, range, previous, now, "period"), comparedWith)
+        // "Last 3 months" includes this month's days still to come, so it's compared at today's pace.
+        val stats = periodStats(expenses, categories, range, previous, now, "period", comparedWith, paceCard = true)
+        return PeriodView(label, range.start, range.endInclusive, stats, comparedWith)
     }
 
     /**
      * Totals, categories, splits and an insight for [range], compared with [previous] (null = no
-     * comparison). [word] names the period in the insight text ("month", or "period" for a range).
+     * comparison), which [vs] names ("last month"). [word] names the period in the insight text
+     * ("month", or "period" for a range). The insight always compares at today's pace; the card
+     * does with [paceCard] (a month's card shows spending so far against all of last month).
      */
     private fun periodStats(
-        expenses: List<Expense>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long, word: String
+        expenses: List<Expense>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long,
+        word: String, vs: String?, paceCard: Boolean
     ): PeriodStats {
         val periodExpenses = expenses.filter { it.date in range }
         val total = periodExpenses.sumOf { it.amount }
         val prevTotal = previous?.let { p -> expenses.filter { it.date in p }.sumOf { it.amount } } ?: 0.0
+        val comparable = previous?.let { comparableTotal(prevTotal, it, range, now) } ?: 0.0
+        val cardPrev = if (paceCard) comparable else prevTotal
         val parentCategories = categories.filter { it.parentId == null }
         val cats = parentCategories.map { parent ->
             val children = categories.filter { it.parentId == parent.id }
@@ -345,7 +359,7 @@ class StatisticsViewModel(
         return PeriodStats(
             total = total,
             categories = cats,
-            vsPreviousPct = if (prevTotal > 0) ((total - prevTotal) / prevTotal * 100).toInt() else null,
+            vsPreviousPct = if (cardPrev > 0) ((total - cardPrev) / cardPrev * 100).toInt() else null,
             paymentSplit = PaymentSplit(
                 upiAmount = periodExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
                 creditCardAmount = periodExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
@@ -359,14 +373,14 @@ class StatisticsViewModel(
                 recurringAmount = periodExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
                 recurringCount = periodExpenses.count { it.source == "Recurring" }
             ),
-            insight = buildPeriodInsight(periodExpenses, prevTotal, previous, categories, range, now, word)
+            insight = buildPeriodInsight(periodExpenses, comparable, vs, categories, range, now, word)
         )
     }
 
     private fun buildPeriodInsight(
         periodExpenses: List<Expense>,
-        prevTotal: Double,
-        previous: DateRange?,
+        comparable: Double,
+        vs: String?,
         categories: List<Category>,
         range: DateRange,
         now: Long,
@@ -382,21 +396,17 @@ class StatisticsViewModel(
         val effectiveDays = if (isCurrent) BudgetPeriod.daysInCycle(DateRange(range.start, now)) else BudgetPeriod.daysInCycle(range)
         val days = (0 until effectiveDays).map { i -> Calendar.getInstance().apply { timeInMillis = range.start; add(Calendar.DAY_OF_YEAR, i) } }
         fun dayKey(c: Calendar) = c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR)
-        val prevDays = previous?.let { BudgetPeriod.daysInCycle(it) } ?: 0
 
         val pool = mutableListOf<MonthlyInsight>()
 
         // vs the previous period, paced to the same day while this one is still running
-        if (prevTotal > 0 && prevDays > 0) {
-            val pct = if (isCurrent) {
-                val prevPaced = prevTotal / prevDays * effectiveDays
-                if (prevPaced > 0) ((total - prevPaced) / prevPaced * 100).roundToInt() else null
-            } else {
-                ((total - prevTotal) / prevTotal * 100).roundToInt()
-            }
-            if (pct != null) when {
-                pct > 20 -> pool.add(MonthlyInsight("📈", "${pct}% up on last $word", "₹${fmt(kotlin.math.abs(total - prevTotal))} more than ${if (isCurrent) "at this point last $word" else "last $word"}"))
-                pct < -15 -> pool.add(MonthlyInsight("📉", "${-pct}% under last $word", "₹${fmt(kotlin.math.abs(total - prevTotal))} less than last $word — great job!"))
+        if (vs != null && comparable > 0) {
+            val pct = ((total - comparable) / comparable * 100).roundToInt()
+            val diff = "₹${fmt(kotlin.math.abs(total - comparable))}"
+            val atPoint = if (isCurrent) " at this point" else ""
+            when {
+                pct > 20 -> pool.add(MonthlyInsight("📈", "${pct}% up on $vs", "$diff more than $vs$atPoint"))
+                pct < -15 -> pool.add(MonthlyInsight("📉", "${-pct}% under $vs", "$diff less than $vs$atPoint — great job!"))
             }
         }
 
@@ -451,6 +461,8 @@ class StatisticsViewModel(
     }
 
     companion object {
+        private const val MONTH_VS = "last month"
+
         fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, monthStartDay: Flow<Int>) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

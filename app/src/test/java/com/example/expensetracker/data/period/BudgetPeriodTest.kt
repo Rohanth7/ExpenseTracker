@@ -35,6 +35,12 @@ class BudgetPeriodTest {
     }
     @Test fun `last three months ends with the current cycle`() =
         assertEquals(DateRange(start(2026, 8, 1), end(2026, 10, 31)), BudgetPeriod.lastNMonths(at(2026, 10, 16), 1, 3))
+    @Test fun `day range labels drop the year in the current year and collapse one day`() {
+        val now = at(2026, 10, 24)
+        assertEquals("1 Oct – 13 Oct", BudgetPeriod.dayRangeLabel(start(2026, 10, 1), end(2026, 10, 13), now))
+        assertEquals("5 Oct", BudgetPeriod.dayRangeLabel(start(2026, 10, 5), end(2026, 10, 5), now))
+        assertEquals("20 Dec 2025 – 3 Jan 2026", BudgetPeriod.dayRangeLabel(start(2025, 12, 20), end(2026, 1, 3), now))
+    }
     @Test fun `labels`() {
         val now = at(2026, 10, 16)
         assertEquals("Oct 2026", BudgetPeriod.label(BudgetPeriod.current(now, 1), 1, now))

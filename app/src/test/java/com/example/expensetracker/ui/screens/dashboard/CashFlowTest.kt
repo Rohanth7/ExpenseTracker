@@ -36,4 +36,6 @@ class CashFlowTest {
         assertEquals(0.0, emi(listOf(loan(5000.0, 20, startDate = at(2026, 11, 1))), at(2026, 10, 16)), 0.0)
     @Test fun `in a 25th-to-24th cycle, an EMI due on the 5th of next month still counts`() =
         assertEquals(5000.0, emi(listOf(loan(5000.0, 5)), at(2026, 10, 26), startDay = 25), 0.0)
+    @Test fun `no EMI is counted before the loan starts`() =  // cycle 10 Oct – 9 Nov; 1 Nov is before the 3 Nov start
+        assertEquals(0.0, emi(listOf(loan(5000.0, 1, startDate = at(2026, 11, 3))), at(2026, 10, 26), startDay = 10), 0.0)
 }

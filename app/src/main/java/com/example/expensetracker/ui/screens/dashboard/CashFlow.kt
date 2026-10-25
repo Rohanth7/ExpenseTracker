@@ -2,6 +2,7 @@ package com.example.expensetracker.ui.screens.dashboard
 
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Loan
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.DateRange
 import java.util.Calendar
 
@@ -27,7 +28,7 @@ object CashFlow {
 
     /** Reminder bills count from today's start; auto-logged bills only after today (today's is logged and in spent). */
     fun billsStillDue(bills: List<Bill>, now: Long, cycle: DateRange): Double {
-        val todayStart = startOfDay(now)
+        val todayStart = BudgetPeriod.startOfDay(now)
         val tomorrowStart = todayStart + 24 * 60 * 60 * 1000L
         return bills.filter { it.isEnabled }.sumOf { b ->
             val from = if (b.autoLog) tomorrowStart else todayStart
@@ -35,14 +36,12 @@ object CashFlow {
         }
     }
 
-    /** EMIs still to come this cycle; pass loans that still have EMIs left. Loans that start after the cycle don't count. */
+    /** EMIs still to come this cycle; pass loans that still have EMIs left. Nothing is due before a loan starts. */
     fun emiStillDue(loans: List<Loan>, now: Long, cycle: DateRange): Double {
-        val todayStart = startOfDay(now)
-        return loans.filter { it.isActive && it.startDate <= cycle.endInclusive }
-            .sumOf { dueDatesInRange(it.dueDayOfMonth, todayStart, cycle.endInclusive).size * it.monthlyEmi }
+        val todayStart = BudgetPeriod.startOfDay(now)
+        return loans.filter { it.isActive }.sumOf { loan ->
+            val from = maxOf(todayStart, BudgetPeriod.startOfDay(loan.startDate))
+            if (from > cycle.endInclusive) 0.0 else dueDatesInRange(loan.dueDayOfMonth, from, cycle.endInclusive).size * loan.monthlyEmi
+        }
     }
-
-    private fun startOfDay(t: Long) = Calendar.getInstance().apply {
-        timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
 }

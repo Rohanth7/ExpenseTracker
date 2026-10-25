@@ -71,15 +71,20 @@ object BudgetPeriod {
         (Math.round((startOfDay(range.endInclusive) - range.start).toDouble() / DAY_MS) + 1).toInt()
 
     /** "Oct 2026" for calendar months; "25 Sep – 24 Oct" for cycles, with years unless it's all in [now]'s year. */
-    fun label(range: DateRange, monthStartDay: Int, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String {
-        if (clampStartDay(monthStartDay) == 1) return SimpleDateFormat("MMM yyyy", locale).format(range.start)
+    fun label(range: DateRange, monthStartDay: Int, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String =
+        if (clampStartDay(monthStartDay) == 1) SimpleDateFormat("MMM yyyy", locale).format(range.start)
+        else dayRangeLabel(range.start, range.endInclusive, now, locale)
+
+    /** "1 Oct – 13 Oct", or "5 Oct" for one day; with years unless it's all in [now]'s year. */
+    fun dayRangeLabel(start: Long, end: Long, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String {
         val year = SimpleDateFormat("yyyy", locale)
-        val thisYear = year.format(range.start) == year.format(range.endInclusive) && year.format(range.start) == year.format(now)
+        val thisYear = year.format(start) == year.format(end) && year.format(start) == year.format(now)
         val fmt = SimpleDateFormat(if (thisYear) "d MMM" else "d MMM yyyy", locale)
-        return "${fmt.format(range.start)} – ${fmt.format(range.endInclusive)}"
+        val a = fmt.format(start); val b = fmt.format(end)
+        return if (a == b) a else "$a – $b"
     }
 
-    private fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
+    fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
         timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 }

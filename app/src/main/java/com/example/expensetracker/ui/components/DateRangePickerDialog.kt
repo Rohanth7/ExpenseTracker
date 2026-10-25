@@ -24,9 +24,14 @@ import com.example.expensetracker.ui.util.utcMidnightToLocalDayStart
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DateRangePickerDialog(title: String, initial: Pair<Long, Long>?, onDismiss: () -> Unit, onPick: (Pair<Long, Long>) -> Unit) {
+    // Only past days can be picked, so a range running past today (e.g. this month) opens ending today.
+    val today = toUtcMidnight(System.currentTimeMillis())
+    val (initialStart, initialEnd) = initial
+        ?.let { (start, end) -> toUtcMidnight(start) to toUtcMidnight(end).coerceAtMost(today) }
+        ?.takeIf { (start, _) -> start <= today } ?: (null to null)
     val state = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = initial?.first?.let(::toUtcMidnight),
-        initialSelectedEndDateMillis = initial?.second?.let(::toUtcMidnight),
+        initialSelectedStartDateMillis = initialStart,
+        initialSelectedEndDateMillis = initialEnd,
         selectableDates = PastOrTodayDates
     )
     DatePickerDialog(

@@ -62,11 +62,7 @@ import kotlinx.coroutines.flow.first
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
     object Dashboard : Screen("dashboard", "Overview")
-    object Expenses : Screen("expenses", "Expenses", "expenses?start={start}&end={end}") {
-        fun createRoute(start: Long? = null, end: Long? = null): String {
-            return if (start != null && end != null) "expenses?start=$start&end=$end" else "expenses"
-        }
-    }
+    object Expenses : Screen("expenses", "Expenses")
     object Categories : Screen("categories", "Categories")
     object Statistics : Screen("statistics", "Stats")
     object Settings : Screen("settings", "Settings")
@@ -111,6 +107,9 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
     // rotation in the moment between the tap and the dialog opening doesn't lose the request; the
     // open dialog itself closes on rotation, as every dialog in the app does.
     var quickAddRequested by rememberSaveable { mutableStateOf(false) }
+    // Statistics' "View all", waiting for the Expenses screen to filter to those dates. Not a route
+    // argument: going back to the saved Expenses tab restores its old arguments, not new ones.
+    var expensesRangeRequest by rememberSaveable { mutableStateOf<Pair<Long, Long>?>(null) }
 
     // Apply recurring expenses if it's a new month; schedule bill reminders
     LaunchedEffect(Unit) {
@@ -202,26 +201,14 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                     onEnableTracking = { navController.navigateToTab(Screen.Settings.route, restore = false) }
                 )
             }
-            composable(
-                route = Screen.Expenses.pattern,
-                arguments = listOf(
-                    navArgument("start") { type = NavType.LongType; defaultValue = -1L },
-                    navArgument("end") { type = NavType.LongType; defaultValue = -1L }
-                )
-            ) { backStackEntry ->
-                val start = backStackEntry.arguments?.getLong("start") ?: -1L
-                val end = backStackEntry.arguments?.getLong("end") ?: -1L
-                
+            composable(Screen.Expenses.pattern) {
                 val vm: ExpensesViewModel = viewModel(
                     factory = ExpensesViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)
                 )
-                
-                LaunchedEffect(start, end) {
-                    if (start != -1L && end != -1L) {
-                        vm.setDateRange(start, end)
-                    } else {
-                        vm.clearDateRange()
-                    }
+                LaunchedEffect(expensesRangeRequest) {
+                    val range = expensesRangeRequest ?: return@LaunchedEffect
+                    vm.setDateRange(range.first, range.second)
+                    expensesRangeRequest = null
                 }
 
                 ExpensesScreen(
@@ -243,7 +230,12 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                 )
                 StatisticsScreen(
                     viewModel = vm,
-                    onMonthClick = { start, end -> navController.navigateToTab(Screen.Expenses.createRoute(start, end)) }
+                    onMonthClick = { start, end ->
+                        expensesRangeRequest = start to end
+                        // Back to the list itself, as for the widget's "+" above.
+                        navController.navigateToTab(Screen.Expenses.route)
+                        navController.popBackStack(Screen.Expenses.pattern, inclusive = false)
+                    }
                 )
             }
             composable(Screen.Settings.pattern) {
