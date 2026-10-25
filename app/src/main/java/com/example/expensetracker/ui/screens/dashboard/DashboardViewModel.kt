@@ -227,10 +227,7 @@ class DashboardViewModel(
     ): List<SmartInsight> {
         val result = mutableListOf<SmartInsight>()
         // The days of this budget month so far (it may start mid-month), as calendars at midnight.
-        val daysSoFar = (0 until dayOfCycle).map { i ->
-            Calendar.getInstance().apply { timeInMillis = cycleStart; add(Calendar.DAY_OF_YEAR, i) }
-        }
-        fun dayKey(c: Calendar) = c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR)
+        val daysSoFar = BudgetPeriod.days(cycleStart, dayOfCycle)
 
         // vs last month pace (pro-rated to same day)
         val prevPaced = if (prevDays > 0) prevTotal / prevDays * dayOfCycle else 0.0
@@ -257,10 +254,8 @@ class DashboardViewModel(
         }
 
         // No-spend days (days with zero transactions)
-        val daysWithSpend = allMonthExpenses.map { exp ->
-            dayKey(Calendar.getInstance().apply { timeInMillis = exp.date })
-        }.toSet()
-        val noSpendDays = daysSoFar.count { dayKey(it) !in daysWithSpend }
+        val daysWithSpend = allMonthExpenses.map { BudgetPeriod.dayKey(it.date) }.toSet()
+        val noSpendDays = daysSoFar.count { BudgetPeriod.dayKey(it.timeInMillis) !in daysWithSpend }
         if (noSpendDays >= 3) {
             result.add(SmartInsight("✨", "$noSpendDays no-spend days so far",
                 "You went without any spending on $noSpendDays day${if (noSpendDays != 1) "s" else ""} this month"))

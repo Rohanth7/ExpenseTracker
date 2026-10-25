@@ -35,12 +35,4 @@ class DateUtilTest {
     }
 
     private fun day(y: Int, m: Int, d: Int, h: Int = 0) = Calendar.getInstance().apply { clear(); set(y, m - 1, d, h, 0) }.timeInMillis
-
-    @Test fun `day ranges read as short dates, with years only when needed`() {
-        val now = day(2026, 10, 23, 12)
-        assertEquals("1 Oct – 13 Oct", dayRangeLabel(day(2026, 10, 1), day(2026, 10, 13, 23), now))
-        assertEquals("13 Oct", dayRangeLabel(day(2026, 10, 13), day(2026, 10, 13, 23), now))
-        assertEquals("20 Dec 2025 – 5 Jan 2026", dayRangeLabel(day(2025, 12, 20), day(2026, 1, 5, 23), now))
-        assertEquals("1 Mar 2025 – 31 Mar 2025", dayRangeLabel(day(2025, 3, 1), day(2025, 3, 31, 23), now))
-    }
 }

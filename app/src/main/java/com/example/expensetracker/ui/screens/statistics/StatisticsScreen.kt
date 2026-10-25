@@ -71,7 +71,7 @@ private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) -> Unit) {
     val state by viewModel.uiState.collectAsState()
-    val viewMode by viewModel.viewMode.collectAsState()
+    val viewMode = state.viewMode
     var showRangeSheet by remember { mutableStateOf(false) }
     val headerLabel = when (viewMode) {
         ViewMode.MONTHLY -> state.month.label
@@ -499,10 +499,19 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
     }
 
     state.selectedCategory?.let { category ->
+        // Split over the same days as the row that was tapped
+        val shown = when (viewMode) {
+            ViewMode.MONTHLY -> state.month.stats.categories
+            ViewMode.RANGE -> state.range.stats.categories
+            ViewMode.ANNUAL -> state.topCategories
+        }
+        val subcats = shown.find { it.category.id == category.id }?.subcategories.orEmpty()
+        val subTotal = subcats.sumOf { it.amount }
         CategoryDetailDialog(
             category = category,
             trend = state.selectedCategoryTrend ?: emptyList(),
-            subcategoryBreakdown = state.subcategoryBreakdown,
+            subcategoryBreakdown = subcats.map { SubcategoryBreakdown(it.category, it.amount, (it.amount / subTotal).toFloat().coerceIn(0f, 1f)) },
+            periodLabel = headerLabel,
             onDismiss = { viewModel.selectCategory(null) }
         )
     }
@@ -806,6 +815,7 @@ private fun CategoryDetailDialog(
     category: com.example.expensetracker.data.db.entity.Category,
     trend: List<CategoryTrend>,
     subcategoryBreakdown: List<SubcategoryBreakdown>?,
+    periodLabel: String,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -831,7 +841,7 @@ private fun CategoryDetailDialog(
                 CategoryTrendChart(trend = trend, color = parseColor(category.colorHex))
                 if (!subcategoryBreakdown.isNullOrEmpty()) {
                     Spacer(Modifier.height(24.dp))
-                    Text("THIS YEAR BY SUBCATEGORY", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
+                    Text("BY SUBCATEGORY · ${periodLabel.uppercase()}", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
                     Spacer(Modifier.height(14.dp))
                     SubcategoryBreakdownChart(subcategoryBreakdown)
                 }

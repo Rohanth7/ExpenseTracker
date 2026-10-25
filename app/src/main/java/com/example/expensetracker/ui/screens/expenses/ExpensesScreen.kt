@@ -41,10 +41,10 @@ import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.ui.components.DateRangePickerDialog
 import com.example.expensetracker.ui.util.PastOrTodayDates
-import com.example.expensetracker.ui.util.dayRangeLabel
 import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.toUtcMidnight
@@ -249,7 +249,7 @@ fun ExpensesScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Default.CalendarToday, null, tint = Jade, modifier = Modifier.size(13.dp))
-                        Text(dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
+                        Text(BudgetPeriod.dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
                         Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(13.dp))
                     }
                 }
@@ -497,7 +497,7 @@ private fun AdvancedFiltersDialog(
                                 colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
                             Text(when {
                                 p == ExportPreset.ALL -> "Any time"
-                                p == ExportPreset.CUSTOM && custom != null -> dayRangeLabel(custom!!.first, custom!!.second)
+                                p == ExportPreset.CUSTOM && custom != null -> BudgetPeriod.dayRangeLabel(custom!!.first, custom!!.second)
                                 else -> p.label
                             }, color = Ink, fontSize = 14.sp)
                         }

@@ -1,9 +1,12 @@
 package com.example.expensetracker.ui.screens.expenses
 
 import android.content.Context
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.preferences.PreferencesManager
@@ -19,17 +22,19 @@ class ExpensesViewModel(
     private val categoryRepo: CategoryRepository,
     private val mappingRepo: MerchantMappingRepository,
     private val appContext: Context,
-    private val prefs: PreferencesManager
+    private val prefs: PreferencesManager,
+    /** Keeps the filters if Android stops the app in the background. */
+    saved: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
 
-    private val _searchQuery = MutableStateFlow("")
-    private val _categoryFilter = MutableStateFlow<Long?>(-1L)
-    private val _tagFilter = MutableStateFlow<String?>(null)
-    private val _sortByAmount = MutableStateFlow(false)
+    private val _searchQuery = saved.getMutableStateFlow("search", "")
+    private val _categoryFilter = saved.getMutableStateFlow<Long?>("category", -1L)
+    private val _tagFilter = saved.getMutableStateFlow<String?>("tag", null)
+    private val _sortByAmount = saved.getMutableStateFlow("sort_by_amount", false)
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
-    private val _dateRange = MutableStateFlow<Pair<Long, Long>?>(null)
-    private val _minAmount = MutableStateFlow<Double?>(null)
-    private val _maxAmount = MutableStateFlow<Double?>(null)
+    private val _dateRange = saved.getMutableStateFlow<Pair<Long, Long>?>("date_range", null)
+    private val _minAmount = saved.getMutableStateFlow<Double?>("min_amount", null)
+    private val _maxAmount = saved.getMutableStateFlow<Double?>("max_amount", null)
 
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val categoryFilter: StateFlow<Long?> = _categoryFilter.asStateFlow()
@@ -228,8 +233,8 @@ class ExpensesViewModel(
         fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, mappingRepo: MerchantMappingRepository, appContext: Context, prefs: PreferencesManager) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, appContext, prefs) as T
+                override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T =
+                    ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, appContext, prefs, extras.createSavedStateHandle()) as T
             }
     }
 }

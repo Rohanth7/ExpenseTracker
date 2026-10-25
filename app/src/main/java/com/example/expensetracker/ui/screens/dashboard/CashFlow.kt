@@ -29,7 +29,7 @@ object CashFlow {
     /** Reminder bills count from today's start; auto-logged bills only after today (today's is logged and in spent). */
     fun billsStillDue(bills: List<Bill>, now: Long, cycle: DateRange): Double {
         val todayStart = BudgetPeriod.startOfDay(now)
-        val tomorrowStart = todayStart + 24 * 60 * 60 * 1000L
+        val tomorrowStart = Calendar.getInstance().apply { timeInMillis = todayStart; add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
         return bills.filter { it.isEnabled }.sumOf { b ->
             val from = if (b.autoLog) tomorrowStart else todayStart
             if (from > cycle.endInclusive) 0.0 else dueDatesInRange(b.dueDayOfMonth, from, cycle.endInclusive).size * b.amount

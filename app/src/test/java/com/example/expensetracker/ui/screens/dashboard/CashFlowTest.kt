@@ -6,6 +6,7 @@ import com.example.expensetracker.data.period.BudgetPeriod
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Calendar
+import java.util.TimeZone
 
 class CashFlowTest {
     private fun at(y: Int, m: Int, d: Int, h: Int = 12) = Calendar.getInstance().apply { clear(); set(y, m - 1, d, h, 0) }.timeInMillis
@@ -25,6 +26,16 @@ class CashFlowTest {
         assertEquals(999.0, still(listOf(bill(999.0, 5)), at(2026, 10, 26), startDay = 25), 0.0)   // cycle 25 Oct – 24 Nov
     @Test fun `in a 25th-to-24th cycle, a bill due on the 26th this month already passed`() =
         assertEquals(0.0, still(listOf(bill(999.0, 26)), at(2026, 10, 27), startDay = 25), 0.0)
+
+    @Test fun `on a 23-hour daylight-saving day, an auto-logged bill due tomorrow still counts`() {
+        val saved = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"))  // clocks go forward on 8 Mar 2026
+            assertEquals(100.0, still(listOf(bill(100.0, 9, autoLog = true)), at(2026, 3, 8)), 0.0)
+        } finally {
+            TimeZone.setDefault(saved)
+        }
+    }
 
     private fun loan(emi: Double, dueDay: Int, startDate: Long = at(2025, 1, 1)) =
         Loan(name = "l$emi", totalAmount = emi * 24, monthlyEmi = emi, tenureMonths = 24, startDate = startDate, dueDayOfMonth = dueDay)

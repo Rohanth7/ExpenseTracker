@@ -2,7 +2,6 @@ package com.example.expensetracker.ui.util
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SelectableDates
-import com.example.expensetracker.data.period.BudgetPeriod
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -43,6 +42,3 @@ private fun localDay(utcMillis: Long, h: Int, m: Int, s: Int, ms: Int): Long {
         set(Calendar.MILLISECOND, ms)
     }.timeInMillis
 }
-
-/** "1 Oct – 13 Oct", one day as "13 Oct"; with years unless the whole range is in [now]'s year. */
-fun dayRangeLabel(start: Long, end: Long, now: Long = System.currentTimeMillis()): String = BudgetPeriod.dayRangeLabel(start, end, now)

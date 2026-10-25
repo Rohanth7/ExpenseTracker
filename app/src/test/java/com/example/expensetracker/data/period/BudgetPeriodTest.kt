@@ -40,6 +40,20 @@ class BudgetPeriodTest {
         assertEquals("1 Oct – 13 Oct", BudgetPeriod.dayRangeLabel(start(2026, 10, 1), end(2026, 10, 13), now))
         assertEquals("5 Oct", BudgetPeriod.dayRangeLabel(start(2026, 10, 5), end(2026, 10, 5), now))
         assertEquals("20 Dec 2025 – 3 Jan 2026", BudgetPeriod.dayRangeLabel(start(2025, 12, 20), end(2026, 1, 3), now))
+        assertEquals("1 Mar 2025 – 31 Mar 2025", BudgetPeriod.dayRangeLabel(start(2025, 3, 1), end(2025, 3, 31), now))
+    }
+
+    @Test fun `days walks midnights across a month end`() {
+        val days = BudgetPeriod.days(start(2026, 9, 29), 3)
+        assertEquals(listOf(start(2026, 9, 29), start(2026, 9, 30), start(2026, 10, 1)), days.map { it.timeInMillis })
+        assertEquals(BudgetPeriod.dayKey(at(2026, 10, 1)), BudgetPeriod.dayKey(days[2].timeInMillis))
+    }
+
+    @Test fun `a cycle's short name is the month most of it falls in`() {
+        assertEquals("Oct", BudgetPeriod.shortLabel(BudgetPeriod.current(at(2026, 10, 16), 1)))
+        assertEquals("Oct", BudgetPeriod.shortLabel(BudgetPeriod.current(at(2026, 10, 16), 25)))  // 25 Sep – 24 Oct
+        assertEquals("Oct", BudgetPeriod.shortLabel(BudgetPeriod.current(at(2026, 10, 16), 10)))  // 10 Oct – 9 Nov
+        assertEquals("Nov", BudgetPeriod.shortLabel(BudgetPeriod.current(at(2026, 10, 20), 17)))  // 17 Oct – 16 Nov
     }
     @Test fun `labels`() {
         val now = at(2026, 10, 16)

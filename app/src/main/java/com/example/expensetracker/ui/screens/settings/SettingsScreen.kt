@@ -230,9 +230,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onBack = { currentPage = null },
                 onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
-                onExportCsv = { preset, range ->
+                onExportCsv = { preset, range, monthStartDay ->
                     pendingCsvRange = range
-                    csvLauncher.launch(ExportRange.fileName(preset, range))
+                    csvLauncher.launch(ExportRange.fileName(preset, range, monthStartDay))
                 },
                 showMockData = isDebugBuild(context),
                 onMockData = { viewModel.loadMockData() },
@@ -810,7 +810,7 @@ private fun PreferencesSubPage(
 @Composable
 private fun DataSubPage(
     modifier: Modifier = Modifier, onBack: () -> Unit,
-    onExport: () -> Unit, onImport: () -> Unit, onExportCsv: (ExportPreset, Pair<Long, Long>?) -> Unit,
+    onExport: () -> Unit, onImport: () -> Unit, onExportCsv: (ExportPreset, Pair<Long, Long>?, Int) -> Unit,
     showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
 ) {
     var showMockDataDialog by remember { mutableStateOf(false) }
@@ -854,7 +854,7 @@ private fun DataSubPage(
     if (showCsvDialog) {
         CsvExportDialog(
             onDismiss = { showCsvDialog = false },
-            onExport = { preset, range -> showCsvDialog = false; onExportCsv(preset, range) }
+            onExport = { preset, range, monthStartDay -> showCsvDialog = false; onExportCsv(preset, range, monthStartDay) }
         )
     }
     if (showMockDataDialog) {
@@ -1305,7 +1305,7 @@ private fun DetailRow(label: String, value: String) {
 /** Pick what to export: a preset range, or any dates with the date-range picker. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?) -> Unit) {
+private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?, monthStartDay: Int) -> Unit) {
     var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
     var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     var showPicker by remember { mutableStateOf(false) }
@@ -1340,7 +1340,8 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
         confirmButton = {
             val ready = preset != ExportPreset.CUSTOM || custom != null
             TextButton(enabled = ready, onClick = {
-                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, MonthStartDay.get(context)))
+                val monthStartDay = MonthStartDay.get(context)
+                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, monthStartDay), monthStartDay)
             }) { Text("Export", color = if (ready) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }

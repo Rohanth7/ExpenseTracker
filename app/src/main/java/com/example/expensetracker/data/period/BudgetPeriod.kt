@@ -84,6 +84,21 @@ object BudgetPeriod {
         return if (a == b) a else "$a – $b"
     }
 
+    /** "Oct": the month most of [range] falls in (its middle day's), short enough for a chart label. */
+    fun shortLabel(range: DateRange, locale: Locale = Locale.ENGLISH): String {
+        val middle = Calendar.getInstance().apply { timeInMillis = range.start; add(Calendar.DAY_OF_YEAR, daysInCycle(range) / 2) }
+        return SimpleDateFormat("MMM", locale).format(middle.time)
+    }
+
+    /** [count] days from [from]'s day, as calendars at midnight. */
+    fun days(from: Long, count: Int): List<Calendar> {
+        val cal = Calendar.getInstance().apply { timeInMillis = startOfDay(from) }
+        return List(count) { i -> (cal.clone() as Calendar).also { if (i < count - 1) cal.add(Calendar.DAY_OF_YEAR, 1) } }
+    }
+
+    /** The same number for every moment of one local day. */
+    fun dayKey(t: Long): Int = Calendar.getInstance().apply { timeInMillis = t }.let { it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR) }
+
     fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
         timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
