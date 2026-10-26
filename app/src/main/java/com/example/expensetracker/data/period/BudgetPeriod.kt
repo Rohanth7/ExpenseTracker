@@ -47,6 +47,19 @@ object BudgetPeriod {
     fun lastNMonths(now: Long, monthStartDay: Int, n: Int): DateRange =
         DateRange(forOffset(now, monthStartDay, -(n - 1)).start, current(now, monthStartDay).endInclusive)
 
+    /** The [n] budget months just before [lastNMonths]'s, to compare with it. */
+    fun monthsBefore(now: Long, monthStartDay: Int, n: Int): DateRange =
+        DateRange(forOffset(now, monthStartDay, -(2 * n - 1)).start, forOffset(now, monthStartDay, -n).endInclusive)
+
+    /**
+     * [previous]'s total to compare [range]'s with: while [range] is still running, scaled to the
+     * days of it gone so far; once it's over, the whole total.
+     */
+    fun comparableTotal(prevTotal: Double, previous: DateRange, range: DateRange, now: Long): Double {
+        if (now !in range) return prevTotal
+        return prevTotal / daysInCycle(previous) * daysInCycle(DateRange(range.start, now))
+    }
+
     fun daysLeft(now: Long, monthStartDay: Int): Int {
         val end = current(now, monthStartDay).endInclusive
         return (Math.round((startOfDay(end) - startOfDay(now)).toDouble() / DAY_MS) + 1).toInt()
@@ -74,6 +87,13 @@ object BudgetPeriod {
     fun label(range: DateRange, monthStartDay: Int, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String =
         if (clampStartDay(monthStartDay) == 1) SimpleDateFormat("MMM yyyy", locale).format(range.start)
         else dayRangeLabel(range.start, range.endInclusive, now, locale)
+
+    /** The widget's header: "OCT" for calendar months, "25 SEP–24 OCT" for cycles. */
+    fun compactLabel(range: DateRange, monthStartDay: Int, locale: Locale = Locale.ENGLISH): String {
+        val text = if (clampStartDay(monthStartDay) == 1) SimpleDateFormat("MMM", locale).format(range.start)
+            else SimpleDateFormat("d MMM", locale).let { "${it.format(range.start)}–${it.format(range.endInclusive)}" }
+        return text.uppercase(locale)
+    }
 
     /** "1 Oct – 13 Oct", or "5 Oct" for one day; with years unless it's all in [now]'s year. */
     fun dayRangeLabel(start: Long, end: Long, now: Long = System.currentTimeMillis(), locale: Locale = Locale.ENGLISH): String {

@@ -9,6 +9,7 @@ import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.DateRange
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import java.text.NumberFormat
 import java.util.Calendar
@@ -80,11 +81,7 @@ data class StatisticsUiState(
     val detectionSplit: DetectionSplit = DetectionSplit(),
     val autoTrackStats: AutoTrackStats = AutoTrackStats(),
     val month: PeriodView = PeriodView(),
-    val canGoForwardMonth: Boolean = false,
-    /** Only worked out while the Range view is shown. */
-    val range: PeriodView = PeriodView(),
-    /** Part of the state so the view and its numbers change together. */
-    val viewMode: ViewMode = ViewMode.MONTHLY
+    val canGoForwardMonth: Boolean = false
 )
 
 /** One stretch of days as the Monthly and Range views show it. */
@@ -107,16 +104,8 @@ data class PeriodStats(
     val insight: MonthlyInsight?
 )
 
-/**
- * [previous]'s total to compare [range]'s with: while [range] is still running, scaled to the
- * days of it gone so far; once it's over, the whole total.
- */
-internal fun comparableTotal(prevTotal: Double, previous: DateRange, range: DateRange, now: Long): Double {
-    if (now !in range) return prevTotal
-    return prevTotal / BudgetPeriod.daysInCycle(previous) * BudgetPeriod.daysInCycle(DateRange(range.start, now))
-}
-
-private data class PeriodInputs(val monthOffset: Int, val startDay: Int, val range: StatsRange, val mode: ViewMode)
+/** Categories (with subcategories), payment split and source split for some expenses. */
+private data class Breakdown(val categories: List<CategoryYearlyStat>, val payment: PaymentSplit, val detection: DetectionSplit)
 
 class StatisticsViewModel(
     private val expenseRepo: ExpenseRepository,
@@ -132,6 +121,7 @@ class StatisticsViewModel(
     private val _viewMode = MutableStateFlow(ViewMode.MONTHLY)
     private val _range = MutableStateFlow<StatsRange>(StatsRange.LastMonths(3))
 
+    val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
     val selectedRange: StateFlow<StatsRange> = _range.asStateFlow()
     fun setViewMode(mode: ViewMode) { _viewMode.value = mode }
     fun setRange(range: StatsRange) { _range.value = range; _viewMode.value = ViewMode.RANGE }
@@ -143,8 +133,8 @@ class StatisticsViewModel(
         categoryRepo.allCategories,
         _yearOffset,
         _selectedCategoryId,
-        combine(_monthOffset, monthStartDay, _range, _viewMode) { o, d, r, m -> PeriodInputs(o, d, r, m) }
-    ) { expenses, categories, offset, selectedId, (monthOffset, startDay, statsRange, mode) ->
+        combine(_monthOffset, monthStartDay) { o, d -> o to d }
+    ) { expenses, categories, offset, selectedId, (monthOffset, startDay) ->
         val nowMs = System.currentTimeMillis()
         val year = Calendar.getInstance().apply { timeInMillis = nowMs }.get(Calendar.YEAR) + offset
 
@@ -177,16 +167,8 @@ class StatisticsViewModel(
         val avgPerMonth = if (monthsWithData > 0) totalThisYear / monthsWithData else 0.0
         val busiestMonth = monthStats.maxByOrNull { it.total }?.takeIf { it.total > 0 }?.label ?: ""
 
-        val parentCategories = categories.filter { it.parentId == null }
-        val topCategories = parentCategories.map { parent ->
-            val children = categories.filter { it.parentId == parent.id }
-            val childIds = children.map { it.id }.toSet()
-            val total = yearExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
-            val subcats = children.map { child ->
-                SubcategoryRow(child, yearExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
-            }.filter { it.amount > 0 }.sortedByDescending { it.amount }
-            CategoryYearlyStat(parent, total, subcats)
-        }.filter { it.total > 0 }.sortedByDescending { it.total }
+        val yearBreakdown = breakdown(yearExpenses, categories)
+        val topCategories = yearBreakdown.categories
 
         // Category trend for the last 6 budget months
         val selectedCategory = categories.find { it.id == selectedId }
@@ -225,20 +207,6 @@ class StatisticsViewModel(
             }
         }
 
-        val split = PaymentSplit(
-            upiAmount = yearExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
-            creditCardAmount = yearExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
-            cashAmount = yearExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
-        )
-        val detectionSplit = DetectionSplit(
-            autoAmount = yearExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
-            autoCount = yearExpenses.count { isAutoSource(it.source) },
-            manualAmount = yearExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
-            manualCount = yearExpenses.count { it.source == "Manual" },
-            recurringAmount = yearExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
-            recurringCount = yearExpenses.count { it.source == "Recurring" }
-        )
-
         val todayStartMs = BudgetPeriod.startOfDay(nowMs)
         val thisMonthStartMs = BudgetPeriod.current(nowMs, startDay).start
         val allAutoExpenses = expenses.filter { isAutoSource(it.source) }
@@ -256,7 +224,6 @@ class StatisticsViewModel(
         // ── Monthly stats: one budget month, from the user's start day ──
         val mRange = BudgetPeriod.forOffset(nowMs, startDay, monthOffset)
         val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month", "last month")
-        val range = if (mode == ViewMode.RANGE) rangeView(statsRange, expenses, categories, nowMs, startDay) else PeriodView()
 
         StatisticsUiState(
             yearLabel = year.toString(),
@@ -270,17 +237,25 @@ class StatisticsViewModel(
             insightBody = insightBody,
             selectedCategoryTrend = trend,
             selectedCategory = selectedCategory,
-            paymentSplit = split,
-            detectionSplit = detectionSplit,
+            paymentSplit = yearBreakdown.payment,
+            detectionSplit = yearBreakdown.detection,
             autoTrackStats = autoStats,
             // While the month is still running its percentage is at today's pace, like the insight
             month = PeriodView(BudgetPeriod.label(mRange, startDay), mRange.start, mRange.endInclusive, month,
                 if (nowMs in mRange) "this point last month" else "last month"),
-            canGoForwardMonth = monthOffset < 0,
-            range = range,
-            viewMode = mode
+            canGoForwardMonth = monthOffset < 0
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatisticsUiState())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StatisticsUiState())
+
+    /**
+     * The Range view, apart from [uiState] so switching views doesn't redo the other numbers. It's
+     * only worked out while the screen collects it, i.e. while the Range view is shown.
+     */
+    val rangeState: StateFlow<PeriodView?> = combine(
+        expenseRepo.allExpenses, categoryRepo.allCategories, _range, monthStartDay
+    ) { expenses, categories, r, startDay ->
+        rangeView(r, expenses, categories, System.currentTimeMillis(), startDay)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun goToPreviousYear() { _yearOffset.value-- }
     fun goToNextYear() { if (_yearOffset.value < 0) _yearOffset.value++ }
@@ -289,29 +264,34 @@ class StatisticsViewModel(
 
     private fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
 
-    private fun rangeView(r: StatsRange, expenses: List<Expense>, categories: List<Category>, now: Long, startDay: Int): PeriodView {
-        val (range, label, comparedWith) = when (r) {
-            is StatsRange.LastMonths -> Triple(BudgetPeriod.lastNMonths(now, startDay, r.n), "Last ${r.n} months", "the previous ${r.n} months")
-            StatsRange.AllTime -> Triple(
-                BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now)),
-                "All time", null)
+    private fun rangeView(r: StatsRange, expenses: List<Expense>, categories: List<Category>, now: Long, startDay: Int): PeriodView =
+        when (r) {
+            is StatsRange.LastMonths -> {
+                // Compared with the n budget months before; this range is still running, so at today's pace
+                val range = BudgetPeriod.lastNMonths(now, startDay, r.n)
+                val vs = "the previous ${r.n} months"
+                val stats = periodStats(expenses, categories, range, BudgetPeriod.monthsBefore(now, startDay, r.n), now, "period", vs)
+                PeriodView("Last ${r.n} months", range.start, range.endInclusive, stats, "this point in $vs")
+            }
+            StatsRange.AllTime -> {
+                val range = BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now))
+                PeriodView("All time", range.start, range.endInclusive, periodStats(expenses, categories, range, null, now, "period", null), null)
+            }
             is StatsRange.Custom -> {
-                val dr = DateRange(r.start, r.end)
-                val days = BudgetPeriod.daysInCycle(dr)
-                Triple(dr, BudgetPeriod.dayRangeLabel(dr.start, dr.endInclusive, now), if (days == 1) "the day before" else "the $days days before")
+                // Past days only, so there's no pace to adjust for
+                val range = DateRange(r.start, r.end)
+                val days = BudgetPeriod.daysInCycle(range)
+                val vs = if (days == 1) "the day before" else "the $days days before"
+                val stats = periodStats(expenses, categories, range, BudgetPeriod.previousOfSameLength(range), now, "period", vs)
+                PeriodView(BudgetPeriod.dayRangeLabel(range.start, range.endInclusive, now), range.start, range.endInclusive, stats, vs)
             }
         }
-        val previous = if (comparedWith == null) null else BudgetPeriod.previousOfSameLength(range)
-        // "Last 3 months" includes this month's days still to come, so it's compared at today's pace.
-        val stats = periodStats(expenses, categories, range, previous, now, "period", comparedWith)
-        return PeriodView(label, range.start, range.endInclusive, stats, comparedWith)
-    }
 
     /**
      * Totals, categories, splits and an insight for [range], compared with [previous] (null = no
      * comparison), which [vs] names ("last month"). [word] names the period in the insight text
      * ("month", or "period" for a range). While [range] is still running, both the percentage and
-     * the insight compare at today's pace (see [comparableTotal]).
+     * the insight compare at today's pace (see [BudgetPeriod.comparableTotal]).
      */
     private fun periodStats(
         expenses: List<Expense>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long,
@@ -320,35 +300,43 @@ class StatisticsViewModel(
         val periodExpenses = expenses.filter { it.date in range }
         val total = periodExpenses.sumOf { it.amount }
         val prevTotal = previous?.let { p -> expenses.filter { it.date in p }.sumOf { it.amount } } ?: 0.0
-        val comparable = previous?.let { comparableTotal(prevTotal, it, range, now) } ?: 0.0
-        val parentCategories = categories.filter { it.parentId == null }
-        val cats = parentCategories.map { parent ->
+        val comparable = previous?.let { BudgetPeriod.comparableTotal(prevTotal, it, range, now) } ?: 0.0
+        val b = breakdown(periodExpenses, categories)
+        return PeriodStats(
+            total = total,
+            categories = b.categories,
+            vsPreviousPct = if (comparable > 0) ((total - comparable) / comparable * 100).roundToInt() else null,
+            paymentSplit = b.payment,
+            detectionSplit = b.detection,
+            insight = buildPeriodInsight(periodExpenses, comparable, vs, b.categories.firstOrNull(), range, now, word)
+        )
+    }
+
+    private fun breakdown(exps: List<Expense>, categories: List<Category>): Breakdown {
+        val cats = categories.filter { it.parentId == null }.map { parent ->
             val children = categories.filter { it.parentId == parent.id }
             val childIds = children.map { it.id }.toSet()
-            val catTotal = periodExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
+            val catTotal = exps.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
             val subcats = children.map { child ->
-                SubcategoryRow(child, periodExpenses.filter { it.categoryId == child.id }.sumOf { it.amount })
+                SubcategoryRow(child, exps.filter { it.categoryId == child.id }.sumOf { it.amount })
             }.filter { it.amount > 0 }.sortedByDescending { it.amount }
             CategoryYearlyStat(parent, catTotal, subcats)
         }.filter { it.total > 0 }.sortedByDescending { it.total }
-        return PeriodStats(
-            total = total,
+        return Breakdown(
             categories = cats,
-            vsPreviousPct = if (comparable > 0) ((total - comparable) / comparable * 100).roundToInt() else null,
-            paymentSplit = PaymentSplit(
-                upiAmount = periodExpenses.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
-                creditCardAmount = periodExpenses.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
-                cashAmount = periodExpenses.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
+            payment = PaymentSplit(
+                upiAmount = exps.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
+                creditCardAmount = exps.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
+                cashAmount = exps.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
             ),
-            detectionSplit = DetectionSplit(
-                autoAmount = periodExpenses.filter { isAutoSource(it.source) }.sumOf { it.amount },
-                autoCount = periodExpenses.count { isAutoSource(it.source) },
-                manualAmount = periodExpenses.filter { it.source == "Manual" }.sumOf { it.amount },
-                manualCount = periodExpenses.count { it.source == "Manual" },
-                recurringAmount = periodExpenses.filter { it.source == "Recurring" }.sumOf { it.amount },
-                recurringCount = periodExpenses.count { it.source == "Recurring" }
-            ),
-            insight = buildPeriodInsight(periodExpenses, comparable, vs, categories, range, now, word)
+            detection = DetectionSplit(
+                autoAmount = exps.filter { isAutoSource(it.source) }.sumOf { it.amount },
+                autoCount = exps.count { isAutoSource(it.source) },
+                manualAmount = exps.filter { it.source == "Manual" }.sumOf { it.amount },
+                manualCount = exps.count { it.source == "Manual" },
+                recurringAmount = exps.filter { it.source == "Recurring" }.sumOf { it.amount },
+                recurringCount = exps.count { it.source == "Recurring" }
+            )
         )
     }
 
@@ -356,7 +344,7 @@ class StatisticsViewModel(
         periodExpenses: List<Expense>,
         comparable: Double,
         vs: String?,
-        categories: List<Category>,
+        topCat: CategoryYearlyStat?,
         range: DateRange,
         now: Long,
         word: String
@@ -416,15 +404,9 @@ class StatisticsViewModel(
         }
 
         // Top category dominance (> 38%)
-        val parentCats = categories.filter { it.parentId == null }
-        val topCat = parentCats.map { parent ->
-            val childIds = categories.filter { it.parentId == parent.id }.map { it.id }.toSet()
-            val catTotal = periodExpenses.filter { it.categoryId == parent.id || it.categoryId in childIds }.sumOf { it.amount }
-            parent to catTotal
-        }.filter { it.second > 0 }.maxByOrNull { it.second }
-        if (topCat != null && (topCat.second / total * 100) > 38) {
-            val pct = (topCat.second / total * 100).roundToInt()
-            pool.add(MonthlyInsight(topCat.first.emoji, "${topCat.first.name} takes the most", "$pct% of this $word — ₹${fmt(topCat.second)}"))
+        if (topCat != null && (topCat.total / total * 100) > 38) {
+            val pct = (topCat.total / total * 100).roundToInt()
+            pool.add(MonthlyInsight(topCat.category.emoji, "${topCat.category.name} takes the most", "$pct% of this $word — ₹${fmt(topCat.total)}"))
         }
 
         // Biggest expense (fallback)

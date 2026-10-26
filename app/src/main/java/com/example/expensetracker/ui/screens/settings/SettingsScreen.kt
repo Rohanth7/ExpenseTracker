@@ -47,7 +47,7 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
-import com.example.expensetracker.ui.components.DateRangePickerDialog
+import com.example.expensetracker.ui.components.DatePresetOptions
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.export.ExportRange
 import androidx.fragment.app.FragmentActivity
@@ -1303,35 +1303,19 @@ private fun DetailRow(label: String, value: String) {
 }
 
 /** Pick what to export: a preset range, or any dates with the date-range picker. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?, monthStartDay: Int) -> Unit) {
     var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
     var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
-    var showPicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val dateFmt = remember { java.text.SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
-    val select = { p: ExportPreset -> preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
-    // Closing the picker without dates goes back to the default, since "Choose dates" needs some.
-    val closePicker = { showPicker = false; if (custom == null) preset = ExportPreset.THIS_MONTH }
 
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
         title = { Text("Export CSV") },
         text = {
             Column {
-                ExportPreset.entries.forEach { p ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { select(p) }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = preset == p, onClick = { select(p) },
-                            colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
-                        val label = if (p == ExportPreset.CUSTOM && custom != null)
-                            "${dateFmt.format(custom!!.first)} – ${dateFmt.format(custom!!.second)}" else p.label
-                        Text(label, color = Ink, fontSize = 14.sp)
-                    }
+                DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
+                    preset = p; custom = c
                 }
                 Text("Includes date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
                     modifier = Modifier.padding(top = 8.dp))
@@ -1346,8 +1330,4 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
-
-    if (showPicker) DateRangePickerDialog("Dates to export", initial = custom, onDismiss = closePicker) {
-        custom = it; showPicker = false
-    }
 }

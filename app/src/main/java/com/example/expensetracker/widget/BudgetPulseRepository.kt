@@ -2,10 +2,7 @@ package com.example.expensetracker.widget
 
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.BudgetPeriod
-import com.example.expensetracker.data.period.DateRange
 import com.example.expensetracker.data.preferences.PreferencesManager
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 data class WidgetData(
     val spent: Double,
@@ -14,6 +11,7 @@ data class WidgetData(
     /** Day of the budget month (1 on its first day) and its length; see BudgetPeriod. */
     val dayOfMonth: Int,
     val daysInMonth: Int,
+    /** Last month's spending up to the same point of the month (see BudgetPeriod.comparableTotal). */
     val prevMonthSpent: Double,
     val prevMonthLabel: String,
     val widgetEnabled: Boolean
@@ -27,19 +25,17 @@ class BudgetPulseRepository(private val db: AppDatabase, private val prefs: Pref
         val startDay = prefs.monthStartDay
         val cur = BudgetPeriod.current(now, startDay)
         val prev = BudgetPeriod.forOffset(now, startDay, -1)
-        val month = SimpleDateFormat("MMM", Locale.getDefault())
-        val day = SimpleDateFormat("d MMM", Locale.getDefault())
-        fun label(r: DateRange) = (if (startDay == 1) month.format(r.start)
-            else "${day.format(r.start)}–${day.format(r.endInclusive)}").uppercase(Locale.getDefault())
+        val prevSpent = db.expenseDao().getTotalSpentInRange(prev.start, prev.endInclusive)
 
         return WidgetData(
             spent = db.expenseDao().getTotalSpentInRange(cur.start, cur.endInclusive),
             income = prefs.monthlyIncome,
-            monthLabel = label(cur),
+            monthLabel = BudgetPeriod.compactLabel(cur, startDay),
             dayOfMonth = BudgetPeriod.dayOfCycle(now, startDay),
             daysInMonth = BudgetPeriod.daysInCycle(cur),
-            prevMonthSpent = db.expenseDao().getTotalSpentInRange(prev.start, prev.endInclusive),
-            prevMonthLabel = if (startDay == 1) label(prev) else "LAST MONTH",
+            // At today's pace, like the app's Overview and Statistics
+            prevMonthSpent = BudgetPeriod.comparableTotal(prevSpent, prev, cur, now),
+            prevMonthLabel = (if (startDay == 1) BudgetPeriod.compactLabel(prev, startDay) else "LAST MONTH") + " PACE",
             widgetEnabled = prefs.widgetEnabled
         )
     }

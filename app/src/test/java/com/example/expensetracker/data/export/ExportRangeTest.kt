@@ -44,4 +44,10 @@ class ExportRangeTest {
         assertEquals("mymoney-expenses-2026-10-01_to_2026-10-31.csv",
             ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 10, 1) to end(2026, 10, 31), monthStartDay = 2))
     }
+
+    @Test fun `a "this month" filter moves on with the month`() {
+        val filter = DateFilter(ExportPreset.THIS_MONTH)
+        assertEquals(start(2026, 10, 10) to end(2026, 11, 9), filter.range(at(2026, 10, 16), 10))
+        assertEquals(start(2026, 11, 10) to end(2026, 12, 9), filter.range(at(2026, 11, 12), 10))
+    }
 }

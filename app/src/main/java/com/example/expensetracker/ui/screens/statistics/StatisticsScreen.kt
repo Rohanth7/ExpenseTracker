@@ -71,11 +71,13 @@ private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) -> Unit) {
     val state by viewModel.uiState.collectAsState()
-    val viewMode = state.viewMode
+    val viewMode by viewModel.viewMode.collectAsState()
+    // Collected (and so worked out) only while the Range view is shown
+    val range = if (viewMode == ViewMode.RANGE) viewModel.rangeState.collectAsState().value else null
     var showRangeSheet by remember { mutableStateOf(false) }
     val headerLabel = when (viewMode) {
         ViewMode.MONTHLY -> state.month.label
-        ViewMode.RANGE -> state.range.label
+        ViewMode.RANGE -> range?.label.orEmpty()
         ViewMode.ANNUAL -> state.yearLabel
     }
 
@@ -152,8 +154,12 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 22.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (viewMode != ViewMode.ANNUAL) {
-                val view = if (viewMode == ViewMode.MONTHLY) state.month else state.range
+            val view = when (viewMode) {
+                ViewMode.MONTHLY -> state.month
+                ViewMode.RANGE -> range  // null for the moment it takes to work out
+                ViewMode.ANNUAL -> null
+            }
+            if (view != null) {
                 if (view.stats.total == 0.0) {
                     item {
                         Box(
@@ -229,6 +235,8 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                         }
                     }
                 }
+            } else if (viewMode != ViewMode.ANNUAL) {
+                // The Range view's numbers are still being worked out
             } else if (state.totalThisYear == 0.0) {
                 item {
                     Box(
@@ -502,7 +510,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
         // Split over the same days as the row that was tapped
         val shown = when (viewMode) {
             ViewMode.MONTHLY -> state.month.stats.categories
-            ViewMode.RANGE -> state.range.stats.categories
+            ViewMode.RANGE -> range?.stats?.categories.orEmpty()
             ViewMode.ANNUAL -> state.topCategories
         }
         val subcats = shown.find { it.category.id == category.id }?.subcategories.orEmpty()

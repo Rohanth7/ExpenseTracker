@@ -10,6 +10,14 @@ enum class ExportPreset(val label: String) {
 }
 
 /**
+ * A date filter that keeps its meaning as time passes: "This month" is always the current budget
+ * month. [custom] is only for [ExportPreset.CUSTOM]. Serializable so it can be saved with screen state.
+ */
+data class DateFilter(val preset: ExportPreset, val custom: Pair<Long, Long>? = null) : java.io.Serializable {
+    fun range(now: Long, monthStartDay: Int): Pair<Long, Long>? = ExportRange.forPreset(preset, now, custom, monthStartDay)
+}
+
+/**
  * Date ranges for CSV export. "This month" and "Last month" are budget months, which follow the
  * user's month start day like the Overview (see BudgetPeriod). Ends are 23:59:59.999.
  */

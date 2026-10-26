@@ -9,6 +9,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.export.DateFilter
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
@@ -32,7 +35,9 @@ class ExpensesViewModel(
     private val _tagFilter = saved.getMutableStateFlow<String?>("tag", null)
     private val _sortByAmount = saved.getMutableStateFlow("sort_by_amount", false)
     private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
-    private val _dateRange = saved.getMutableStateFlow<Pair<Long, Long>?>("date_range", null)
+    private val _dateFilter = saved.getMutableStateFlow<DateFilter?>("date_filter", null)
+    /** Refreshed when the screen comes back, so "This month" moves on when the month does. */
+    private val _now = MutableStateFlow(System.currentTimeMillis())
     private val _minAmount = saved.getMutableStateFlow<Double?>("min_amount", null)
     private val _maxAmount = saved.getMutableStateFlow<Double?>("max_amount", null)
 
@@ -41,7 +46,11 @@ class ExpensesViewModel(
     val tagFilter: StateFlow<String?> = _tagFilter.asStateFlow()
     val sortByAmount: StateFlow<Boolean> = _sortByAmount.asStateFlow()
     val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
-    val dateRange: StateFlow<Pair<Long, Long>?> = _dateRange.asStateFlow()
+    val dateFilter: StateFlow<DateFilter?> = _dateFilter.asStateFlow()
+    /** The dates [dateFilter] covers now. */
+    val dateRange: StateFlow<Pair<Long, Long>?> = combine(_dateFilter, _now, MonthStartDay.flow(appContext)) { filter, now, startDay ->
+        filter?.range(now, startDay)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, _dateFilter.value?.range(_now.value, MonthStartDay.get(appContext)))
     val minAmount: StateFlow<Double?> = _minAmount.asStateFlow()
     val maxAmount: StateFlow<Double?> = _maxAmount.asStateFlow()
 
@@ -59,7 +68,7 @@ class ExpensesViewModel(
         _allExpenses,
         _searchQuery,
         combine(_categoryFilter, categories) { f, cats -> f to cats },
-        combine(_sortByAmount, _dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
+        combine(_sortByAmount, dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
             Quint(b, r, min, max, tag)
         }
     ) { all, query, (catFilter, cats), extra ->
@@ -108,21 +117,23 @@ class ExpensesViewModel(
     fun syncPrefs() {
         _weekStartsOnMonday.value = prefs.weekStartsOnMonday
         _lastManualCategoryId.value = prefs.lastManualCategoryId
+        _now.value = System.currentTimeMillis()
     }
 
     fun setSearchQuery(query: String) { _searchQuery.value = query }
     fun setCategoryFilter(id: Long?) { _categoryFilter.value = id }
     fun setTagFilter(tag: String?) { _tagFilter.value = tag }
     fun toggleSortOrder() { _sortByAmount.value = !_sortByAmount.value }
-    fun setDateRange(start: Long, end: Long) { _dateRange.value = start to end }
-    fun clearDateRange() { _dateRange.value = null }
+    fun setDateRange(start: Long, end: Long) { _dateFilter.value = DateFilter(ExportPreset.CUSTOM, start to end) }
+    fun setDateFilter(filter: DateFilter?) { _dateFilter.value = filter }
+    fun clearDateRange() { _dateFilter.value = null }
     fun setMinAmount(amt: Double?) { _minAmount.value = amt }
     fun setMaxAmount(amt: Double?) { _maxAmount.value = amt }
     fun clearAllFilters() {
         _searchQuery.value = ""
         _categoryFilter.value = -1L
         _tagFilter.value = null
-        _dateRange.value = null
+        _dateFilter.value = null
         _minAmount.value = null
         _maxAmount.value = null
     }

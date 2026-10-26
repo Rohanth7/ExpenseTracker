@@ -40,10 +40,9 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.data.export.ExportPreset
-import com.example.expensetracker.data.export.ExportRange
+import com.example.expensetracker.data.export.DateFilter
 import com.example.expensetracker.data.period.BudgetPeriod
-import com.example.expensetracker.data.period.MonthStartDay
-import com.example.expensetracker.ui.components.DateRangePickerDialog
+import com.example.expensetracker.ui.components.DatePresetOptions
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
@@ -76,6 +75,7 @@ fun ExpensesScreen(
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
     val dateRange by viewModel.dateRange.collectAsState()
+    val dateFilter by viewModel.dateFilter.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
@@ -454,12 +454,12 @@ fun ExpensesScreen(
         AdvancedFiltersDialog(
             minAmount = minAmount,
             maxAmount = maxAmount,
-            dateRange = dateRange,
+            dateFilter = dateFilter,
             onDismiss = { showAdvancedFilters = false },
-            onConfirm = { min, max, range ->
+            onConfirm = { min, max, filter ->
                 viewModel.setMinAmount(min)
                 viewModel.setMaxAmount(max)
-                if (range == null) viewModel.clearDateRange() else viewModel.setDateRange(range.first, range.second)
+                viewModel.setDateFilter(filter)
                 showAdvancedFilters = false
             }
         )
@@ -470,17 +470,15 @@ fun ExpensesScreen(
 private fun AdvancedFiltersDialog(
     minAmount: Double?,
     maxAmount: Double?,
-    dateRange: Pair<Long, Long>?,
+    dateFilter: DateFilter?,
     onDismiss: () -> Unit,
-    onConfirm: (Double?, Double?, Pair<Long, Long>?) -> Unit
+    onConfirm: (Double?, Double?, DateFilter?) -> Unit
 ) {
     var minText by remember { mutableStateOf(minAmount?.toString() ?: "") }
     var maxText by remember { mutableStateOf(maxAmount?.toString() ?: "") }
-    // Dates: ALL means no date filter. An existing filter shows as its dates.
-    var preset by remember { mutableStateOf(if (dateRange == null) ExportPreset.ALL else ExportPreset.CUSTOM) }
-    var custom by remember { mutableStateOf(dateRange) }
-    var showPicker by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    // Dates: ALL means no date filter. A preset stays a preset ("This month" moves on with the month).
+    var preset by remember { mutableStateOf(dateFilter?.preset ?: ExportPreset.ALL) }
+    var custom by remember { mutableStateOf(dateFilter?.custom) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -489,19 +487,8 @@ private fun AdvancedFiltersDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text("Dates", style = MaterialTheme.typography.labelSmall, color = Muted)
-                Column {
-                    ExportPreset.entries.forEach { p ->
-                        val select = { preset = p; if (p == ExportPreset.CUSTOM) showPicker = true }
-                        Row(Modifier.fillMaxWidth().clickable(onClick = select), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = preset == p, onClick = select,
-                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
-                            Text(when {
-                                p == ExportPreset.ALL -> "Any time"
-                                p == ExportPreset.CUSTOM && custom != null -> BudgetPeriod.dayRangeLabel(custom!!.first, custom!!.second)
-                                else -> p.label
-                            }, color = Ink, fontSize = 14.sp)
-                        }
-                    }
+                DatePresetOptions(preset, custom, pickerTitle = "Dates to show", allLabel = "Any time") { p, c ->
+                    preset = p; custom = c
                 }
                 Text("Amount Range", style = MaterialTheme.typography.labelSmall, color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -529,7 +516,7 @@ private fun AdvancedFiltersDialog(
             TextButton(enabled = ready, onClick = {
                 // "This month" and "Last month" are budget months, like the Overview.
                 onConfirm(minText.toDoubleOrNull(), maxText.toDoubleOrNull(),
-                    ExportRange.forPreset(preset, System.currentTimeMillis(), custom, MonthStartDay.get(context)))
+                    if (preset == ExportPreset.ALL) null else DateFilter(preset, custom.takeIf { preset == ExportPreset.CUSTOM }))
             }) { Text("Apply", color = if (ready) Jade else Muted) }
         },
         dismissButton = {
@@ -538,11 +525,6 @@ private fun AdvancedFiltersDialog(
             }) { Text("Clear", color = Coral) }
         }
     )
-
-    if (showPicker) DateRangePickerDialog("Dates to show", initial = custom,
-        onDismiss = { showPicker = false; if (custom == null) preset = ExportPreset.ALL }) {
-        custom = it; showPicker = false
-    }
 }
 
 @Composable

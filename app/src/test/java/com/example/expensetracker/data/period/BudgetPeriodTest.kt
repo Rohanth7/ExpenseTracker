@@ -76,4 +76,28 @@ class BudgetPeriodTest {
         // Three 25th-to-24th months (25 Jul – 24 Oct, 92 days) → the 92 days before
         assertEquals(DateRange(start(2026, 4, 24), end(2026, 7, 24)), BudgetPeriod.previousOfSameLength(DateRange(start(2026, 7, 25), end(2026, 10, 24))))
     }
+
+    @Test fun `the months before last N months are whole budget months`() {
+        // Dec–Feb is 90 days; the 3 months before it are Sep–Nov (91 days), not the 90 days before
+        assertEquals(DateRange(start(2026, 9, 1), end(2026, 11, 30)), BudgetPeriod.monthsBefore(at(2027, 2, 10), 1, 3))
+        assertEquals(DateRange(start(2026, 5, 25), end(2026, 8, 24)), BudgetPeriod.monthsBefore(at(2026, 10, 26), 25, 3))
+    }
+
+    @Test fun `a running range is compared with the same share of the previous one`() {
+        val now = at(2026, 10, 26)
+        val range = BudgetPeriod.lastNMonths(now, 25, 3)  // 25 Aug – 24 Nov: 92 days, 63 of them so far
+        val previous = BudgetPeriod.previousOfSameLength(range)
+        assertEquals(6300.0, BudgetPeriod.comparableTotal(9200.0, previous, range, now), 0.001)
+    }
+
+    @Test fun `a finished range is compared with the whole previous one`() {
+        val now = at(2026, 10, 26)
+        val range = BudgetPeriod.dayRange(at(2026, 10, 1), at(2026, 10, 13))
+        assertEquals(9200.0, BudgetPeriod.comparableTotal(9200.0, BudgetPeriod.previousOfSameLength(range), range, now), 0.0)
+    }
+
+    @Test fun `compact labels for the widget`() {
+        assertEquals("OCT", BudgetPeriod.compactLabel(BudgetPeriod.current(at(2026, 10, 16), 1), 1))
+        assertEquals("25 SEP–24 OCT", BudgetPeriod.compactLabel(BudgetPeriod.current(at(2026, 10, 16), 25), 25))
+    }
 }
