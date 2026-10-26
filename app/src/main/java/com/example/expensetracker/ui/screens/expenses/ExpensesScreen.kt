@@ -44,9 +44,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseLimitInput
-import com.example.expensetracker.ui.util.amountHint
-import com.example.expensetracker.ui.util.amountSupportingText
-import com.example.expensetracker.ui.util.INVALID_AMOUNT
+import com.example.expensetracker.ui.util.rememberAmountText
 
 private data class DayGroup(
     val dayLabel: String,
@@ -452,10 +450,12 @@ private fun AdvancedFiltersDialog(
     var minText by remember { mutableStateOf(formatLimitInput(minAmount ?: 0.0)) }
     var maxText by remember { mutableStateOf(formatLimitInput(maxAmount ?: 0.0)) }
     // Blank or 0 means no bound. Unreadable text used to drop the bound without a word.
-    val minValue = remember(minText) { parseLimitInput(minText) }
-    val maxValue = remember(maxText) { parseLimitInput(maxText) }
-    val minNote = remember(minText) { amountHint(minText, minValue) }
-    val maxNote = remember(maxText) { amountHint(maxText, maxValue) }
+    val min = rememberAmountText(minText) { parseLimitInput(it) }
+    val max = rememberAmountText(maxText) { parseLimitInput(it) }
+    val minValue = min.value
+    val maxValue = max.value
+    // An inverted range hid every expense without a word.
+    val inverted = minValue != null && maxValue != null && minValue > 0 && maxValue > 0 && minValue > maxValue
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -470,8 +470,8 @@ private fun AdvancedFiltersDialog(
                         onValueChange = { minText = it },
                         label = { Text("Min (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = minNote == INVALID_AMOUNT,
-                        supportingText = amountSupportingText(minNote),
+                        isError = min.invalid,
+                        supportingText = min.supportingText,
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
@@ -480,8 +480,8 @@ private fun AdvancedFiltersDialog(
                         onValueChange = { maxText = it },
                         label = { Text("Max (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = maxNote == INVALID_AMOUNT,
-                        supportingText = amountSupportingText(maxNote),
+                        isError = max.invalid || inverted,
+                        supportingText = if (inverted) {{ Text("Less than min") }} else max.supportingText,
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
@@ -489,7 +489,7 @@ private fun AdvancedFiltersDialog(
             }
         },
         confirmButton = {
-            val valid = minValue != null && maxValue != null
+            val valid = minValue != null && maxValue != null && !inverted
             TextButton(
                 onClick = { onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 }) },
                 enabled = valid

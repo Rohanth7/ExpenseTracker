@@ -29,10 +29,10 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
-import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.expensetracker.ui.util.rememberAmountText
 
 private val PRESET_EMOJIS = listOf(
     "🍔", "🛒", "🚗", "🏠", "💊", "🎮", "📚", "✈️",
@@ -620,8 +620,8 @@ private fun CategoryDialog(
     var limitText by remember {
         mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }
-    val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
-    val limitShown = remember(limitText) { AmountCalculator.previewText(limitText, parsedLimit) }
+    val limit = rememberAmountText(limitText) { parseLimitInput(it) }
+    val parsedLimit = limit.value
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -688,12 +688,8 @@ private fun CategoryDialog(
                     label = { Text("Monthly limit ₹ (optional)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    isError = parsedLimit == null,
-                    supportingText = when {
-                        parsedLimit == null -> {{ Text("Enter a valid amount") }}
-                        limitShown != null -> {{ Text(limitShown, color = Muted, fontSize = 12.sp) }}
-                        else -> null
-                    },
+                    isError = limit.invalid,
+                    supportingText = limit.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,

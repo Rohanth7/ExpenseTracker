@@ -9,6 +9,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,20 +42,38 @@ class AmountInputState(initial: String) {
 const val INVALID_AMOUNT = "Enter a valid amount"
 
 /**
- * The line under a plain amount field (bills, loans, goals, income, filters), given the [value]
- * its text was read as: [INVALID_AMOUNT] for text that isn't an amount, else the "= ₹…" preview
- * when the text is a sum or could be read two ways. Null when there's nothing to say, including
- * before anything is typed.
+ * A plain amount field's text (bills, loans, goals, income, limits, filters) read as an amount.
+ * [value] is null when it isn't one. [invalid] is only for text that's finished but wrong: nothing
+ * typed yet, or "1," / "120+" on the way to a number, isn't an error. [preview] is the "= ₹…"
+ * line, shown when the text is a sum or could be read two ways.
  */
-fun amountHint(
-    text: String, value: Double?,
-    decimalComma: Boolean = AmountCalculator.usesDecimalComma(), locale: java.util.Locale = java.util.Locale.getDefault()
-): String? = if (text.isNotBlank() && value == null) INVALID_AMOUNT else AmountCalculator.previewText(text, value, decimalComma, locale)
-
-/** [amountHint] as an OutlinedTextField supportingText: the error in the error colour, the preview muted. */
-fun amountSupportingText(hint: String?): (@Composable () -> Unit)? = hint?.let {
-    { if (it == INVALID_AMOUNT) Text(it) else Text(it, color = Muted, fontSize = 12.sp) }
+@Immutable
+class AmountText(val value: Double?, val invalid: Boolean, val preview: String?) {
+    /** For OutlinedTextField's supportingText: the error in the error colour, else the preview, muted. */
+    val supportingText: (@Composable () -> Unit)?
+        get() = when {
+            invalid -> {{ Text(INVALID_AMOUNT) }}
+            preview != null -> {{ Text(preview, color = Muted, fontSize = 12.sp) }}
+            else -> null
+        }
 }
+
+/** Reads [text] with [parse]: [AmountCalculator.evaluate] for amounts, [parseLimitInput] where blank or 0 means none. */
+fun readAmountText(
+    text: String, parse: (String) -> Double?,
+    decimalComma: Boolean = AmountCalculator.usesDecimalComma(), locale: java.util.Locale = java.util.Locale.getDefault()
+): AmountText {
+    val value = parse(text)
+    val trimmed = text.trim()
+    val unfinished = trimmed.isEmpty() || trimmed.last() in UNFINISHED_ENDINGS
+    return AmountText(value, invalid = value == null && !unfinished, preview = AmountCalculator.previewText(text, value, decimalComma, locale))
+}
+
+private const val UNFINISHED_ENDINGS = ",.+-−×÷*/xX"
+
+/** [readAmountText], read again only when the text changes. */
+@Composable
+fun rememberAmountText(text: String, parse: (String) -> Double?): AmountText = remember(text) { readAmountText(text, parse) }
 
 @Composable
 fun rememberAmountInputState(initial: String = ""): AmountInputState = remember { AmountInputState(initial) }

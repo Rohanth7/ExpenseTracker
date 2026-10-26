@@ -42,10 +42,8 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.formatLimitInput
-import com.example.expensetracker.ui.util.parseLimitInput
-import com.example.expensetracker.ui.util.amountHint
-import com.example.expensetracker.ui.util.amountSupportingText
-import com.example.expensetracker.ui.util.INVALID_AMOUNT
+import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.util.parseAmountOrZero
 
 @Composable
 fun DashboardScreen(
@@ -746,8 +744,7 @@ private fun SavingsGoalCard(
 private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
     var name by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
-    val targetValue = remember(target) { AmountCalculator.evaluate(target) }
-    val targetNote = remember(target) { amountHint(target, targetValue) }
+    val targetText = rememberAmountText(target) { AmountCalculator.evaluate(it) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -769,8 +766,8 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
                     label = { Text("Target Amount (₹)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    isError = targetNote == INVALID_AMOUNT,
-                    supportingText = amountSupportingText(targetNote),
+                    isError = targetText.invalid,
+                    supportingText = targetText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
                 )
@@ -778,11 +775,11 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
         },
         confirmButton = {
             TextButton(onClick = { 
-                val amt = targetValue
+                val amt = targetText.value
                 if (name.isNotBlank() && amt != null) {
                     onConfirm(name.trim(), amt)
                 }
-            }) { Text("Create", color = Jade) }
+            }, enabled = targetText.value != null) { Text("Create", color = if (targetText.value != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -796,8 +793,7 @@ private fun DepositDialog(
     onConfirm: (Double) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
-    val amountValue = remember(amount) { AmountCalculator.evaluate(amount) }
-    val amountNote = remember(amount) { amountHint(amount, amountValue) }
+    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -812,8 +808,8 @@ private fun DepositDialog(
                     placeholder = if (surplus > 0) ({ Text("e.g. ₹${fmtINR(surplus)}", color = Muted) }) else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    isError = amountNote == INVALID_AMOUNT,
-                    supportingText = amountSupportingText(amountNote),
+                    isError = amountText.invalid,
+                    supportingText = amountText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -833,8 +829,8 @@ private fun DepositDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                amountValue?.let(onConfirm)
-            }) { Text("Add", color = Jade) }
+                amountText.value?.let(onConfirm)
+            }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -1004,9 +1000,8 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
 private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     // Was "%.0f": rounded off the paise and wrote the phone's own digits.
     var text by remember { mutableStateOf(formatLimitInput(currentIncome)) }
-    // Blank or 0 clears the income, as in onboarding.
-    val value = remember(text) { parseLimitInput(text) }
-    val note = remember(text) { amountHint(text, value) }
+    // 0 clears the income. Blank did nothing before, so a cleared field can't wipe it by accident.
+    val income = rememberAmountText(text) { parseAmountOrZero(it) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
@@ -1018,15 +1013,15 @@ private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm
                 label = { Text("Income (₹)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
-                isError = note == INVALID_AMOUNT,
-                supportingText = amountSupportingText(note),
+                isError = income.invalid,
+                supportingText = income.supportingText,
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             TextButton(onClick = {
-                value?.let(onConfirm)
-            }) { Text("Save", color = Jade) }
+                income.value?.let(onConfirm)
+            }, enabled = income.value != null) { Text("Save", color = if (income.value != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
