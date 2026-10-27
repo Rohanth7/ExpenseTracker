@@ -242,7 +242,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
             }
             composable(Screen.Settings.pattern) {
                 val vm: SettingsViewModel = viewModel(
-                    factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, backupManager, prefs)
+                    factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, incomeRepo, backupManager, prefs)
                 )
                 SettingsScreen(viewModel = vm, onOpenMessageRules = { navController.navigate(Screen.MessageRules.route) })
             }

@@ -54,6 +54,12 @@ object RecurringManager {
         if (applyRecurringIncome(db, prefs, cal) > 0) WidgetUpdateHelper.update(context)
     }
 
+    /** After recurring income is added or changed in Settings: logs any that's due now, without waiting for the next launch. */
+    suspend fun applyIncomeNow(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (applyRecurringIncome(AppDatabase.getInstance(context), prefs, Calendar.getInstance()) > 0) WidgetUpdateHelper.update(context)
+    }
+
     /**
      * Logs each enabled recurring income on its calendar day (clamped, like bills), dated midnight
      * of that day, once per calendar month. Returns how many were logged.

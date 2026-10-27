@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
@@ -57,6 +58,9 @@ import com.example.expensetracker.ui.util.isDebugBuild
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.ui.util.INVALID_AMOUNT
+import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
@@ -567,6 +571,10 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
     var showAddBill by remember { mutableStateOf(false) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
     var billToEdit by remember { mutableStateOf<Bill?>(null) }
+    val recurringIncomes by viewModel.recurringIncomes.collectAsState()
+    var showAddIncome by remember { mutableStateOf(false) }
+    var incomeToEdit by remember { mutableStateOf<RecurringIncome?>(null) }
+    var incomeToDelete by remember { mutableStateOf<RecurringIncome?>(null) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Bills & Reminders", onBack) ; Spacer(Modifier.height(8.dp)) }
@@ -590,7 +598,42 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
                 Spacer(Modifier.height(8.dp))
             }
         }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel("RECURRING INCOME")
+                Text("Add +", fontSize = 12.sp, color = Jade, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddIncome = true })
+            }
+        }
+        if (recurringIncomes.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text("No recurring income yet.\nAdd your salary and it's logged as income on its day each month.",
+                        fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+                }
+            }
+        } else {
+            items(recurringIncomes, key = { "income_${it.id}" }) { r ->
+                RecurringIncomeRow(r, onToggle = { viewModel.toggleRecurringIncome(r) }, onDelete = { incomeToDelete = r }, onClick = { incomeToEdit = r })
+                Spacer(Modifier.height(8.dp))
+            }
+        }
         item { Spacer(Modifier.height(40.dp)) }
+    }
+
+    if (showAddIncome) {
+        RecurringIncomeDialog(existing = null, onDismiss = { showAddIncome = false },
+            onConfirm = { viewModel.addRecurringIncome(it); showAddIncome = false })
+    }
+    incomeToEdit?.let { r ->
+        RecurringIncomeDialog(existing = r, onDismiss = { incomeToEdit = null },
+            onConfirm = { viewModel.updateRecurringIncome(it); incomeToEdit = null })
+    }
+    incomeToDelete?.let { r ->
+        AppAlertDialog(onDismissRequest = { incomeToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Delete recurring income?") },
+            text = { Text("\"${r.name}\" won't be logged any more. Income it already logged stays.") },
+            confirmButton = { TextButton(onClick = { viewModel.deleteRecurringIncome(r); incomeToDelete = null }) { Text("Delete", color = Coral) } },
+            dismissButton = { TextButton(onClick = { incomeToDelete = null }) { Text("Cancel", color = Muted) } })
     }
 
     if (showAddBill) {
@@ -940,15 +983,77 @@ private fun SettingRow(icon: @Composable () -> Unit, title: String, subtitle: St
 
 // ── Bill / Loan rows & dialogs ───────────────────────────────────────────────
 
+private fun ordinal(day: Int) = when {
+    day in 11..13 -> "${day}th"
+    day % 10 == 1 -> "${day}st"
+    day % 10 == 2 -> "${day}nd"
+    day % 10 == 3 -> "${day}rd"
+    else -> "${day}th"
+}
+
+@Composable
+private fun RecurringIncomeRow(r: RecurringIncome, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Jade.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Text("💰", fontSize = 18.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(r.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text("+₹${fmtINR(r.amount)} · logged on the ${ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
+                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+        }
+        Switch(checked = r.isEnabled, onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(18.dp)) }
+    }
+}
+
+/** Add ([existing] null) or edit a recurring income: name, amount, day of the month, on/off. Mirrors the bill dialogs. */
+@Composable
+private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> Unit, onConfirm: (RecurringIncome) -> Unit) {
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    val amount = rememberAmountInputState(existing?.let { AmountCalculator.forEditing(it.amount) } ?: "")
+    var day by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
+    var enabled by remember { mutableStateOf(existing?.isEnabled ?: true) }
+    val dayValue = day.toIntOrNull()?.takeIf { it in 1..31 }
+    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
+
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+        title = { Text(if (existing == null) "Add Recurring Income" else "Edit Recurring Income") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (e.g. Salary)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                AmountField(amount)
+                OutlinedTextField(value = day, onValueChange = { if (it.length <= 2) day = it.filter { c -> c.isDigit() } },
+                    label = { Text("Day of the month (1–31)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors,
+                    isError = day.isNotEmpty() && dayValue == null,
+                    supportingText = { Text(if (day.isNotEmpty() && dayValue == null) "Enter a day from 1 to 31" else "Logged as income on this day; 31 means the month's last day") })
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (enabled) JadeSoft else Canvas).clickable { enabled = !enabled }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Log it each month", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
+                    Switch(checked = enabled, onCheckedChange = { enabled = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                }
+            }
+        },
+        confirmButton = {
+            val canSave = name.isNotBlank() && dayValue != null
+            TextButton(onClick = {
+                val amt = amount.validated()?.takeIf { it > 0 } ?: run { amount.error = INVALID_AMOUNT; return@TextButton }
+                val d = dayValue ?: return@TextButton
+                val base = existing ?: RecurringIncome(name = "", amount = 0.0, dayOfMonth = 1)
+                onConfirm(base.copy(name = name.trim(), amount = amt, dayOfMonth = d, isEnabled = enabled))
+            }, enabled = canSave) { Text(if (existing == null) "Add" else "Save", color = if (canSave) Jade else Muted) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
+}
+
 @Composable
 private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
-    val ordinal = when {
-        bill.dueDayOfMonth in 11..13 -> "${bill.dueDayOfMonth}th"
-        bill.dueDayOfMonth % 10 == 1 -> "${bill.dueDayOfMonth}st"
-        bill.dueDayOfMonth % 10 == 2 -> "${bill.dueDayOfMonth}nd"
-        bill.dueDayOfMonth % 10 == 3 -> "${bill.dueDayOfMonth}rd"
-        else -> "${bill.dueDayOfMonth}th"
-    }
+    val ordinal = ordinal(bill.dueDayOfMonth)
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
