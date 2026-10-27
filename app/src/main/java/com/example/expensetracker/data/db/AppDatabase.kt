@@ -10,18 +10,22 @@ import com.example.expensetracker.data.db.dao.BillDao
 import com.example.expensetracker.data.db.dao.CategoryDao
 import com.example.expensetracker.data.db.dao.LoanDao
 import com.example.expensetracker.data.db.dao.ExpenseDao
+import com.example.expensetracker.data.db.dao.IncomeDao
 import com.example.expensetracker.data.db.dao.MerchantMappingDao
+import com.example.expensetracker.data.db.dao.RecurringIncomeDao
 import com.example.expensetracker.data.db.dao.RecurringTemplateDao
 import com.example.expensetracker.data.db.dao.SavingsGoalDao
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.MerchantMapping
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 
-@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class], version = 13, exportSchema = false)
+@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class, Income::class, RecurringIncome::class], version = 14, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
@@ -30,6 +34,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun savingsGoalDao(): SavingsGoalDao
     abstract fun billDao(): BillDao
     abstract fun loanDao(): LoanDao
+    abstract fun incomeDao(): IncomeDao
+    abstract fun recurringIncomeDao(): RecurringIncomeDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -153,6 +159,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Income records live in their own tables, so nothing about expenses changes.
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS `incomes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `description` TEXT NOT NULL, `date` INTEGER NOT NULL, `source` TEXT NOT NULL, `tags` TEXT NOT NULL, `recurringIncomeId` INTEGER, `accountId` INTEGER)")
+                database.execSQL("CREATE TABLE IF NOT EXISTS `recurring_incomes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `dayOfMonth` INTEGER NOT NULL, `isEnabled` INTEGER NOT NULL)")
+            }
+        }
+
+        /** Every migration, oldest first; the app and the migration test use the same list. */
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -160,7 +177,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "expense_tracker.db"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(*ALL_MIGRATIONS)
                 .build().also { INSTANCE = it }
             }
     }
