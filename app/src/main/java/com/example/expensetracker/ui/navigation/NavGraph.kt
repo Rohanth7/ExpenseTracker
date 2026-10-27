@@ -35,6 +35,7 @@ import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
+import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
@@ -99,6 +100,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
     val savingsRepo = remember { SavingsGoalRepository(db.savingsGoalDao()) }
     val billRepo = remember { BillRepository(db.billDao()) }
     val loanRepo = remember { LoanRepository(db.loanDao()) }
+    val incomeRepo = remember { IncomeRepository(db.incomeDao(), db.recurringIncomeDao(), context.applicationContext) }
     val prefs = remember { PreferencesManager(context) }
     val backupManager = remember { BackupManager(context.applicationContext) }
 
@@ -190,7 +192,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         ) {
             composable(Screen.Dashboard.pattern) {
                 val vm: DashboardViewModel = viewModel(
-                    factory = DashboardViewModel.factory(context.applicationContext, categoryRepo, expenseRepo, savingsRepo, billRepo, loanRepo, prefs)
+                    factory = DashboardViewModel.factory(context.applicationContext, categoryRepo, expenseRepo, savingsRepo, billRepo, loanRepo, incomeRepo, prefs)
                 )
                 DashboardScreen(
                     viewModel = vm,

@@ -268,7 +268,7 @@ fun DashboardScreen(
                     }
                 } else {
                     Text(
-                        "Set monthly income →",
+                        "Set expected income →",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                         color = JadeInk,
@@ -648,9 +648,10 @@ fun DashboardScreen(
 
     if (showIncomeDialog) {
         IncomeDialog(
-            currentIncome = state.monthlyIncome,
+            currentIncome = state.expectedIncome,
+            incomeLogged = state.incomeFromRecords,
             onDismiss = { showIncomeDialog = false },
-            onConfirm = { income -> viewModel.setIncome(income); showIncomeDialog = false }
+            onConfirm = { income -> viewModel.setExpectedIncome(income); showIncomeDialog = false }
         )
     }
 
@@ -999,7 +1000,7 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
 }
 
 @Composable
-private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
+private fun IncomeDialog(currentIncome: Double, incomeLogged: Boolean, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     // Was "%.0f": rounded off the paise and wrote the phone's own digits.
     var text by remember { mutableStateOf(formatLimitInput(currentIncome)) }
     // 0 clears the income. Blank did nothing before, so a cleared field can't wipe it by accident.
@@ -1007,18 +1008,25 @@ private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm
     AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
-        title = { Text("Set Monthly Income", color = Ink) },
+        title = { Text("Expected monthly income", color = Ink) },
         text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Income (₹)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                isError = income.invalid,
-                supportingText = income.supportingText,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Income (₹)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    isError = income.invalid,
+                    supportingText = income.supportingText,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    if (incomeLogged) "Not used this month: you've logged income, so the forecast uses that."
+                    else "Used until you log income. Add your salary as recurring income in Settings → Bills & Reminders.",
+                    fontSize = 12.sp, color = Muted
+                )
+            }
         },
         confirmButton = {
             TextButton(onClick = {

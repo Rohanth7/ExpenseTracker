@@ -1,8 +1,11 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.period.BudgetPeriod
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 import java.util.TimeZone
@@ -44,6 +47,31 @@ class IncomeForecastTest {
         val now = at(2026, 10, 31, 23)  // 17:30 UTC: still 31 Oct here
         assertEquals(0.0, still(listOf(salary(50000.0, 1)), now), 0.0)
         assertEquals(50000.0, still(listOf(salary(50000.0, 1)), now, offset = 1), 0.0)
+    }
+
+    private fun income(amount: Double, date: Long) = Income(amount = amount, description = "i", date = date)
+
+    @Test fun `a month's income counts only the income logged inside it`() {
+        val now = at(2026, 10, 16)
+        val c = IncomeForecast.cycleIncome(listOf(income(50000.0, at(2026, 10, 1, 0)), income(2000.0, at(2026, 10, 10)), income(9.0, at(2026, 9, 30, 23))),
+            listOf(salary(1000.0, 25)), expectedMonthly = 40000.0, now = now, cycle = BudgetPeriod.forOffset(now, 1, 0))
+        assertEquals(52000.0, c.logged, 0.0)
+        assertEquals(1000.0, c.stillDue, 0.0)
+        assertEquals(53000.0, c.total, 0.0)
+        assertTrue(c.fromRecords)
+    }
+
+    @Test fun `with no income records the month uses the expected figure`() {
+        val now = at(2026, 10, 16)
+        val c = IncomeForecast.cycleIncome(listOf(income(9.0, at(2026, 9, 30))), emptyList(), 40000.0, now, BudgetPeriod.forOffset(now, 1, 0))
+        assertEquals(40000.0, c.total, 0.0)
+        assertFalse(c.fromRecords)
+    }
+
+    @Test fun `a past month uses what was logged in it`() {
+        val now = at(2026, 10, 16)
+        val c = IncomeForecast.cycleIncome(listOf(income(48000.0, at(2026, 9, 1, 0))), listOf(salary(50000.0, 1)), 40000.0, now, BudgetPeriod.forOffset(now, 1, -1))
+        assertEquals(48000.0, c.total, 0.0)
     }
 
     private fun inZone(id: String, block: () -> Unit) {
