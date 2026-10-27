@@ -3,8 +3,10 @@ package com.example.expensetracker.data.backup
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.sms.ParsingRule
@@ -25,6 +27,7 @@ data class BackupSettings(
  * Backup file contents.
  *
  * Version 1 files (before this change) only have categories, expenses and recurring templates.
+ * Version 3 adds income records and recurring income; restoring a v2 file leaves both alone.
  * Every list is nullable: a missing section means "not in this backup", and restore leaves that
  * part of the phone's data alone instead of wiping it.
  */
@@ -39,7 +42,9 @@ data class BackupData(
     val savingsGoals: List<SavingsGoal>? = null,
     val merchantMappings: List<MerchantMapping>? = null,
     val settings: BackupSettings? = null,
-    val parsingRules: List<ParsingRule>? = null
+    val parsingRules: List<ParsingRule>? = null,
+    val incomes: List<Income>? = null,
+    val recurringIncomes: List<RecurringIncome>? = null
 ) {
     /** Sections of the phone's data that restoring this backup will NOT touch. */
     val missingSections: List<String>
@@ -49,6 +54,8 @@ data class BackupData(
             if (savingsGoals == null) add("savings goals")
             if (merchantMappings == null) add("learned categories")
             if (parsingRules == null) add("message rules")
+            if (incomes == null) add("income")
+            if (recurringIncomes == null) add("recurring income")
         }
 }
 
@@ -58,7 +65,7 @@ sealed class ParseResult {
 }
 
 object BackupCodec {
-    const val CURRENT_VERSION = 2
+    const val CURRENT_VERSION = 3
     private val gson = Gson()
 
     /** Captured SMS/notification text never goes into a backup; parsed amount and payee do. */
@@ -119,6 +126,14 @@ object BackupCodec {
         d.parsingRules?.forEachIndexed { i, r ->
             if ((r as Any?) == null || (r.pattern as String?) == null || (r.kind as ParsingRule.Kind?) == null ||
                 runCatching { Regex(r.pattern) }.isFailure) return "message rule ${i + 1} is damaged"
+        }
+        d.incomes?.forEachIndexed { i, n ->
+            if ((n as Any?) == null || !(n.amount as Double?).ok() || (n.description as String?) == null ||
+                (n.source as String?) == null || (n.tags as String?) == null) return "income ${i + 1} is incomplete"
+        }
+        d.recurringIncomes?.forEachIndexed { i, r ->
+            if ((r as Any?) == null || (r.name as String?) == null || !(r.amount as Double?).ok() || r.dayOfMonth !in 1..31)
+                return "recurring income ${i + 1} is incomplete"
         }
         d.merchantMappings?.forEachIndexed { i, m ->
             if ((m as Any?) == null || (m.merchantName as String?) == null) return "learned category ${i + 1} is incomplete"

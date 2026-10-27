@@ -3,8 +3,10 @@ package com.example.expensetracker.data.backup
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -33,8 +35,12 @@ class BackupCodecTest {
             merchantMappings = listOf(MerchantMapping("Swiggy", 1)),
             settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true, monthStartDay = 25),
             parsingRules = listOf(com.example.expensetracker.sms.ParsingRule("r1", com.example.expensetracker.sms.ParsingRule.Kind.PAYMENT,
-                "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L))
+                "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L)),
+            incomes = listOf(Income(id = 8, amount = 50000.0, description = "Salary", date = 1_760_000_000_000, source = "Recurring", recurringIncomeId = 9),
+                Income(id = 10, amount = 2500.5, description = "Freelance", tags = "side")),
+            recurringIncomes = listOf(RecurringIncome(id = 9, name = "Salary", amount = 50000.0, dayOfMonth = 1, isEnabled = false))
         )
+        assertEquals(3, data.version)
         assertEquals(data, ok(BackupCodec.toJson(data)))
         assertTrue(data.missingSections.isEmpty())
     }
@@ -67,11 +73,32 @@ class BackupCodecTest {
         val data = ok(v1)
         assertEquals(1, data.version)
         assertEquals(null, data.bills)
-        assertEquals(listOf("bills", "loans", "savings goals", "learned categories", "message rules"), data.missingSections)
+        assertEquals(listOf("bills", "loans", "savings goals", "learned categories", "message rules", "income", "recurring income"), data.missingSections)
     }
 
     @Test fun `backup from a newer app version is refused`() {
         assertTrue(invalid("""{"version":99,"categories":[],"expenses":[]}""").contains("newer version"))
+        assertTrue(invalid("""{"version":4,"categories":[],"expenses":[]}""").contains("newer version"))
+    }
+
+    @Test fun `version 2 backups have no income, so restoring leaves the phone's alone`() {
+        val v2 = ok("""{"version":2,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],"bills":[],"loans":[],
+            "savingsGoals":[],"merchantMappings":[],"parsingRules":[],"settings":{"monthlyIncome":50000.0}}""")
+        assertEquals(null, v2.incomes)
+        assertEquals(null, v2.recurringIncomes)
+        assertEquals(listOf("income", "recurring income"), v2.missingSections)
+    }
+
+    @Test fun `damaged income is caught before restoring`() {
+        fun v3(section: String) = """{"version":3,"categories":[],"expenses":[],$section}"""
+        assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":NaN,"description":"Salary","date":1,"source":"Manual","tags":""}]""")).contains("income 1"))
+        assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":5.0,"date":1,"source":"Manual","tags":""}]""")).contains("income 1"))
+        assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":5.0,"description":"x","date":1}]""")).contains("income 1"))
+        assertTrue(invalid(v3(""""incomes":[null]""")).contains("income 1"))
+        assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"amount":5.0,"dayOfMonth":1,"isEnabled":true}]""")).contains("recurring income 1"))
+        assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":Infinity,"dayOfMonth":1,"isEnabled":true}]""")).contains("recurring income 1"))
+        assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":5.0,"isEnabled":true}]""")).contains("recurring income 1"))
+        assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":5.0,"dayOfMonth":32,"isEnabled":true}]""")).contains("recurring income 1"))
     }
 
     @Test fun `files that aren't backups are refused`() {

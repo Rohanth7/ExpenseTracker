@@ -69,6 +69,8 @@ class BackupManager(
                 savingsGoals = db.savingsGoalDao().getAll().first(),
                 merchantMappings = db.merchantMappingDao().getAllMappings(),
                 parsingRules = rules.rules.value,
+                incomes = db.incomeDao().getAllOnce(),
+                recurringIncomes = db.recurringIncomeDao().getAllOnce(),
                 settings = BackupSettings(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
@@ -95,6 +97,8 @@ class BackupManager(
             data.loans?.let { list -> db.loanDao().deleteAll(); list.forEach { db.loanDao().insert(it) } }
             data.savingsGoals?.let { list -> db.savingsGoalDao().deleteAll(); list.forEach { db.savingsGoalDao().insert(it) } }
             data.merchantMappings?.let { list -> db.merchantMappingDao().deleteAll(); list.forEach { db.merchantMappingDao().insert(it) } }
+            data.incomes?.let { list -> db.incomeDao().deleteAll(); db.incomeDao().insertAll(list) }
+            data.recurringIncomes?.let { list -> db.recurringIncomeDao().deleteAll(); db.recurringIncomeDao().insertAll(list) }
         }
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.

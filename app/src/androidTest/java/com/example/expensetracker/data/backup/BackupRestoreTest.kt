@@ -8,8 +8,10 @@ import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.sms.ParsingRule
@@ -60,6 +62,9 @@ class BackupRestoreTest {
         source.loanDao().insert(Loan(id = 6, name = "Car", totalAmount = 500000.0, monthlyEmi = 12000.0, tenureMonths = 48, startDate = 1L))
         source.savingsGoalDao().insert(SavingsGoal(id = 7, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0))
         source.merchantMappingDao().insert(MerchantMapping("Swiggy", 10))
+        source.recurringIncomeDao().insert(RecurringIncome(id = 4, name = "Salary", amount = 50000.0, dayOfMonth = 1))
+        source.incomeDao().insert(Income(id = 40, amount = 50000.0, description = "Salary", date = 2L, source = "Recurring", recurringIncomeId = 4))
+        source.incomeDao().insert(Income(id = 41, amount = 3000.0, description = "Freelance", date = 3L, tags = "side"))
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
         sourceRules.add(ParsingRule("r1", ParsingRule.Kind.IGNORE, "^Promo\\s+\\d+$", label = "Promo #", createdAt = 1L))
@@ -69,7 +74,11 @@ class BackupRestoreTest {
         target.categoryDao().insert(Category(id = 1, name = "Old category"))
         target.expenseDao().insert(Expense(id = 1, amount = 5.0, description = "Old expense"))
         target.billDao().insert(Bill(id = 1, name = "Old bill", amount = 10.0, dueDayOfMonth = 1))
+        target.incomeDao().insert(Income(id = 1, amount = 7.0, description = "Old income", date = 1L))
+        target.recurringIncomeDao().insert(RecurringIncome(id = 1, name = "Old salary", amount = 8.0, dayOfMonth = 15))
     }
+
+    private suspend fun targetIncome() = target.incomeDao().getAllOnce() to target.recurringIncomeDao().getAllOnce()
 
     @Test fun everythingRoundTripsThroughAFile() = runBlocking {
         seedSource(); seedTargetWithOtherData()
@@ -83,6 +92,8 @@ class BackupRestoreTest {
         assertEquals(source.loanDao().getAll().first(), target.loanDao().getAll().first())
         assertEquals(source.savingsGoalDao().getAll().first(), target.savingsGoalDao().getAll().first())
         assertEquals(source.merchantMappingDao().getAllMappings(), target.merchantMappingDao().getAllMappings())
+        assertEquals(source.incomeDao().getAllOnce(), target.incomeDao().getAllOnce())
+        assertEquals(source.recurringIncomeDao().getAllOnce(), target.recurringIncomeDao().getAllOnce())
         assertEquals(75000.0, targetPrefs.monthlyIncome, 0.0)
         assertEquals(85, targetPrefs.budgetAlertThreshold)
         assertEquals(sourceRules.rules.value, targetRules.rules.value)
@@ -98,6 +109,31 @@ class BackupRestoreTest {
         assertEquals(listOf("Food"), target.categoryDao().getAllOnce().map { it.name })
         // The v1 file had no bills, so the phone's bill is kept
         assertEquals(listOf("Old bill"), target.billDao().getAll().first().map { it.name })
+    }
+
+    @Test fun version2BackupLeavesThePhonesIncomeAlone() = runBlocking {
+        seedTargetWithOtherData()
+        val before = targetIncome()
+        val v2 = BackupCodec.parse("""{"version":2,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],
+            "bills":[],"loans":[],"savingsGoals":[],"merchantMappings":[],"parsingRules":[]}""") as ParseResult.Ok
+        manager(target, targetPrefs).restore(v2.data)
+        // The restore ran (expenses and bills replaced), but income wasn't in the file
+        assertTrue(target.expenseDao().getAll().first().isEmpty())
+        assertTrue(target.billDao().getAll().first().isEmpty())
+        assertEquals(before, targetIncome())
+    }
+
+    @Test fun failedRestoreLeavesIncomeUnchanged() = runBlocking {
+        seedTargetWithOtherData()
+        val before = targetIncome()
+        // Incomes are replaced first; the duplicate recurring income id then fails the transaction.
+        val broken = BackupData(
+            categories = emptyList(), expenses = emptyList(),
+            incomes = listOf(Income(id = 2, amount = 1.0, description = "New")),
+            recurringIncomes = listOf(RecurringIncome(id = 9, name = "A", amount = 1.0, dayOfMonth = 1), RecurringIncome(id = 9, name = "B", amount = 2.0, dayOfMonth = 2))
+        )
+        assertTrue("restore should fail", runCatching { manager(target, targetPrefs).restore(broken) }.isFailure)
+        assertEquals(before, targetIncome())
     }
 
     @Test fun failedRestoreChangesNothing() = runBlocking {
