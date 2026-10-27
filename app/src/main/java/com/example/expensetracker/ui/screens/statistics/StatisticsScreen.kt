@@ -162,6 +162,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 ViewMode.ANNUAL -> null
             }
             if (view != null) {
+                view.stats.income?.let { summary -> item { IncomeSpentSavedRow(summary) } }
                 if (view.stats.total == 0.0) {
                     item {
                         Box(
@@ -592,6 +593,25 @@ private fun ViewModeToggle(viewMode: ViewMode, onModeChange: (ViewMode) -> Unit)
                 )
             }
         }
+    }
+}
+
+/** "Income ₹X · Spent ₹Y · Saved ₹Z"; saved is coral when more went out than came in. */
+@Composable
+private fun IncomeSpentSavedRow(summary: IncomeSummary) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Deep).padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        @Composable fun part(label: String, value: String, color: Color) = Column {
+            Text(label, fontFamily = FontFamily.Monospace, fontSize = 9.sp, letterSpacing = 1.6.sp, color = Ink.copy(alpha = 0.55f))
+            Spacer(Modifier.height(2.dp))
+            Text(value, fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        part("INCOME", "₹${fmtINR(summary.income)}", Jade)
+        part("SPENT", "₹${fmtINR(summary.spent)}", Ink)
+        val saved = summary.saved
+        part("SAVED", "${if (saved < 0) "−" else ""}₹${fmtINR(kotlin.math.abs(saved))}", if (saved < 0) Coral else Jade)
     }
 }
 

@@ -228,7 +228,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
             }
             composable(Screen.Statistics.pattern) {
                 val vm: StatisticsViewModel = viewModel(
-                    factory = StatisticsViewModel.factory(expenseRepo, categoryRepo, MonthStartDay.flow(context))
+                    factory = StatisticsViewModel.factory(expenseRepo, categoryRepo, MonthStartDay.flow(context), incomeRepo.allIncomes)
                 )
                 StatisticsScreen(
                     viewModel = vm,
