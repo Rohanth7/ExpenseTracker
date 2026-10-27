@@ -205,7 +205,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
             }
             composable(Screen.Expenses.pattern) {
                 val vm: ExpensesViewModel = viewModel(
-                    factory = ExpensesViewModel.factory(expenseRepo, categoryRepo, mappingRepo, context.applicationContext, prefs)
+                    factory = ExpensesViewModel.factory(expenseRepo, categoryRepo, mappingRepo, incomeRepo, context.applicationContext, prefs)
                 )
                 LaunchedEffect(expensesRangeRequest) {
                     val range = expensesRangeRequest ?: return@LaunchedEffect
