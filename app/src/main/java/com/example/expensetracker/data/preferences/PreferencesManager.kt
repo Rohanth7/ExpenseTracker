@@ -1,6 +1,7 @@
 package com.example.expensetracker.data.preferences
 
 import android.content.Context
+import com.example.expensetracker.data.period.BudgetPeriod
 
 class PreferencesManager(context: Context, fileName: String = "expense_tracker_prefs") {
     private val prefs = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
@@ -25,10 +26,28 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
         get() = prefs.getBoolean("week_starts_monday", true)
         set(value) = prefs.edit().putBoolean("week_starts_monday", value).apply()
 
+    /** Day the budget month starts, 1–28 (1 = calendar month). Read it live through `MonthStartDay`. */
+    var monthStartDay: Int
+        get() = BudgetPeriod.clampStartDay(prefs.getInt("month_start_day", 1))
+        set(value) = prefs.edit().putInt("month_start_day", BudgetPeriod.clampStartDay(value)).apply()
+
     /** Set once the first-run setup has been finished or skipped for an existing install. */
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    /**
+     * Set on the first launch (and the first after "Reset everything"), once `SetupGate` has
+     * checked whether existing data means setup can be skipped.
+     */
+    var onboardingFirstLaunchChecked: Boolean
+        get() = prefs.getBoolean("onboarding_first_launch_checked", false)
+        set(value) = prefs.edit().putBoolean("onboarding_first_launch_checked", value).apply()
+
+    /** `RestoredInfo` JSON for a backup restored during setup; cleared when setup finishes. */
+    var onboardingRestore: String?
+        get() = prefs.getString("onboarding_restore", null)
+        set(value) = prefs.edit().putString("onboarding_restore", value).apply()
 
     var biometricLockEnabled: Boolean
         get() = prefs.getBoolean("biometric_lock_enabled", false)

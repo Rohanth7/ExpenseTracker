@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -37,7 +39,14 @@ import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.export.DateFilter
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.components.DatePresetOptions
+import com.example.expensetracker.ui.util.PastOrTodayDates
+import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
+import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -45,6 +54,8 @@ import java.util.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.AppDatePickerDialog
 
 private data class DayGroup(
     val dayLabel: String,
@@ -68,6 +79,8 @@ fun ExpensesScreen(
     val selectedIds by viewModel.selectedIds.collectAsState()
     val minAmount by viewModel.minAmount.collectAsState()
     val maxAmount by viewModel.maxAmount.collectAsState()
+    val dateRange by viewModel.dateRange.collectAsState()
+    val dateFilter by viewModel.dateFilter.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
@@ -208,7 +221,7 @@ fun ExpensesScreen(
                         onValueChange = { viewModel.setSearchQuery(it) },
                         modifier = Modifier.weight(1f)
                     )
-                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null) {
+                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null || dateRange != null) {
                         Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.clearAllFilters() })
                     } else {
                         Icon(
@@ -225,9 +238,25 @@ fun ExpensesScreen(
                     Icon(
                         Icons.Default.Tune,
                         null,
-                        tint = if (minAmount != null || maxAmount != null) Jade else Muted,
+                        tint = if (minAmount != null || maxAmount != null || dateRange != null) Jade else Muted,
                         modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
                     )
+                }
+
+                // ── Active date filter (from the filters dialog or a Statistics "View all") ──
+                dateRange?.let { (from, to) ->
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp)
+                            .clip(RoundedCornerShape(100.dp)).background(JadeSoft)
+                            .clickable { viewModel.clearDateRange() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.CalendarToday, null, tint = Jade, modifier = Modifier.size(13.dp))
+                        Text(BudgetPeriod.dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
+                        Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(13.dp))
+                    }
                 }
 
                 // ── Filter chips ────────────────────────────────────
@@ -396,7 +425,7 @@ fun ExpensesScreen(
     }
 
     expenseToDelete?.let { expense ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { expenseToDelete = null },
             containerColor = Paper,
             titleContentColor = Ink,
@@ -430,10 +459,12 @@ fun ExpensesScreen(
         AdvancedFiltersDialog(
             minAmount = minAmount,
             maxAmount = maxAmount,
+            dateFilter = dateFilter,
             onDismiss = { showAdvancedFilters = false },
-            onConfirm = { min, max ->
+            onConfirm = { min, max, filter ->
                 viewModel.setMinAmount(min)
                 viewModel.setMaxAmount(max)
+                viewModel.setDateFilter(filter)
                 showAdvancedFilters = false
             }
         )
@@ -444,8 +475,9 @@ fun ExpensesScreen(
 private fun AdvancedFiltersDialog(
     minAmount: Double?,
     maxAmount: Double?,
+    dateFilter: DateFilter?,
     onDismiss: () -> Unit,
-    onConfirm: (Double?, Double?) -> Unit
+    onConfirm: (Double?, Double?, DateFilter?) -> Unit
 ) {
     var minText by remember { mutableStateOf(formatLimitInput(minAmount ?: 0.0)) }
     var maxText by remember { mutableStateOf(formatLimitInput(maxAmount ?: 0.0)) }
@@ -456,13 +488,20 @@ private fun AdvancedFiltersDialog(
     val maxValue = max.value
     // An inverted range hid every expense without a word.
     val inverted = minValue != null && maxValue != null && minValue > 0 && maxValue > 0 && minValue > maxValue
+    // Dates: ALL means no date filter. A preset stays a preset ("This month" moves on with the month).
+    var preset by remember { mutableStateOf(dateFilter?.preset ?: ExportPreset.ALL) }
+    var custom by remember { mutableStateOf(dateFilter?.custom) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Advanced Filters", color = Ink) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("Dates", style = MaterialTheme.typography.labelSmall, color = Muted)
+                DatePresetOptions(preset, custom, pickerTitle = "Dates to show", allLabel = "Any time") { p, c ->
+                    preset = p; custom = c
+                }
                 Text("Amount Range", style = MaterialTheme.typography.labelSmall, color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -489,15 +528,17 @@ private fun AdvancedFiltersDialog(
             }
         },
         confirmButton = {
-            val valid = minValue != null && maxValue != null && !inverted
-            TextButton(
-                onClick = { onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 }) },
-                enabled = valid
-            ) { Text("Apply", color = if (valid) Jade else Muted) }
+            val valid = minValue != null && maxValue != null && !inverted &&
+                (preset != ExportPreset.CUSTOM || custom != null)
+            TextButton(enabled = valid, onClick = {
+                // "This month" and "Last month" are budget months, like the Overview.
+                onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 },
+                    if (preset == ExportPreset.ALL) null else DateFilter(preset, custom.takeIf { preset == ExportPreset.CUSTOM }))
+            }) { Text("Apply", color = if (valid) Jade else Muted) }
         },
         dismissButton = {
             TextButton(onClick = {
-                minText = ""; maxText = ""; onConfirm(null, null)
+                minText = ""; maxText = ""; onConfirm(null, null, null)
             }) { Text("Clear", color = Coral) }
         }
     )
@@ -552,7 +593,7 @@ private fun BulkCategorizeDialog(
     val bulkParents = remember(categories) { categories.filter { it.parentId == null } }
     val bulkChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Move to Category", color = Ink) },
@@ -845,7 +886,7 @@ private fun AddExpenseDialog(
     var selectedPaymentMethod by remember { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Add Expense", color = Ink) },
@@ -955,7 +996,7 @@ private fun EditExpenseDialog(
     var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Edit Expense", color = Ink) },
@@ -1070,11 +1111,9 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
     if (showPicker) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = selectedUtcMidnight,
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= System.currentTimeMillis()
-            }
+            selectableDates = PastOrTodayDates
         )
-        DatePickerDialog(
+        AppDatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {
                 TextButton(onClick = {
@@ -1136,28 +1175,6 @@ private fun weekStart(startsOnMonday: Boolean = true): Long {
     cal.add(Calendar.DAY_OF_YEAR, -diff)
     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
     return cal.timeInMillis
-}
-
-private fun toUtcMidnight(localMillis: Long): Long {
-    val local = Calendar.getInstance().apply { timeInMillis = localMillis }
-    return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-        set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-}
-
-private fun buildTimestamp(utcMidnight: Long, referenceMillis: Long): Long {
-    val dateCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMidnight }
-    val timeCal = Calendar.getInstance().apply { timeInMillis = referenceMillis }
-    return Calendar.getInstance().apply {
-        set(Calendar.YEAR, dateCal.get(Calendar.YEAR))
-        set(Calendar.MONTH, dateCal.get(Calendar.MONTH))
-        set(Calendar.DAY_OF_MONTH, dateCal.get(Calendar.DAY_OF_MONTH))
-        set(Calendar.HOUR_OF_DAY, timeCal.get(Calendar.HOUR_OF_DAY))
-        set(Calendar.MINUTE, timeCal.get(Calendar.MINUTE))
-        set(Calendar.SECOND, timeCal.get(Calendar.SECOND))
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
 }
 
 private fun fmtINR(n: Double): String {

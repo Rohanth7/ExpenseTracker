@@ -44,6 +44,8 @@ import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.AppModalBottomSheet
 
 @Composable
 fun DashboardScreen(
@@ -746,7 +748,7 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
     var target by remember { mutableStateOf("") }
     val targetText = rememberAmountText(target) { AmountCalculator.evaluate(it) }
     
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("New Savings Goal", color = Ink) },
@@ -795,7 +797,7 @@ private fun DepositDialog(
     var amount by remember { mutableStateOf("") }
     val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Add to \"$goalName\"", color = Ink) },
@@ -1002,7 +1004,7 @@ private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm
     var text by remember { mutableStateOf(formatLimitInput(currentIncome)) }
     // 0 clears the income. Blank did nothing before, so a cleared field can't wipe it by accident.
     val income = rememberAmountText(text) { parseAmountOrZero(it) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Set Monthly Income", color = Ink) },
@@ -1126,7 +1128,7 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
 private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Canvas,

@@ -7,6 +7,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
@@ -94,10 +96,15 @@ class DashboardViewModel(
             Quad(cats, exps, inc, off)
         },
         combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
-        DismissedSubscriptions.flow(context)
-    ) { quad, (goals, bills, loans), dismissedSubscriptions ->
+        DismissedSubscriptions.flow(context),
+        MonthStartDay.flow(context)
+    ) { quad, (goals, bills, loans), dismissedSubscriptions, startDay ->
         val (categories, expenses, income, offset) = quad
-        val (start, end) = monthRangeForOffset(offset)
+        val nowMs = System.currentTimeMillis()
+        // A budget month runs from the user's start day (1 = calendar month); see BudgetPeriod.
+        val cycle = BudgetPeriod.forOffset(nowMs, startDay, offset)
+        val start = cycle.start
+        val end = cycle.endInclusive
         val allMonthExpenses = expenses.filter { it.date in start..end }
         val categorizedExpenses = allMonthExpenses.filter { it.categoryId != -1L }
         val pendingTotal = allMonthExpenses.filter { it.categoryId == -1L }.sumOf { it.amount }
@@ -111,19 +118,13 @@ class DashboardViewModel(
             CategorySummary(parent, spent, if (categorizedTotal > 0) (spent / categorizedTotal * 100).toFloat() else 0f)
         }.filter { it.spent > 0.0 }.sortedByDescending { it.spent }
 
-        val (prevStart, prevEnd) = monthRangeForOffset(offset - 1)
-        val prevTotal = expenses.filter { it.date in prevStart..prevEnd }.sumOf { it.amount }
-        val prevCal = Calendar.getInstance().also { it.add(Calendar.MONTH, offset - 1) }
-        val prevDays = prevCal.getActualMaximum(Calendar.DAY_OF_MONTH).toDouble()
+        val prevCycle = BudgetPeriod.forOffset(nowMs, startDay, offset - 1)
+        val prevTotal = expenses.filter { it.date in prevCycle }.sumOf { it.amount }
+        val prevDays = BudgetPeriod.daysInCycle(prevCycle).toDouble()
 
         // safeToSpendToday and surplus — only meaningful for current month
         val surplus = (income - total).coerceAtLeast(0.0)
-        val daysLeft = run {
-            if (offset != 0) return@run 0
-            val cal = Calendar.getInstance()
-            val totalDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            (totalDays - cal.get(Calendar.DAY_OF_MONTH) + 1).coerceAtLeast(1)
-        }
+        val daysLeft = if (offset != 0) 0 else BudgetPeriod.daysLeft(nowMs, startDay).coerceAtLeast(1)
         val safeToSpendToday = if (offset == 0 && surplus > 0) surplus / daysLeft else 0.0
 
         val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
@@ -157,16 +158,13 @@ class DashboardViewModel(
         val totalMonthlyEmi = activeLoans.sumOf { it.loan.monthlyEmi }
         // Forecast counts only EMIs/bills not yet due — earlier ones are assumed paid and already in `total`.
         // Loans starting after this month (startDate > end) have no EMI due yet.
-        val emiStillDue = if (offset == 0)
-            activeLoans.filter { it.loan.startDate <= end && it.loan.dueDayOfMonth.coerceAtMost(daysInMonth) >= today }
-                .sumOf { it.loan.monthlyEmi }
-        else 0.0
-        val billsStillDue = if (offset == 0) CashFlow.billsStillDue(bills, today, daysInMonth) else 0.0
+        val emiStillDue = if (offset == 0) CashFlow.emiStillDue(activeLoans.map { it.loan }, nowMs, cycle) else 0.0
+        val billsStillDue = if (offset == 0) CashFlow.billsStillDue(bills, nowMs, cycle) else 0.0
 
-        val dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        val insightPool = if (offset != 0 || total == 0.0 || dayOfMonth < 3) emptyList()
-        else buildInsights(allMonthExpenses, summaries, total, prevTotal, prevDays, dayOfMonth)
-        val smartInsight = if (insightPool.isEmpty()) null else insightPool[dayOfMonth % insightPool.size]
+        val dayOfCycle = BudgetPeriod.dayOfCycle(nowMs, startDay)
+        val insightPool = if (offset != 0 || total == 0.0 || dayOfCycle < 3) emptyList()
+        else buildInsights(allMonthExpenses, summaries, total, prevTotal, prevDays, cycle.start, dayOfCycle)
+        val smartInsight = if (insightPool.isEmpty()) null else insightPool[dayOfCycle % insightPool.size]
 
         // Notification centre items — always from full expense list; budget alerts only for current month
         val notifItems = buildNotifItems(expenses, if (offset == 0) summaries else emptyList(), categories, upcomingBills)
@@ -177,7 +175,7 @@ class DashboardViewModel(
             overBudget = income > 0 && total > income,
             categorySummaries = summaries,
             pendingCount = allMonthExpenses.count { it.categoryId == -1L },
-            monthLabel = monthLabelFull(offset),
+            monthLabel = BudgetPeriod.label(cycle, startDay),
             canGoForward = offset < 0,
             prevMonthDailyPace = if (prevDays > 0) prevTotal / prevDays else 0.0,
             savingsGoals = goals,
@@ -224,12 +222,15 @@ class DashboardViewModel(
         total: Double,
         prevTotal: Double,
         prevDays: Double,
-        dayOfMonth: Int
+        cycleStart: Long,
+        dayOfCycle: Int
     ): List<SmartInsight> {
         val result = mutableListOf<SmartInsight>()
+        // The days of this budget month so far (it may start mid-month), as calendars at midnight.
+        val daysSoFar = BudgetPeriod.days(cycleStart, dayOfCycle)
 
         // vs last month pace (pro-rated to same day)
-        val prevPaced = if (prevDays > 0) prevTotal / prevDays * dayOfMonth else 0.0
+        val prevPaced = if (prevDays > 0) prevTotal / prevDays * dayOfCycle else 0.0
         if (prevPaced > 0) {
             val pct = ((total - prevPaced) / prevPaced * 100).roundToInt()
             when {
@@ -253,10 +254,8 @@ class DashboardViewModel(
         }
 
         // No-spend days (days with zero transactions)
-        val daysWithSpend = allMonthExpenses.map { exp ->
-            Calendar.getInstance().apply { timeInMillis = exp.date }.get(Calendar.DAY_OF_MONTH)
-        }.toSet()
-        val noSpendDays = (1..dayOfMonth).count { it !in daysWithSpend }
+        val daysWithSpend = allMonthExpenses.map { BudgetPeriod.dayKey(it.date) }.toSet()
+        val noSpendDays = daysSoFar.count { BudgetPeriod.dayKey(it.timeInMillis) !in daysWithSpend }
         if (noSpendDays >= 3) {
             result.add(SmartInsight("✨", "$noSpendDays no-spend days so far",
                 "You went without any spending on $noSpendDays day${if (noSpendDays != 1) "s" else ""} this month"))
@@ -269,11 +268,9 @@ class DashboardViewModel(
             if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) weekendTotal += exp.amount
             else weekdayTotal += exp.amount
         }
-        val cal = Calendar.getInstance()
-        val yr = cal.get(Calendar.YEAR); val mo = cal.get(Calendar.MONTH)
         var wkendDays = 0; var wkdayDays = 0
-        for (d in 1..dayOfMonth) {
-            val dow = Calendar.getInstance().apply { set(yr, mo, d) }.get(Calendar.DAY_OF_WEEK)
+        daysSoFar.forEach { day ->
+            val dow = day.get(Calendar.DAY_OF_WEEK)
             if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) wkendDays++ else wkdayDays++
         }
         val wkendPerDay = if (wkendDays > 0) weekendTotal / wkendDays else 0.0
@@ -383,24 +380,6 @@ class DashboardViewModel(
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component2() = second
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component3() = third
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component4() = fourth
-
-    private fun monthRangeForOffset(offset: Int): Pair<Long, Long> {
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.MONTH, offset)
-        cal.set(Calendar.DAY_OF_MONTH, 1)
-        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-        val start = cal.timeInMillis
-        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
-        cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999)
-        return start to cal.timeInMillis
-    }
-
-    private val MONTHS = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
-
-    private fun monthLabelFull(offset: Int): String {
-        val cal = Calendar.getInstance().also { it.add(Calendar.MONTH, offset) }
-        return "${MONTHS[cal.get(Calendar.MONTH)]} ${cal.get(Calendar.YEAR)}"
-    }
 
     companion object {
         fun factory(

@@ -33,6 +33,7 @@ import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.components.AppAlertDialog
 
 private val PRESET_EMOJIS = listOf(
     "🍔", "🛒", "🚗", "🏠", "💊", "🎮", "📚", "✈️",
@@ -279,7 +280,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
             cat.parentId != null -> "Delete subcategory \"${cat.name}\"? Its expenses will be moved to pending."
             else -> "Delete \"${cat.name}\"? All its expenses will be moved back to pending."
         }
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { categoryToDelete = null },
             containerColor = Paper,
             titleContentColor = Ink,
@@ -298,7 +299,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     }
 
     tagToDelete?.let { name ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { tagToDelete = null },
             containerColor = Paper,
             titleContentColor = Ink,
@@ -573,7 +574,7 @@ private fun RenameTagDialog(
 ) {
     var newName by remember { mutableStateOf(currentName) }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         titleContentColor = Ink,
@@ -623,7 +624,7 @@ private fun CategoryDialog(
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }
     val parsedLimit = limit.value
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         titleContentColor = Ink,
