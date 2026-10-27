@@ -31,4 +31,23 @@ class ExportRangeTest {
         assertEquals("mymoney-expenses-2026-10-01_to_2026-10-13.csv",
             ExportRange.fileName(ExportPreset.CUSTOM, start(2026, 10, 1) to end(2026, 10, 13)))
     }
+
+    @Test fun `with a salary cycle, this and last month follow it`() {
+        assertEquals(start(2026, 9, 25) to end(2026, 10, 24), ExportRange.forPreset(ExportPreset.THIS_MONTH, at(2026, 10, 16), monthStartDay = 25))
+        assertEquals(start(2026, 8, 25) to end(2026, 9, 24), ExportRange.forPreset(ExportPreset.LAST_MONTH, at(2026, 10, 16), monthStartDay = 25))
+    }
+
+    @Test fun `a salary-cycle month is named by its dates`() {
+        assertEquals("mymoney-expenses-2026-09-25_to_2026-10-24.csv",
+            ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 9, 25) to end(2026, 10, 24), monthStartDay = 25))
+        // Named by the setting, not by where the range happens to start
+        assertEquals("mymoney-expenses-2026-10-01_to_2026-10-31.csv",
+            ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 10, 1) to end(2026, 10, 31), monthStartDay = 2))
+    }
+
+    @Test fun `a "this month" filter moves on with the month`() {
+        val filter = DateFilter(ExportPreset.THIS_MONTH)
+        assertEquals(start(2026, 10, 10) to end(2026, 11, 9), filter.range(at(2026, 10, 16), 10))
+        assertEquals(start(2026, 11, 10) to end(2026, 12, 9), filter.range(at(2026, 11, 12), 10))
+    }
 }

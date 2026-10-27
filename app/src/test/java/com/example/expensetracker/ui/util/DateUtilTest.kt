@@ -33,4 +33,6 @@ class DateUtilTest {
         assertEquals(listOf(2026, 9, 1, 21, 15, 30), listOf(c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH),
             c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), c.get(Calendar.SECOND)))
     }
+
+    private fun day(y: Int, m: Int, d: Int, h: Int = 0) = Calendar.getInstance().apply { clear(); set(y, m - 1, d, h, 0) }.timeInMillis
 }

@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.sms.ParsingRuleStore
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
@@ -72,7 +73,8 @@ class BackupManager(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
                     budgetAlertThreshold = p.budgetAlertThreshold,
-                    weekStartsOnMonday = p.weekStartsOnMonday
+                    weekStartsOnMonday = p.weekStartsOnMonday,
+                    monthStartDay = p.monthStartDay
                 )
             )
         }
@@ -104,7 +106,10 @@ class BackupManager(
             s.budgetAlertsEnabled?.let { p.budgetAlertsEnabled = it }
             s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
             s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
+            s.monthStartDay?.let { p.monthStartDay = it }
         }
+        // Screens follow the month start live; tests use their own prefs and leave the app's alone.
+        if (preferences == null) MonthStartDay.reload(context)
         // Best effort: the data is already restored, so a widget that can't refresh mustn't fail it.
         if (database == null) runCatching { WidgetUpdateHelper.update(context) }
     }

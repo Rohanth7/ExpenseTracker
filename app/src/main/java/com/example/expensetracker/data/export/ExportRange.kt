@@ -1,5 +1,6 @@
 package com.example.expensetracker.data.export
 
+import com.example.expensetracker.data.period.BudgetPeriod
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -9,16 +10,24 @@ enum class ExportPreset(val label: String) {
 }
 
 /**
- * Date ranges for CSV export. Calendar months for now; the salary-cycle feature switches
- * THIS_MONTH and LAST_MONTH to the user's cycle. Ends are 23:59:59.999.
+ * A date filter that keeps its meaning as time passes: "This month" is always the current budget
+ * month. [custom] is only for [ExportPreset.CUSTOM]. Serializable so it can be saved with screen state.
+ */
+data class DateFilter(val preset: ExportPreset, val custom: Pair<Long, Long>? = null) : java.io.Serializable {
+    fun range(now: Long, monthStartDay: Int): Pair<Long, Long>? = ExportRange.forPreset(preset, now, custom, monthStartDay)
+}
+
+/**
+ * Date ranges for CSV export. "This month" and "Last month" are budget months, which follow the
+ * user's month start day like the Overview (see BudgetPeriod). Ends are 23:59:59.999.
  */
 object ExportRange {
     /** (start, endInclusive), or null for all time. */
-    fun forPreset(preset: ExportPreset, now: Long, custom: Pair<Long, Long>? = null): Pair<Long, Long>? = when (preset) {
-        ExportPreset.THIS_MONTH -> month(now, 0)
-        ExportPreset.LAST_MONTH -> month(now, -1)
+    fun forPreset(preset: ExportPreset, now: Long, custom: Pair<Long, Long>? = null, monthStartDay: Int = 1): Pair<Long, Long>? = when (preset) {
+        ExportPreset.THIS_MONTH -> BudgetPeriod.current(now, monthStartDay).let { it.start to it.endInclusive }
+        ExportPreset.LAST_MONTH -> BudgetPeriod.forOffset(now, monthStartDay, -1).let { it.start to it.endInclusive }
         ExportPreset.THIS_YEAR -> {
-            val start = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.DAY_OF_YEAR, 1); startOfDay() }
+            val start = Calendar.getInstance().apply { timeInMillis = BudgetPeriod.startOfDay(now); set(Calendar.DAY_OF_YEAR, 1) }
             val end = (start.clone() as Calendar).apply { add(Calendar.YEAR, 1); add(Calendar.MILLISECOND, -1) }
             start.timeInMillis to end.timeInMillis
         }
@@ -26,24 +35,16 @@ object ExportRange {
         ExportPreset.CUSTOM -> custom
     }
 
-    fun fileName(preset: ExportPreset, range: Pair<Long, Long>?): String {
+    /** [monthStartDay] is the one [range] was made with (see [forPreset]). */
+    fun fileName(preset: ExportPreset, range: Pair<Long, Long>?, monthStartDay: Int = 1): String {
         fun f(pattern: String, t: Long) = SimpleDateFormat(pattern, Locale.US).format(t)
         val part = when {
             range == null -> "all"
-            preset == ExportPreset.THIS_MONTH || preset == ExportPreset.LAST_MONTH -> f("yyyy-MM", range.first)
+            // A calendar month is named by its month; a salary-cycle month by its dates (below).
+            (preset == ExportPreset.THIS_MONTH || preset == ExportPreset.LAST_MONTH) && BudgetPeriod.clampStartDay(monthStartDay) == 1 -> f("yyyy-MM", range.first)
             preset == ExportPreset.THIS_YEAR -> f("yyyy", range.first)
             else -> "${f("yyyy-MM-dd", range.first)}_to_${f("yyyy-MM-dd", range.second)}"
         }
         return "mymoney-expenses-$part.csv"
-    }
-
-    private fun month(now: Long, offset: Int): Pair<Long, Long> {
-        val start = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.DAY_OF_MONTH, 1); startOfDay(); add(Calendar.MONTH, offset) }
-        val end = (start.clone() as Calendar).apply { add(Calendar.MONTH, 1); add(Calendar.MILLISECOND, -1) }
-        return start.timeInMillis to end.timeInMillis
-    }
-
-    private fun Calendar.startOfDay() {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
 }
