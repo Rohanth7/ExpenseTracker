@@ -73,7 +73,7 @@ class BackupCodecTest {
         val data = ok(v1)
         assertEquals(1, data.version)
         assertEquals(null, data.bills)
-        assertEquals(listOf("bills", "loans", "savings goals", "learned categories", "message rules", "income", "recurring income"), data.missingSections)
+        assertEquals(listOf("bills", "loans", "savings goals", "learned categories", "message rules", "income records", "recurring income"), data.missingSections)
     }
 
     @Test fun `backup from a newer app version is refused`() {
@@ -86,7 +86,7 @@ class BackupCodecTest {
             "savingsGoals":[],"merchantMappings":[],"parsingRules":[],"settings":{"monthlyIncome":50000.0}}""")
         assertEquals(null, v2.incomes)
         assertEquals(null, v2.recurringIncomes)
-        assertEquals(listOf("income", "recurring income"), v2.missingSections)
+        assertEquals(listOf("income records", "recurring income"), v2.missingSections)
     }
 
     @Test fun `damaged income is caught before restoring`() {

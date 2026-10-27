@@ -54,7 +54,7 @@ data class BackupData(
             if (savingsGoals == null) add("savings goals")
             if (merchantMappings == null) add("learned categories")
             if (parsingRules == null) add("message rules")
-            if (incomes == null) add("income")
+            if (incomes == null) add("income records")
             if (recurringIncomes == null) add("recurring income")
         }
 }

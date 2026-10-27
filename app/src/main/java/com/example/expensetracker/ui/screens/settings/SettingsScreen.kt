@@ -299,7 +299,9 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
         count(d.categories?.size, "category", "categories"),
         count(d.bills?.size, "bill", "bills"),
         count(d.loans?.size, "loan", "loans"),
-        count(d.savingsGoals?.size, "savings goal", "savings goals")
+        count(d.savingsGoals?.size, "savings goal", "savings goals"),
+        count(d.incomes?.size, "income", "incomes"),
+        count(d.recurringIncomes?.size, "recurring income", "recurring incomes")
     ).joinToString(", ")
     val kept = d.missingSections
     AppAlertDialog(
@@ -310,7 +312,10 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
             Text(buildString {
                 append("Backup from $date: $contents.\n\n")
                 append("This replaces that data on this phone. If anything goes wrong, nothing is changed.")
-                if (kept.isNotEmpty()) append("\n\nThis is an older backup without ${kept.joinToString(", ")}, so those stay as they are.")
+                if (kept.isNotEmpty()) {
+                    val list = if (kept.size == 1) kept[0] else kept.dropLast(1).joinToString(", ") + " and " + kept.last()
+                    append("\n\nThis is an older backup without $list, so those stay as they are.")
+                }
             })
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Restore", color = Jade) } },
@@ -872,7 +877,7 @@ private fun DataSubPage(
                     title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export CSV", subtitle = "Expenses for Excel or Google Sheets", onClick = { showCsvDialog = true })
+                    title = "Export CSV", subtitle = "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
@@ -906,14 +911,14 @@ private fun DataSubPage(
     if (showMockDataDialog) {
         AppAlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
-            text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, and savings goals.") },
+            text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, a salary and savings goals.") },
             confirmButton = { TextButton(onClick = { onMockData(); showMockDataDialog = false }) { Text("Load", color = Jade) } },
             dismissButton = { TextButton(onClick = { showMockDataDialog = false }) { Text("Cancel", color = Muted) } })
     }
     if (showResetDialog) {
         AppAlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
-            text = { Text("This permanently deletes all expenses, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
+            text = { Text("This permanently deletes all expenses, income, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
             confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
             dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel", color = Muted) } })
     }
@@ -1444,7 +1449,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
                 DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
                     preset = p; custom = c
                 }
-                Text("Includes date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
                     modifier = Modifier.padding(top = 8.dp))
             }
         },
