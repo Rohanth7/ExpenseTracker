@@ -644,6 +644,7 @@ suspend fun restoreFromBackup(uri: Uri): RestoreOutcome {
 | `ui/screens/statistics/StatisticsViewModel.kt` | L215–221, L251–276, L352–356 | auto-track "this month", monthly view, previous month, monthly insight |
 | `widget/BudgetPulseRepository.kt` | L22–55 | current and previous range, day counts |
 | `notification/BudgetAlertHelper.kt` | L43–51, L62 | range and `monthKey` |
+| `data/export/ExportRange.kt` | `month()`, `THIS_YEAR` | CSV export "This month" / "Last month" must match the Overview's cycle |
 | `ui/widgets/ExpenseWidget.kt` | L31–39 | **not registered in the manifest**; leave unchanged |
 
 ### Task F3.1: `BudgetPeriod`

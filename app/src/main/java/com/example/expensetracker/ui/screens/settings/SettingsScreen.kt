@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +44,12 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.data.backup.BackupData
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.components.DatePresetOptions
+import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.export.ExportRange
 import androidx.fragment.app.FragmentActivity
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.util.BiometricUtil
@@ -83,6 +90,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
+    val monthStartDay by viewModel.monthStartDay.collectAsState()
     val snackbarMessage = viewModel.snackbarMessage
     val pendingRestore = viewModel.pendingRestore
     val snackbarHostState = remember { SnackbarHostState() }
@@ -104,6 +112,11 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportTo(it) }
+    }
+    // The chosen range has to outlive the file picker, which can outlive the app's process.
+    var pendingCsvRange by rememberSaveable { mutableStateOf<Pair<Long, Long>?>(null) }
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        uri?.let { viewModel.exportCsvTo(it, pendingCsvRange) }
     }
     val tracking = rememberTrackingStatus()
     val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -190,6 +203,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 budgetAlertsEnabled = budgetAlertsEnabled,
                 budgetAlertThreshold = budgetAlertThreshold,
                 weekStartsOnMonday = weekStartsOnMonday,
+                monthStartDay = monthStartDay,
                 privacyMode = privacyMode,
                 biometricLockEnabled = biometricLockEnabled,
                 widgetEnabled = widgetEnabled,
@@ -198,6 +212,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onSetBudgetAlerts = { viewModel.setBudgetAlertsEnabled(it) },
                 onSetBudgetThreshold = { viewModel.setBudgetAlertThreshold(it) },
                 onSetWeekStart = { viewModel.setWeekStartsOnMonday(it) },
+                onSetMonthStart = { viewModel.setMonthStartDay(it) },
                 onSetPrivacyMode = { viewModel.setPrivacyMode(it) },
                 onSetBiometricLock = { enable ->
                     when {
@@ -220,6 +235,10 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onBack = { currentPage = null },
                 onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                onExportCsv = { preset, range, monthStartDay ->
+                    pendingCsvRange = range
+                    csvLauncher.launch(ExportRange.fileName(preset, range, monthStartDay))
+                },
                 showMockData = isDebugBuild(context),
                 onMockData = { viewModel.loadMockData() },
                 onReset = { viewModel.resetAll() }
@@ -229,7 +248,8 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 
     if (pendingRestore != null) {
         RestoreConfirmDialog(
-            pending = pendingRestore,
+            data = pendingRestore.data,
+            fromDrive = pendingRestore.fromDrive,
             onConfirm = { viewModel.confirmRestore() },
             onDismiss = { viewModel.cancelRestore() }
         )
@@ -237,8 +257,33 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 }
 
 @Composable
-private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val d = pending.data
+private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
+    AppAlertDialog(
+        onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text("Month starts on") },
+        text = {
+            Column {
+                Text("Pick the day your salary usually arrives. Budgets, the forecast and monthly statistics will run from that day. Bills keep their own due dates.",
+                    fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 8.dp))
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items((BudgetPeriod.MIN_START_DAY..BudgetPeriod.MAX_START_DAY).toList()) { day ->
+                        Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = day == current, onClick = { onPick(day) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
+}
+
+/** Shows what a backup contains before it replaces anything. Used by Settings and first-run setup. */
+@Composable
+internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val d = data
     val date = remember(d.exportedAt) {
         java.text.SimpleDateFormat("d MMM yyyy, h:mm a", Locale.getDefault()).format(java.util.Date(d.exportedAt))
     }
@@ -254,7 +299,7 @@ private fun RestoreConfirmDialog(pending: SettingsViewModel.PendingRestore, onCo
     AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-        title = { Text(if (pending.fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
+        title = { Text(if (fromDrive) "Restore from Google Drive?" else "Restore this backup?") },
         text = {
             Text(buildString {
                 append("Backup from $date: $contents.\n\n")
@@ -678,10 +723,10 @@ private fun CloudSubPage(
 @Composable
 private fun PreferencesSubPage(
     budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int,
-    weekStartsOnMonday: Boolean, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
+    weekStartsOnMonday: Boolean, monthStartDay: Int, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
     onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit,
-    onSetWeekStart: (Boolean) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
+    onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -737,6 +782,20 @@ private fun PreferencesSubPage(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
                 }
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                var showMonthStart by remember { mutableStateOf(false) }
+                Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Month starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
+                    }
+                    Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
+                        fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                }
+                if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
+                    onSetMonthStart(it); showMonthStart = false
+                }
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)
             }
             Spacer(Modifier.height(20.dp))
@@ -756,9 +815,11 @@ private fun PreferencesSubPage(
 @Composable
 private fun DataSubPage(
     modifier: Modifier = Modifier, onBack: () -> Unit,
-    onExport: () -> Unit, onImport: () -> Unit, showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
+    onExport: () -> Unit, onImport: () -> Unit, onExportCsv: (ExportPreset, Pair<Long, Long>?, Int) -> Unit,
+    showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
 ) {
     var showMockDataDialog by remember { mutableStateOf(false) }
+    var showCsvDialog by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -768,6 +829,9 @@ private fun DataSubPage(
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
                 SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
+                    title = "Export CSV", subtitle = "Expenses for Excel or Google Sheets", onClick = { showCsvDialog = true })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
@@ -792,6 +856,12 @@ private fun DataSubPage(
         }
     }
 
+    if (showCsvDialog) {
+        CsvExportDialog(
+            onDismiss = { showCsvDialog = false },
+            onExport = { preset, range, monthStartDay -> showCsvDialog = false; onExportCsv(preset, range, monthStartDay) }
+        )
+    }
     if (showMockDataDialog) {
         AppAlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
@@ -1235,4 +1305,34 @@ private fun DetailRow(label: String, value: String) {
         Text(label, fontSize = 12.sp, color = Muted)
         Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
     }
+}
+
+/** Pick what to export: a preset range, or any dates with the date-range picker. */
+@Composable
+private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?, monthStartDay: Int) -> Unit) {
+    var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
+    var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    val context = LocalContext.current
+
+    AppAlertDialog(
+        onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+        title = { Text("Export CSV") },
+        text = {
+            Column {
+                DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
+                    preset = p; custom = c
+                }
+                Text("Includes date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                    modifier = Modifier.padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            val ready = preset != ExportPreset.CUSTOM || custom != null
+            TextButton(enabled = ready, onClick = {
+                val monthStartDay = MonthStartDay.get(context)
+                onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, monthStartDay), monthStartDay)
+            }) { Text("Export", color = if (ready) Jade else Muted) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
+    )
 }
