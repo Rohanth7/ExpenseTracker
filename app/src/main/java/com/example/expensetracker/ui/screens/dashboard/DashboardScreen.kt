@@ -40,6 +40,8 @@ import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.AppModalBottomSheet
 
 @Composable
 fun DashboardScreen(
@@ -741,7 +743,7 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
     var name by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
     
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("New Savings Goal", color = Ink) },
@@ -787,7 +789,7 @@ private fun DepositDialog(
 ) {
     var amount by remember { mutableStateOf("") }
 
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Add to \"$goalName\"", color = Ink) },
@@ -990,7 +992,7 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
 @Composable
 private fun IncomeDialog(currentIncome: Double, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var text by remember { mutableStateOf(if (currentIncome > 0) "%.0f".format(currentIncome) else "") }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = { Text("Set Monthly Income", color = Ink) },
@@ -1113,7 +1115,7 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
 private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    AppModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Canvas,

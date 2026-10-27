@@ -40,6 +40,8 @@ import com.example.expensetracker.ui.util.parseColor
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.abs
+import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.AppModalBottomSheet
 
 private fun fmtINR(amount: Double): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
@@ -535,7 +537,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
 @Composable
 private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (StatsRange) -> Unit) {
     var showPicker by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
+    AppModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
             Text("SHOW", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
             listOf(StatsRange.LastMonths(3) to "Last 3 months", StatsRange.LastMonths(6) to "Last 6 months", StatsRange.AllTime to "All time")
@@ -826,7 +828,7 @@ private fun CategoryDetailDialog(
     periodLabel: String,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
         title = {
