@@ -15,9 +15,6 @@ interface IncomeDao {
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM incomes WHERE date BETWEEN :start AND :end")
     suspend fun sumInRange(start: Long, end: Long): Double
 
-    @Query("SELECT COUNT(*) FROM incomes WHERE recurringIncomeId = :recurringId AND date BETWEEN :start AND :end")
-    suspend fun countRecurringInRange(recurringId: Long, start: Long, end: Long): Int
-
     @Query("SELECT * FROM incomes WHERE date BETWEEN :start AND :end")
     suspend fun getInRange(start: Long, end: Long): List<Income>
 

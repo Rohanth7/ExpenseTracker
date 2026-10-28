@@ -12,9 +12,9 @@ import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
-import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRule
 import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.first
@@ -65,10 +65,13 @@ class BackupRestoreTest {
         source.savingsGoalDao().insert(SavingsGoal(id = 7, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0))
         source.merchantMappingDao().insert(MerchantMapping("Swiggy", 10))
         source.recurringIncomeDao().insert(RecurringIncome(id = 4, name = "Salary", amount = 50000.0, dayOfMonth = 1))
-        // Dated this month: a restore logs this month's salary if the backup doesn't have it yet
+        // Dated this month, with its month record below, so a restore has nothing to add
         source.incomeDao().insert(Income(id = 40, amount = 50000.0, description = "Salary", date = System.currentTimeMillis(), source = "Recurring", recurringIncomeId = 4))
         source.incomeDao().insert(Income(id = 41, amount = 3000.0, description = "Freelance", date = 3L, tags = "side"))
-        sourcePrefs.sharedPreferences.edit().putBoolean("income_applied_2026_9_4", true).commit()
+        // Logged this month (entry and month record, as RecurringManager writes them), and an older month matched by hand
+        val now = Calendar.getInstance()
+        source.recurringIncomeDao().insertMonth(RecurringIncomeMonth(4, now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1))
+        source.recurringIncomeDao().insertMonth(RecurringIncomeMonth(4, 2026, 9, byHand = true))
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
         sourceRules.add(ParsingRule("r1", ParsingRule.Kind.IGNORE, "^Promo\\s+\\d+$", label = "Promo #", createdAt = 1L))
@@ -98,7 +101,7 @@ class BackupRestoreTest {
         assertEquals(source.merchantMappingDao().getAllMappings(), target.merchantMappingDao().getAllMappings())
         assertEquals(source.incomeDao().getAllOnce(), target.incomeDao().getAllOnce())
         assertEquals(source.recurringIncomeDao().getAllOnce(), target.recurringIncomeDao().getAllOnce())
-        assertTrue("2026_9_4" in RecurringManager.incomeMarks(targetPrefs.sharedPreferences))
+        assertEquals(source.recurringIncomeDao().getMonthsOnce().toSet(), target.recurringIncomeDao().getMonthsOnce().toSet())
         assertEquals(75000.0, targetPrefs.monthlyIncome, 0.0)
         assertEquals(85, targetPrefs.budgetAlertThreshold)
         assertEquals(sourceRules.rules.value, targetRules.rules.value)
@@ -128,11 +131,10 @@ class BackupRestoreTest {
         assertEquals(before, targetIncome())
     }
 
-    /** The phone's "logged this month" marks are about the data a restore replaces. */
+    /** The phone's record of handled months is about the data a restore replaces. */
     @Test fun restoredRecurringIncomeIsLoggedEvenIfThePhoneHadLoggedTheSameId() = runBlocking {
         val now = Calendar.getInstance()
-        context.getSharedPreferences("backup_test_target", Context.MODE_PRIVATE).edit()
-            .putBoolean("income_applied_${now.get(Calendar.YEAR)}_${now.get(Calendar.MONTH)}_1", true).commit()
+        target.recurringIncomeDao().insertMonth(RecurringIncomeMonth(1, now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1))
         // Taken before payday: a salary on the 1st with nothing logged for it this month
         manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), incomes = emptyList(),
             recurringIncomes = listOf(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1))))
@@ -144,7 +146,7 @@ class BackupRestoreTest {
         val now = Calendar.getInstance()
         manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), incomes = emptyList(),
             recurringIncomes = listOf(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1)),
-            recurringIncomeLogged = listOf("${now.get(Calendar.YEAR)}_${now.get(Calendar.MONTH)}_1")))
+            recurringIncomeMonths = listOf(RecurringIncomeMonth(1, now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1))))
         assertTrue(target.incomeDao().getAllOnce().isEmpty())
     }
 

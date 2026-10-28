@@ -22,10 +22,11 @@ import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 
-@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class, Income::class, RecurringIncome::class], version = 14, exportSchema = true)
+@Database(entities = [Category::class, Expense::class, RecurringTemplate::class, MerchantMapping::class, SavingsGoal::class, Bill::class, Loan::class, Income::class, RecurringIncome::class, RecurringIncomeMonth::class], version = 14, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun expenseDao(): ExpenseDao
@@ -164,6 +165,7 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("CREATE TABLE IF NOT EXISTS `incomes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `description` TEXT NOT NULL, `date` INTEGER NOT NULL, `source` TEXT NOT NULL, `tags` TEXT NOT NULL, `recurringIncomeId` INTEGER, `accountId` INTEGER)")
                 database.execSQL("CREATE TABLE IF NOT EXISTS `recurring_incomes` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `dayOfMonth` INTEGER NOT NULL, `isEnabled` INTEGER NOT NULL)")
+                database.execSQL("CREATE TABLE IF NOT EXISTS `recurring_income_months` (`recurringIncomeId` INTEGER NOT NULL, `year` INTEGER NOT NULL, `month` INTEGER NOT NULL, `byHand` INTEGER NOT NULL, PRIMARY KEY(`recurringIncomeId`, `year`, `month`))")
             }
         }
 

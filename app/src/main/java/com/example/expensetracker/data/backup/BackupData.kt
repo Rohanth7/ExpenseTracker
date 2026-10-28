@@ -7,6 +7,7 @@ import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.sms.ParsingRule
@@ -45,8 +46,8 @@ data class BackupData(
     val parsingRules: List<ParsingRule>? = null,
     val incomes: List<Income>? = null,
     val recurringIncomes: List<RecurringIncome>? = null,
-    /** Months RecurringManager has marked done ("2026_9_4"), so a salary deleted on purpose stays deleted. */
-    val recurringIncomeLogged: List<String>? = null
+    /** Months RecurringManager has handled, so a salary deleted on purpose stays deleted (restored with [recurringIncomes]). */
+    val recurringIncomeMonths: List<RecurringIncomeMonth>? = null
 ) {
     /** Sections of the phone's data that restoring this backup will NOT touch. */
     val missingSections: List<String>
@@ -136,6 +137,9 @@ object BackupCodec {
         d.recurringIncomes?.forEachIndexed { i, r ->
             if ((r as Any?) == null || (r.name as String?) == null || !(r.amount as Double?).ok() || r.dayOfMonth !in 1..31)
                 return "recurring income ${i + 1} is incomplete"
+        }
+        d.recurringIncomeMonths?.forEachIndexed { i, m ->
+            if ((m as Any?) == null || m.month !in 1..12) return "recurring income month ${i + 1} is incomplete"
         }
         d.merchantMappings?.forEachIndexed { i, m ->
             if ((m as Any?) == null || (m.merchantName as String?) == null) return "learned category ${i + 1} is incomplete"

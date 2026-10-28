@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 14,
-    "identityHash": "d45cea070af52d287e267e927bcf794b",
+    "identityHash": "b736d8a223cb41d7bda0c95bc0e6afee",
     "entities": [
       {
         "tableName": "categories",
@@ -460,11 +460,49 @@
             "id"
           ]
         }
+      },
+      {
+        "tableName": "recurring_income_months",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recurringIncomeId` INTEGER NOT NULL, `year` INTEGER NOT NULL, `month` INTEGER NOT NULL, `byHand` INTEGER NOT NULL, PRIMARY KEY(`recurringIncomeId`, `year`, `month`))",
+        "fields": [
+          {
+            "fieldPath": "recurringIncomeId",
+            "columnName": "recurringIncomeId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "year",
+            "columnName": "year",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "month",
+            "columnName": "month",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "byHand",
+            "columnName": "byHand",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recurringIncomeId",
+            "year",
+            "month"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd45cea070af52d287e267e927bcf794b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b736d8a223cb41d7bda0c95bc0e6afee')"
     ]
   }
 }

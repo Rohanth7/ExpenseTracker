@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -53,7 +54,9 @@ class IncomeMigrationTest {
                 assertEquals(50000.0, room.incomeDao().sumInRange(0, 3000), 0.0)
                 val rid = room.recurringIncomeDao().insert(RecurringIncome(name = "Salary", amount = 50000.0, dayOfMonth = 1))
                 room.incomeDao().insert(Income(amount = 50000.0, description = "Salary", date = 2500, source = "Recurring", recurringIncomeId = rid))
-                assertEquals(1, room.incomeDao().countRecurringInRange(rid, 0, 3000))
+                assertEquals(rid, room.incomeDao().getInRange(2500, 2500).single().recurringIncomeId)
+                room.recurringIncomeDao().insertMonth(RecurringIncomeMonth(rid, 2026, 10))
+                assertEquals(listOf(RecurringIncomeMonth(rid, 2026, 10)), room.recurringIncomeDao().getMonthsOnce())
                 assertEquals(listOf("Salary"), room.recurringIncomeDao().getEnabled().map { it.name })
             }
         } finally {

@@ -7,6 +7,7 @@ import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -39,7 +40,7 @@ class BackupCodecTest {
             incomes = listOf(Income(id = 8, amount = 50000.0, description = "Salary", date = 1_760_000_000_000, source = "Recurring", recurringIncomeId = 9),
                 Income(id = 10, amount = 2500.5, description = "Freelance", tags = "side")),
             recurringIncomes = listOf(RecurringIncome(id = 9, name = "Salary", amount = 50000.0, dayOfMonth = 1, isEnabled = false)),
-            recurringIncomeLogged = listOf("2026_9_9")
+            recurringIncomeMonths = listOf(RecurringIncomeMonth(9, 2026, 10), RecurringIncomeMonth(9, 2026, 9, byHand = true))
         )
         assertEquals(3, data.version)
         assertEquals(data, ok(BackupCodec.toJson(data)))
@@ -100,6 +101,8 @@ class BackupCodecTest {
         assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":Infinity,"dayOfMonth":1,"isEnabled":true}]""")).contains("recurring income 1"))
         assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":5.0,"isEnabled":true}]""")).contains("recurring income 1"))
         assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":5.0,"dayOfMonth":32,"isEnabled":true}]""")).contains("recurring income 1"))
+        assertTrue(invalid(v3(""""recurringIncomeMonths":[{"recurringIncomeId":1,"year":2026,"month":13,"byHand":false}]""")).contains("recurring income month 1"))
+        assertTrue(invalid(v3(""""recurringIncomeMonths":[null]""")).contains("recurring income month 1"))
     }
 
     @Test fun `files that aren't backups are refused`() {

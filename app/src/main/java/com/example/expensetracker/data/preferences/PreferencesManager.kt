@@ -1,14 +1,10 @@
 package com.example.expensetracker.data.preferences
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.example.expensetracker.data.period.BudgetPeriod
 
 class PreferencesManager(context: Context, fileName: String = "expense_tracker_prefs") {
     private val prefs = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
-
-    /** The file itself, which RecurringManager also keeps its "logged this month" marks in. */
-    val sharedPreferences: SharedPreferences get() = prefs
 
     var monthlyIncome: Double
         get() = Double.fromBits(prefs.getLong("monthly_income", 0L))
