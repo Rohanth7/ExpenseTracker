@@ -649,7 +649,8 @@ fun DashboardScreen(
     if (showIncomeDialog) {
         IncomeDialog(
             currentIncome = state.expectedIncome,
-            incomeLogged = state.incomeFromRecords,
+            // The month on screen, which may not be this one
+            monthWithIncome = state.monthLabel.takeIf { state.incomeFromRecords },
             onDismiss = { showIncomeDialog = false },
             onConfirm = { income -> viewModel.setExpectedIncome(income); showIncomeDialog = false }
         )
@@ -1000,7 +1001,7 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
 }
 
 @Composable
-private fun IncomeDialog(currentIncome: Double, incomeLogged: Boolean, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
+private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     // Was "%.0f": rounded off the paise and wrote the phone's own digits.
     var text by remember { mutableStateOf(formatLimitInput(currentIncome)) }
     // 0 clears the income. Blank did nothing before, so a cleared field can't wipe it by accident.
@@ -1022,7 +1023,7 @@ private fun IncomeDialog(currentIncome: Double, incomeLogged: Boolean, onDismiss
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    if (incomeLogged) "Not used this month: you've logged income, so the forecast uses that."
+                    if (monthWithIncome != null) "Not used for $monthWithIncome: it has income logged or on its way, so the forecast uses that."
                     else "Used until you log income. Add your salary as recurring income in Settings → Bills & Reminders.",
                     fontSize = 12.sp, color = Muted
                 )

@@ -12,6 +12,7 @@ import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRuleStore
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.Dispatchers
@@ -103,6 +104,7 @@ class BackupManager(
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L
+        if (data.recurringIncomes != null) RecurringManager.reapplyIncomeAfterRestore(db, prefs.sharedPreferences)
         data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs

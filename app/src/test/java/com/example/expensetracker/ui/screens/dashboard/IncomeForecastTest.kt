@@ -25,8 +25,14 @@ class IncomeForecastTest {
 
     @Test fun `a salary later this month is still to come`() = assertEquals(50000.0, still(listOf(salary(50000.0, 25)), at(2026, 10, 16)), 0.0)
     @Test fun `a salary earlier this month has been logged`() = assertEquals(0.0, still(listOf(salary(50000.0, 1)), at(2026, 10, 16)), 0.0)
-    @Test fun `today's salary is logged when the app opens, so it isn't counted twice`() =
-        assertEquals(0.0, still(listOf(salary(50000.0, 16)), at(2026, 10, 16)), 0.0)
+    // The app logs it on open, but the widget and an app left open overnight see payday start first.
+    @Test fun `today's salary counts until it's logged`() =
+        assertEquals(50000.0, still(listOf(salary(50000.0, 16)), at(2026, 10, 16)), 0.0)
+    @Test fun `once today's salary is logged it isn't counted twice`() {
+        val now = at(2026, 10, 16)
+        val s = salary(50000.0, 16).copy(id = 7)
+        assertEquals(0.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 1, 0), loggedToday = setOf(7L)), 0.0)
+    }
     @Test fun `tomorrow's salary is still to come`() = assertEquals(50000.0, still(listOf(salary(50000.0, 17)), at(2026, 10, 16, 23)), 0.0)
     @Test fun `disabled recurring income is ignored`() = assertEquals(0.0, still(listOf(salary(50000.0, 25, enabled = false)), at(2026, 10, 16)), 0.0)
     @Test fun `several add up`() = assertEquals(62000.0, still(listOf(salary(50000.0, 25), salary(12000.0, 20), salary(999.0, 2)), at(2026, 10, 16)), 0.0)
@@ -66,6 +72,15 @@ class IncomeForecastTest {
         val c = IncomeForecast.cycleIncome(listOf(income(9.0, at(2026, 9, 30))), emptyList(), 40000.0, now, BudgetPeriod.forOffset(now, 1, 0))
         assertEquals(40000.0, c.total, 0.0)
         assertFalse(c.fromRecords)
+    }
+
+    @Test fun `on payday, before and after the salary is logged, it counts once`() {
+        val now = at(2026, 10, 16, 0)
+        val cycle = BudgetPeriod.forOffset(now, 1, 0)
+        val s = salary(50000.0, 16).copy(id = 7)
+        assertEquals(50000.0, IncomeForecast.cycleIncome(emptyList(), listOf(s), 0.0, now, cycle).total, 0.0)
+        val logged = income(50000.0, at(2026, 10, 16, 0)).copy(source = "Recurring", recurringIncomeId = 7)
+        assertEquals(50000.0, IncomeForecast.cycleIncome(listOf(logged), listOf(s), 0.0, now, cycle).total, 0.0)
     }
 
     @Test fun `a past month uses what was logged in it`() {

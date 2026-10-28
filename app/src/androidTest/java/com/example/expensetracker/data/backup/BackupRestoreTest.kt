@@ -24,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.Calendar
 
 /** Runs on a device against throwaway in-memory databases; the app's real data isn't touched. */
 @RunWith(AndroidJUnit4::class)
@@ -63,7 +64,8 @@ class BackupRestoreTest {
         source.savingsGoalDao().insert(SavingsGoal(id = 7, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0))
         source.merchantMappingDao().insert(MerchantMapping("Swiggy", 10))
         source.recurringIncomeDao().insert(RecurringIncome(id = 4, name = "Salary", amount = 50000.0, dayOfMonth = 1))
-        source.incomeDao().insert(Income(id = 40, amount = 50000.0, description = "Salary", date = 2L, source = "Recurring", recurringIncomeId = 4))
+        // Dated this month: a restore logs this month's salary if the backup doesn't have it yet
+        source.incomeDao().insert(Income(id = 40, amount = 50000.0, description = "Salary", date = System.currentTimeMillis(), source = "Recurring", recurringIncomeId = 4))
         source.incomeDao().insert(Income(id = 41, amount = 3000.0, description = "Freelance", date = 3L, tags = "side"))
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
@@ -121,6 +123,17 @@ class BackupRestoreTest {
         assertTrue(target.expenseDao().getAll().first().isEmpty())
         assertTrue(target.billDao().getAll().first().isEmpty())
         assertEquals(before, targetIncome())
+    }
+
+    /** The phone's "logged this month" marks are about the data a restore replaces. */
+    @Test fun restoredRecurringIncomeIsLoggedEvenIfThePhoneHadLoggedTheSameId() = runBlocking {
+        val now = Calendar.getInstance()
+        context.getSharedPreferences("backup_test_target", Context.MODE_PRIVATE).edit()
+            .putBoolean("income_applied_${now.get(Calendar.YEAR)}_${now.get(Calendar.MONTH)}_1", true).commit()
+        // Taken before payday: a salary on the 1st with nothing logged for it this month
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), incomes = emptyList(),
+            recurringIncomes = listOf(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1))))
+        assertEquals(listOf(1L), target.incomeDao().getAllOnce().map { it.recurringIncomeId })
     }
 
     @Test fun failedRestoreLeavesIncomeUnchanged() = runBlocking {

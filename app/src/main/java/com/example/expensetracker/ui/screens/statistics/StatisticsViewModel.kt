@@ -85,6 +85,12 @@ data class StatisticsUiState(
     val canGoForwardMonth: Boolean = false
 )
 
+/** From the first expense or income to today, or to the last entry if one is dated later. */
+internal fun allTimeRange(expenseDates: List<Long>, incomeDates: List<Long>, now: Long): DateRange {
+    val dates = expenseDates + incomeDates
+    return BudgetPeriod.dayRange(dates.minOrNull() ?: now, maxOf(now, dates.maxOrNull() ?: now))
+}
+
 /** One stretch of days as the Monthly and Range views show it. */
 data class PeriodView(
     val label: String = "",
@@ -278,7 +284,7 @@ class StatisticsViewModel(
                 PeriodView("Last ${r.n} months", range.start, range.endInclusive, stats, "this point in $vs")
             }
             StatsRange.AllTime -> {
-                val range = BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now))
+                val range = allTimeRange(expenses.map { it.date }, incomes.map { it.date }, now)
                 PeriodView("All time", range.start, range.endInclusive, periodStats(expenses, incomes, categories, range, null, now, "period", null), null)
             }
             is StatsRange.Custom -> {

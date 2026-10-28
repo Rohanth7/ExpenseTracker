@@ -61,6 +61,17 @@ object RecurringManager {
     }
 
     /**
+     * After a restore: the "logged this month" marks describe the data that was replaced, so they're
+     * dropped and anything due is logged (the database checks still stop duplicates).
+     */
+    suspend fun reapplyIncomeAfterRestore(db: AppDatabase, prefs: SharedPreferences): Int {
+        prefs.edit().apply { prefs.all.keys.filter { it.startsWith(INCOME_APPLIED) }.forEach { remove(it) } }.apply()
+        return applyRecurringIncome(db, prefs, Calendar.getInstance())
+    }
+
+    private const val INCOME_APPLIED = "income_applied_"
+
+    /**
      * Logs each enabled recurring income on its calendar day (clamped, like bills), dated midnight
      * of that day, once per calendar month. Returns how many were logged.
      */
@@ -76,13 +87,15 @@ object RecurringManager {
         }.timeInMillis
         var logged = 0
         db.recurringIncomeDao().getEnabled().forEach { r ->
-            val key = "income_applied_${month}_${r.id}"
+            val key = "$INCOME_APPLIED${month}_${r.id}"
             if (prefs.getBoolean(key, false)) return@forEach
             val dueDate = RecurringSchedule.dueDateIfReached(r.dayOfMonth, now) ?: return@forEach
             // The DB check covers a crash between the insert and the pref; doing it in the same
-            // transaction as the insert covers two launches running at once.
+            // transaction as the insert covers two launches running at once. A match logged by hand
+            // (same name and amount, like bills) means it was entered before it was set up here.
             val inserted = db.withTransaction {
-                if (db.incomeDao().countRecurringInRange(r.id, monthStart, monthEnd) > 0) false
+                if (db.incomeDao().countRecurringInRange(r.id, monthStart, monthEnd) > 0 ||
+                    db.incomeDao().countByHandInRange(r.name, r.amount, monthStart, monthEnd) > 0) false
                 else {
                     db.incomeDao().insert(Income(amount = r.amount, description = r.name, date = dueDate, source = "Recurring", recurringIncomeId = r.id))
                     true

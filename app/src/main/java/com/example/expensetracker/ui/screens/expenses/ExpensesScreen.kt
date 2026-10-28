@@ -431,11 +431,12 @@ fun ExpensesScreen(
             onConfirm = { amount, description, categoryId, date, tags, paymentMethod ->
                 viewModel.addExpense(amount, description, categoryId, date, tags, paymentMethod)
                 showAddDialog = false
+                viewModel.setShowIncome(false)
             },
             onConfirmIncome = { amount, description, date, tags ->
                 viewModel.addIncome(amount, description, date, tags)
                 showAddDialog = false
-                // Show where it went, so it doesn't seem to vanish from the spending list
+                // Show where it went, so it doesn't seem to vanish (the same for an expense above)
                 viewModel.setShowIncome(true)
             }
         )

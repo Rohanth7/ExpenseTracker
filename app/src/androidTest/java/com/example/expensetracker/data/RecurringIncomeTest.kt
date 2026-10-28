@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.recurring.RecurringManager
 import kotlinx.coroutines.async
@@ -103,6 +104,19 @@ class RecurringIncomeTest {
         val now = day(2026, Calendar.OCTOBER, 16)
         List(4) { async(Dispatchers.IO) { RecurringManager.applyRecurringIncome(db, prefs, now.clone() as Calendar) } }.awaitAll()
         assertEquals(1, incomes().size)
+    }
+
+    /** Logged by hand before it was set up: adding it in Settings mustn't log the month's salary again. */
+    @Test fun salaryAlreadyLoggedByHandThisMonthIsNotLoggedAgain() = runBlocking {
+        db.incomeDao().insert(Income(amount = 50000.0, description = "salary ", date = day(2026, Calendar.OCTOBER, 1, 10).timeInMillis))
+        db.recurringIncomeDao().insert(RecurringIncome(name = "Salary", amount = 50000.0, dayOfMonth = 1))
+        assertEquals(0, RecurringManager.applyRecurringIncome(db, prefs, day(2026, Calendar.OCTOBER, 28)))
+        assertEquals(1, incomes().size)
+        // A different amount, or last month's, isn't the same income
+        db.incomeDao().deleteAll(); prefs.edit().clear().commit()
+        db.incomeDao().insert(Income(amount = 2000.0, description = "Salary", date = day(2026, Calendar.OCTOBER, 1).timeInMillis))
+        db.incomeDao().insert(Income(amount = 50000.0, description = "Salary", date = day(2026, Calendar.SEPTEMBER, 1).timeInMillis))
+        assertEquals(1, RecurringManager.applyRecurringIncome(db, prefs, day(2026, Calendar.OCTOBER, 28)))
     }
 
     /** Two salaries with the same name and amount are two incomes (bills dedupe on name + amount; income uses its id). */

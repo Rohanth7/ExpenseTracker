@@ -20,26 +20,35 @@ object IncomeForecast {
         val total: Double get() = forCycle(logged, stillDue, expected)
     }
 
-    fun cycleIncome(incomes: List<Income>, recurring: List<RecurringIncome>, expectedMonthly: Double, now: Long, cycle: DateRange) =
-        CycleIncome(incomes.filter { it.date in cycle }.sumOf { it.amount }, recurringStillDue(recurring, now, cycle), expectedMonthly)
+    fun cycleIncome(incomes: List<Income>, recurring: List<RecurringIncome>, expectedMonthly: Double, now: Long, cycle: DateRange): CycleIncome {
+        val inCycle = incomes.filter { it.date in cycle }
+        val loggedToday = inCycle.filter { it.date >= BudgetPeriod.startOfDay(now) }.mapNotNull { it.recurringIncomeId }.toSet()
+        return CycleIncome(inCycle.sumOf { it.amount }, recurringStillDue(recurring, now, cycle, loggedToday), expectedMonthly)
+    }
 
     /** The same, straight from the database (widgets). */
-    suspend fun load(db: AppDatabase, expectedMonthly: Double, now: Long, cycle: DateRange) =
-        CycleIncome(db.incomeDao().sumInRange(cycle.start, cycle.endInclusive), recurringStillDue(db.recurringIncomeDao().getEnabled(), now, cycle), expectedMonthly)
+    suspend fun load(db: AppDatabase, expectedMonthly: Double, now: Long, cycle: DateRange): CycleIncome {
+        val loggedToday = db.incomeDao().recurringIdsInRange(maxOf(BudgetPeriod.startOfDay(now), cycle.start), cycle.endInclusive).toSet()
+        return CycleIncome(db.incomeDao().sumInRange(cycle.start, cycle.endInclusive),
+            recurringStillDue(db.recurringIncomeDao().getEnabled(), now, cycle, loggedToday), expectedMonthly)
+    }
 
     fun forCycle(loggedThisCycle: Double, recurringStillDue: Double, expectedMonthly: Double): Double =
         if (loggedThisCycle > 0 || recurringStillDue > 0) loggedThisCycle + recurringStillDue else expectedMonthly
 
     /**
-     * Recurring income due after today and inside [cycle]. Today's is left out: it's logged when
-     * the app opens, so it's already in the logged total.
+     * Recurring income due from today to the end of [cycle]. Today's counts until it's logged
+     * ([loggedToday] holds the ids already logged from today on): the app logs it when it opens,
+     * but the widget, or an app left open overnight, sees payday start before that.
      */
-    fun recurringStillDue(recurring: List<RecurringIncome>, now: Long, cycle: DateRange): Double {
+    fun recurringStillDue(recurring: List<RecurringIncome>, now: Long, cycle: DateRange, loggedToday: Set<Long> = emptySet()): Double {
+        val todayStart = BudgetPeriod.startOfDay(now)
         // Calendar arithmetic, not + 24 h: a daylight-saving day is 23 or 25 hours long.
-        val tomorrowStart = Calendar.getInstance().apply { timeInMillis = BudgetPeriod.startOfDay(now); add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
-        if (tomorrowStart > cycle.endInclusive) return 0.0
+        val tomorrowStart = Calendar.getInstance().apply { timeInMillis = todayStart; add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
+        if (todayStart > cycle.endInclusive) return 0.0
         return recurring.filter { it.isEnabled }.sumOf { r ->
-            CashFlow.dueDatesInRange(r.dayOfMonth, maxOf(tomorrowStart, cycle.start), cycle.endInclusive).size * r.amount
+            CashFlow.dueDatesInRange(r.dayOfMonth, maxOf(todayStart, cycle.start), cycle.endInclusive)
+                .count { it >= tomorrowStart || r.id !in loggedToday } * r.amount
         }
     }
 }
