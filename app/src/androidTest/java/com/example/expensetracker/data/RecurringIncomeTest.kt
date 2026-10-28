@@ -119,6 +119,17 @@ class RecurringIncomeTest {
         assertEquals(1, RecurringManager.applyRecurringIncome(db, prefs, day(2026, Calendar.OCTOBER, 28)))
     }
 
+    /** Two tenants paying the same rent, one entered by hand: the other is still logged. */
+    @Test fun oneEntryByHandCoversOnlyOneOfTwoAlike() = runBlocking {
+        db.incomeDao().insert(Income(amount = 10000.0, description = "Rent received", date = day(2026, Calendar.OCTOBER, 2).timeInMillis))
+        db.recurringIncomeDao().insert(RecurringIncome(name = "Rent received", amount = 10000.0, dayOfMonth = 1))
+        db.recurringIncomeDao().insert(RecurringIncome(name = "Rent received", amount = 10000.0, dayOfMonth = 1))
+        assertEquals(1, RecurringManager.applyRecurringIncome(db, prefs, day(2026, Calendar.OCTOBER, 16)))
+        prefs.edit().clear().commit()
+        assertEquals(0, RecurringManager.applyRecurringIncome(db, prefs, day(2026, Calendar.OCTOBER, 17)))
+        assertEquals(2, incomes().size)
+    }
+
     /** Two salaries with the same name and amount are two incomes (bills dedupe on name + amount; income uses its id). */
     @Test fun twoAlikeAreBothLogged() = runBlocking {
         db.recurringIncomeDao().insert(RecurringIncome(name = "Rent received", amount = 12000.0, dayOfMonth = 5))

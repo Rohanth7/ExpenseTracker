@@ -31,7 +31,35 @@ class IncomeForecastTest {
     @Test fun `once today's salary is logged it isn't counted twice`() {
         val now = at(2026, 10, 16)
         val s = salary(50000.0, 16).copy(id = 7)
-        assertEquals(0.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 1, 0), loggedToday = setOf(7L)), 0.0)
+        val logged = income(50000.0, at(2026, 10, 16, 0)).copy(source = "Recurring", recurringIncomeId = 7)
+        assertEquals(0.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 1, 0), incomes = listOf(logged)), 0.0)
+    }
+
+    // What the forecast leaves out must match what RecurringManager won't log (RecurringIncomeRule).
+    @Test fun `a salary already entered by hand this month isn't still to come`() {
+        val now = at(2026, 10, 3)
+        val s = RecurringIncome(id = 7, name = "Salary", amount = 50000.0, dayOfMonth = 5)
+        val hand = Income(amount = 50000.0, description = "salary", date = at(2026, 10, 3))
+        assertEquals(0.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 1, 0), incomes = listOf(hand)), 0.0)
+        // Last month's hand entry doesn't count for this month
+        val old = hand.copy(date = at(2026, 9, 3))
+        assertEquals(50000.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 1, 0), incomes = listOf(old)), 0.0)
+    }
+
+    @Test fun `a month RecurringManager has marked done isn't still to come`() {
+        // Logged on the 1st and then deleted, or its day moved from 1 to 30 after it was logged
+        val now = at(2026, 10, 16)
+        val s = salary(50000.0, 30).copy(id = 7)
+        val cycle = BudgetPeriod.forOffset(now, 1, 0)
+        assertEquals(0.0, IncomeForecast.recurringStillDue(listOf(s), now, cycle, marks = setOf("2026_9_7")), 0.0)
+        assertEquals(50000.0, IncomeForecast.recurringStillDue(listOf(s), now, cycle, marks = setOf("2026_8_7")), 0.0)
+    }
+
+    @Test fun `in a 25th-to-24th cycle, next month's salary checks next month's entries`() {
+        val now = at(2026, 10, 26)  // cycle 25 Oct – 24 Nov; salary on the 1st is due 1 Nov
+        val s = salary(50000.0, 1).copy(id = 7)
+        val octEntry = income(50000.0, at(2026, 10, 1, 0)).copy(source = "Recurring", recurringIncomeId = 7)
+        assertEquals(50000.0, IncomeForecast.recurringStillDue(listOf(s), now, BudgetPeriod.forOffset(now, 25, 0), incomes = listOf(octEntry), marks = setOf("2026_9_7")), 0.0)
     }
     @Test fun `tomorrow's salary is still to come`() = assertEquals(50000.0, still(listOf(salary(50000.0, 17)), at(2026, 10, 16, 23)), 0.0)
     @Test fun `disabled recurring income is ignored`() = assertEquals(0.0, still(listOf(salary(50000.0, 25, enabled = false)), at(2026, 10, 16)), 0.0)

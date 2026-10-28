@@ -38,7 +38,8 @@ class BackupCodecTest {
                 "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L)),
             incomes = listOf(Income(id = 8, amount = 50000.0, description = "Salary", date = 1_760_000_000_000, source = "Recurring", recurringIncomeId = 9),
                 Income(id = 10, amount = 2500.5, description = "Freelance", tags = "side")),
-            recurringIncomes = listOf(RecurringIncome(id = 9, name = "Salary", amount = 50000.0, dayOfMonth = 1, isEnabled = false))
+            recurringIncomes = listOf(RecurringIncome(id = 9, name = "Salary", amount = 50000.0, dayOfMonth = 1, isEnabled = false)),
+            recurringIncomeLogged = listOf("2026_9_9")
         )
         assertEquals(3, data.version)
         assertEquals(data, ok(BackupCodec.toJson(data)))

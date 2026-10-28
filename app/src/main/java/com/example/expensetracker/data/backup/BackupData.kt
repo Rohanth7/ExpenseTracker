@@ -44,7 +44,9 @@ data class BackupData(
     val settings: BackupSettings? = null,
     val parsingRules: List<ParsingRule>? = null,
     val incomes: List<Income>? = null,
-    val recurringIncomes: List<RecurringIncome>? = null
+    val recurringIncomes: List<RecurringIncome>? = null,
+    /** Months RecurringManager has marked done ("2026_9_4"), so a salary deleted on purpose stays deleted. */
+    val recurringIncomeLogged: List<String>? = null
 ) {
     /** Sections of the phone's data that restoring this backup will NOT touch. */
     val missingSections: List<String>

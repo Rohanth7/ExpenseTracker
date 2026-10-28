@@ -59,7 +59,6 @@ import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
-import com.example.expensetracker.ui.util.INVALID_AMOUNT
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
@@ -1047,7 +1046,7 @@ private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> U
         confirmButton = {
             val canSave = name.isNotBlank() && dayValue != null
             TextButton(onClick = {
-                val amt = amount.validated()?.takeIf { it > 0 } ?: run { amount.error = INVALID_AMOUNT; return@TextButton }
+                val amt = amount.validated() ?: return@TextButton
                 val d = dayValue ?: return@TextButton
                 val base = existing ?: RecurringIncome(name = "", amount = 0.0, dayOfMonth = 1)
                 onConfirm(base.copy(name = name.trim(), amount = amt, dayOfMonth = d, isEnabled = enabled))

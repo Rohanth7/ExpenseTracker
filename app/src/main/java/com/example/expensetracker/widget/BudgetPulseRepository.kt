@@ -3,6 +3,7 @@ package com.example.expensetracker.widget
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.ui.screens.dashboard.IncomeForecast
 
 data class WidgetData(
@@ -31,7 +32,7 @@ class BudgetPulseRepository(private val db: AppDatabase, private val prefs: Pref
         return WidgetData(
             spent = db.expenseDao().getTotalSpentInRange(cur.start, cur.endInclusive),
             // Same rule as the Overview: logged and recurring income, else the expected figure
-            income = IncomeForecast.load(db, prefs.monthlyIncome, now, cur).total,
+            income = IncomeForecast.load(db, prefs.monthlyIncome, now, cur, RecurringManager.incomeMarks(prefs.sharedPreferences)).total,
             monthLabel = BudgetPeriod.compactLabel(cur, startDay),
             dayOfMonth = BudgetPeriod.dayOfCycle(now, startDay),
             daysInMonth = BudgetPeriod.daysInCycle(cur),

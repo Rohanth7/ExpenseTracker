@@ -14,6 +14,7 @@ import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRule
 import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.first
@@ -67,6 +68,7 @@ class BackupRestoreTest {
         // Dated this month: a restore logs this month's salary if the backup doesn't have it yet
         source.incomeDao().insert(Income(id = 40, amount = 50000.0, description = "Salary", date = System.currentTimeMillis(), source = "Recurring", recurringIncomeId = 4))
         source.incomeDao().insert(Income(id = 41, amount = 3000.0, description = "Freelance", date = 3L, tags = "side"))
+        sourcePrefs.sharedPreferences.edit().putBoolean("income_applied_2026_9_4", true).commit()
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
         sourceRules.add(ParsingRule("r1", ParsingRule.Kind.IGNORE, "^Promo\\s+\\d+$", label = "Promo #", createdAt = 1L))
@@ -96,6 +98,7 @@ class BackupRestoreTest {
         assertEquals(source.merchantMappingDao().getAllMappings(), target.merchantMappingDao().getAllMappings())
         assertEquals(source.incomeDao().getAllOnce(), target.incomeDao().getAllOnce())
         assertEquals(source.recurringIncomeDao().getAllOnce(), target.recurringIncomeDao().getAllOnce())
+        assertTrue("2026_9_4" in RecurringManager.incomeMarks(targetPrefs.sharedPreferences))
         assertEquals(75000.0, targetPrefs.monthlyIncome, 0.0)
         assertEquals(85, targetPrefs.budgetAlertThreshold)
         assertEquals(sourceRules.rules.value, targetRules.rules.value)
@@ -134,6 +137,15 @@ class BackupRestoreTest {
         manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), incomes = emptyList(),
             recurringIncomes = listOf(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1))))
         assertEquals(listOf(1L), target.incomeDao().getAllOnce().map { it.recurringIncomeId })
+    }
+
+    /** A salary deleted on purpose this month (marked done, no entry) stays deleted after a restore. */
+    @Test fun aDeletedSalaryInTheBackupIsNotLoggedAgain() = runBlocking {
+        val now = Calendar.getInstance()
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), incomes = emptyList(),
+            recurringIncomes = listOf(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1)),
+            recurringIncomeLogged = listOf("${now.get(Calendar.YEAR)}_${now.get(Calendar.MONTH)}_1")))
+        assertTrue(target.incomeDao().getAllOnce().isEmpty())
     }
 
     @Test fun failedRestoreLeavesIncomeUnchanged() = runBlocking {

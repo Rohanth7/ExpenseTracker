@@ -59,6 +59,8 @@ import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.AppDatePickerDialog
 
 private data class DayGroup<T>(
+    /** Unique per list (the date, with its year), for LazyColumn keys. */
+    val key: String,
     val dayLabel: String,
     val dateLabel: String,
     val items: List<T>,
@@ -281,7 +283,8 @@ fun ExpensesScreen(
 
                 // ── Filter chips ────────────────────────────────────
                 val parentCategories = remember(categories) { categories.filter { it.parentId == null } }
-                // Categories and tags are spending's; income has neither, so they don't filter it.
+                // Category and tag chips are spending's (income has no category, and tag rename/delete
+                // covers expenses only), so they're hidden for income; search matches income tags.
                 if (!showIncome && (parentCategories.isNotEmpty() || allTagSummaries.isNotEmpty())) {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -364,7 +367,7 @@ fun ExpensesScreen(
                     ) {
                         grouped.forEachIndexed { groupIdx, dayGroup ->
                             if (!sortByAmount) {
-                                item(key = "header_${dayGroup.dayLabel}_${dayGroup.dateLabel}") {
+                                item(key = "header_${dayGroup.key}") {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -391,7 +394,7 @@ fun ExpensesScreen(
                                     }
                                 }
                             }
-                            item(key = "card_${dayGroup.dayLabel}_${dayGroup.dateLabel}") {
+                            item(key = "card_${dayGroup.key}") {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1047,7 +1050,7 @@ private fun AddExpenseDialog(
                     val amt = amount.validated() ?: return@TextButton
                     val date = buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis())
                     if (isIncome) return@TextButton onConfirmIncome(amt, description.trim(), date, tags.trim())
-                    onConfirm(amt, description.trim(), selectedCategoryId, buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis()), tags.trim(), selectedPaymentMethod)
+                    onConfirm(amt, description.trim(), selectedCategoryId, date, tags.trim(), selectedPaymentMethod)
                 }
             ) { Text("Add", color = Jade) }
         },
@@ -1276,7 +1279,7 @@ private fun IncomeList(groups: List<DayGroup<Income>>, hasAny: Boolean, showDayH
         else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
             groups.forEachIndexed { groupIdx, dayGroup ->
                 if (showDayHeaders) {
-                    item(key = "income_header_${dayGroup.dayLabel}_${dayGroup.dateLabel}") {
+                    item(key = "income_header_${dayGroup.key}") {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1291,7 +1294,7 @@ private fun IncomeList(groups: List<DayGroup<Income>>, hasAny: Boolean, showDayH
                         }
                     }
                 }
-                item(key = "income_card_${dayGroup.dayLabel}_${dayGroup.dateLabel}") {
+                item(key = "income_card_${dayGroup.key}") {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp)).background(Paper)
                     ) {
@@ -1400,6 +1403,7 @@ private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T)
     if (sortByAmount) {
         return listOf(
             DayGroup(
+                key = "by_amount",
                 dayLabel = "Highest",
                 dateLabel = "Amount",
                 items = expenses.sortedByDescending(amountOf),
@@ -1431,7 +1435,7 @@ private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T)
                 else -> SimpleDateFormat("EEE", Locale.getDefault()).format(c.time)
             }
             val dateLabel = SimpleDateFormat("d MMM", Locale.getDefault()).format(c.time)
-            DayGroup(dayLabel = dayLabel, dateLabel = dateLabel, items = items.sortedByDescending(dateOf), total = items.sumOf(amountOf))
+            DayGroup(key = "${key.first}_${key.second}_${key.third}", dayLabel = dayLabel, dateLabel = dateLabel, items = items.sortedByDescending(dateOf), total = items.sumOf(amountOf))
         }
 }
 

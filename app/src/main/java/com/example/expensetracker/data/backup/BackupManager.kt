@@ -72,6 +72,7 @@ class BackupManager(
                 parsingRules = rules.rules.value,
                 incomes = db.incomeDao().getAllOnce(),
                 recurringIncomes = db.recurringIncomeDao().getAllOnce(),
+                recurringIncomeLogged = RecurringManager.incomeMarks(p.sharedPreferences).sorted(),
                 settings = BackupSettings(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
@@ -104,7 +105,6 @@ class BackupManager(
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L
-        if (data.recurringIncomes != null) RecurringManager.reapplyIncomeAfterRestore(db, prefs.sharedPreferences)
         data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs
@@ -113,6 +113,11 @@ class BackupManager(
             s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
             s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
             s.monthStartDay?.let { p.monthStartDay = it }
+        }
+        // Best effort, like the widget below: the data is already restored. The phone's "done this
+        // month" marks were about the replaced data; the backup's take their place.
+        if (data.recurringIncomes != null) runCatching {
+            RecurringManager.restoreIncomeMarks(db, prefs.sharedPreferences, data.recurringIncomeLogged.orEmpty())
         }
         // Screens follow the month start live; tests use their own prefs and leave the app's alone.
         if (preferences == null) MonthStartDay.reload(context)

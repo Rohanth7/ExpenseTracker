@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
@@ -111,7 +112,7 @@ class DashboardViewModel(
         val nowMs = System.currentTimeMillis()
         // A budget month runs from the user's start day (1 = calendar month); see BudgetPeriod.
         val cycle = BudgetPeriod.forOffset(nowMs, startDay, offset)
-        val cycleIncome = IncomeForecast.cycleIncome(incomes, recurringIncomes, expectedIncome, nowMs, cycle)
+        val cycleIncome = IncomeForecast.cycleIncome(incomes, recurringIncomes, expectedIncome, nowMs, cycle, RecurringManager.incomeMarks(prefs.sharedPreferences))
         val income = cycleIncome.total
         val start = cycle.start
         val end = cycle.endInclusive
