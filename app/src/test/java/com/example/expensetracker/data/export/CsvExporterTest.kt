@@ -2,6 +2,7 @@ package com.example.expensetracker.data.export
 
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -78,5 +79,43 @@ class CsvExporterTest {
         val out = StringBuilder()
         CsvExporter.write(out, expenses, listOf(food), ist)
         assertEquals(CsvExporter.expensesToCsv(expenses, listOf(food), ist), out.toString())
+    }
+
+    @Test fun `income rows sit between expenses by date, with no category or payment method`() {
+        val csv = CsvExporter.expensesToCsv(listOf(
+            Expense(amount = 99.5, description = "Tea", categoryId = 1, date = at(2026, 10, 1)),
+            Expense(amount = 1500.0, description = "Rent", categoryId = 1, date = at(2026, 10, 5)),
+        ), listOf(food), ist, incomes = listOf(
+            Income(amount = 50000.0, description = "Salary", date = at(2026, 10, 1, 0, 0), source = "Recurring", recurringIncomeId = 1),
+            Income(amount = 2500.5, description = "Freelance", date = at(2026, 10, 3, 18, 5), tags = "side"),
+        ))
+        assertEquals(listOf(
+            "2026-10-01,00:00,income,50000.00,Salary,,,,,Recurring",
+            "2026-10-01,09:30,expense,99.50,Tea,Food,,UPI,,Manual",
+            "2026-10-03,18:05,income,2500.50,Freelance,,,,side,Manual",
+            "2026-10-05,09:30,expense,1500.00,Rent,Food,,UPI,,Manual",
+        ), lines(csv).drop(1))
+    }
+
+    @Test fun `income text is escaped and quoted like expense text`() {
+        val csv = CsvExporter.expensesToCsv(emptyList(), emptyList(), ist, incomes = listOf(
+            Income(amount = 10.0, description = "=1+1", date = at(2026, 10, 2), tags = "@x"),
+            Income(amount = 20.0, description = "Refund, \"Amazon\"", date = at(2026, 10, 3)),
+        ))
+        assertEquals("2026-10-02,09:30,income,10.00,'=1+1,,,,'@x,Manual", lines(csv)[1])
+        assertEquals("2026-10-03,09:30,income,20.00,\"Refund, \"\"Amazon\"\"\",,,,,Manual", lines(csv)[2])
+    }
+
+    @Test fun `an income amount that isn't a number is left empty`() {
+        val csv = CsvExporter.expensesToCsv(emptyList(), emptyList(), ist, incomes = listOf(Income(amount = Double.POSITIVE_INFINITY, description = "X", date = at(2026, 10, 2))))
+        assertEquals("2026-10-02,09:30,income,,X,,,,,Manual", lines(csv)[1])
+    }
+
+    @Test fun `writing incomes to a stream gives the same file`() {
+        val expenses = listOf(Expense(amount = 99.5, description = "Tea", categoryId = 1, date = at(2026, 10, 1)))
+        val incomes = listOf(Income(amount = 100.0, description = "Gift", date = at(2026, 10, 2)))
+        val out = StringBuilder()
+        CsvExporter.write(out, expenses, listOf(food), ist, incomes)
+        assertEquals(CsvExporter.expensesToCsv(expenses, listOf(food), ist, incomes), out.toString())
     }
 }

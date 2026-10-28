@@ -1,8 +1,12 @@
 package com.example.expensetracker.data.recurring
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
+import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
+import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import java.util.Calendar
 
 object RecurringManager {
@@ -15,14 +19,7 @@ object RecurringManager {
 
         val db = AppDatabase.getInstance(context)
         val bills = db.billDao().getAutoLogEnabled()
-        val monthStart = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val monthEnd = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
+        val (monthStart, monthEnd) = RecurringSchedule.monthBounds(cal)
 
         bills.forEach { bill ->
             val key = "bill_applied_${currentMonth}_${bill.id}"
@@ -45,5 +42,49 @@ object RecurringManager {
             }
             prefs.edit().putBoolean(key, true).apply()
         }
+
+        // The widget's forecast counts logged income.
+        if (applyRecurringIncome(db, cal) > 0) WidgetUpdateHelper.update(context)
+    }
+
+    /** After recurring income is added or changed in Settings: logs any that's due now, without waiting for the next launch. */
+    suspend fun applyIncomeNow(context: Context) {
+        if (applyRecurringIncome(AppDatabase.getInstance(context), Calendar.getInstance()) > 0) WidgetUpdateHelper.update(context)
+    }
+
+    /**
+     * Logs each enabled recurring income on its calendar day (clamped, like bills), dated midnight
+     * of that day, once per calendar month, unless [RecurringIncomeRule] finds the month done.
+     * Either way the month is recorded (a [RecurringIncomeMonth]) in the same transaction, so a
+     * deleted or moved entry doesn't make it log again. Returns how many were logged.
+     */
+    suspend fun applyRecurringIncome(db: AppDatabase, now: Calendar): Int {
+        val (monthStart, monthEnd) = RecurringSchedule.monthBounds(now)
+        val year = now.get(Calendar.YEAR)
+        val month = now.get(Calendar.MONTH) + 1
+        val dao = db.recurringIncomeDao()
+        val enabled = dao.getEnabled()
+        // By due day, the order the rule hands out hand entries in
+        var logged = 0
+        enabled.sortedWith(compareBy({ it.dayOfMonth }, { it.id })).forEach { r ->
+            val dueDate = RecurringSchedule.dueDateIfReached(r.dayOfMonth, now) ?: return@forEach
+            // One transaction, so two launches running at once log it once.
+            val inserted = db.withTransaction {
+                val months = dao.getMonthsIn(year, month)
+                when {
+                    months.any { it.recurringIncomeId == r.id } -> false
+                    RecurringIncomeRule.done(r, year, month, db.incomeDao().getInRange(monthStart, monthEnd), enabled, months) -> {
+                        dao.insertMonth(RecurringIncomeMonth(r.id, year, month, byHand = true)); false
+                    }
+                    else -> {
+                        dao.insertMonth(RecurringIncomeMonth(r.id, year, month))
+                        db.incomeDao().insert(Income(amount = r.amount, description = r.name, date = dueDate, source = "Recurring", recurringIncomeId = r.id))
+                        true
+                    }
+                }
+            }
+            if (inserted) logged++
+        }
+        return logged
     }
 }

@@ -9,21 +9,26 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.export.DateFilter
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
+import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.notification.BudgetAlertHelper
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ExpensesViewModel(
     private val expenseRepo: ExpenseRepository,
     private val categoryRepo: CategoryRepository,
     private val mappingRepo: MerchantMappingRepository,
+    private val incomeRepo: IncomeRepository,
     private val appContext: Context,
     private val prefs: PreferencesManager,
     /** Keeps the filters if Android stops the app in the background. */
@@ -40,6 +45,8 @@ class ExpensesViewModel(
     private val _now = MutableStateFlow(System.currentTimeMillis())
     private val _minAmount = saved.getMutableStateFlow<Double?>("min_amount", null)
     private val _maxAmount = saved.getMutableStateFlow<Double?>("max_amount", null)
+    /** Spending or Income list; saved like the filters. */
+    private val _showIncome = saved.getMutableStateFlow("show_income", false)
 
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     val categoryFilter: StateFlow<Long?> = _categoryFilter.asStateFlow()
@@ -53,6 +60,8 @@ class ExpensesViewModel(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, _dateFilter.value?.range(_now.value, MonthStartDay.get(appContext)))
     val minAmount: StateFlow<Double?> = _minAmount.asStateFlow()
     val maxAmount: StateFlow<Double?> = _maxAmount.asStateFlow()
+    val showIncome: StateFlow<Boolean> = _showIncome.asStateFlow()
+    fun setShowIncome(show: Boolean) { _showIncome.value = show; if (show) _selectedIds.value = emptySet() }
 
     val categories: StateFlow<List<Category>> = categoryRepo.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -87,6 +96,18 @@ class ExpensesViewModel(
             matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _allIncomes: StateFlow<List<Income>> = incomeRepo.allIncomes
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val hasAnyIncome: StateFlow<Boolean> = _allIncomes
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** The Income list: search, dates and amount limits apply (see [filterIncomes]). */
+    val incomes: StateFlow<List<Income>> = combine(_allIncomes, _searchQuery, dateRange, combine(_minAmount, _maxAmount, ::Pair), _sortByAmount) { all, query, range, (min, max), byAmount ->
+        filterIncomes(all, query, range, min, max, byAmount)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     data class TagSummary(val name: String, val count: Int, val totalSpent: Double)
@@ -237,15 +258,32 @@ class ExpensesViewModel(
         expenseRepo.delete(expense)
     }
 
+    // Income writes finish even if the screen goes away mid-save.
+    private fun write(block: suspend () -> Unit) = viewModelScope.launch { withContext(NonCancellable) { block() } }
+
+    fun addIncome(amount: Double, description: String, date: Long, tags: String) =
+        write { incomeRepo.insert(Income(amount = amount, description = description, date = date, tags = tags)) }
+
+    fun updateIncome(income: Income, amount: Double, description: String, date: Long, tags: String) =
+        write { incomeRepo.update(income.copy(amount = amount, description = description, date = date, tags = tags)) }
+
+    /** Edit's Duplicate for income; with [saveEdits] the form is saved to [original] first. */
+    fun duplicateIncome(original: Income, amount: Double, description: String, date: Long, tags: String, saveEdits: Boolean) = write {
+        if (saveEdits) incomeRepo.update(original.copy(amount = amount, description = description, date = date, tags = tags))
+        incomeRepo.insert(original.duplicateWithEdits(amount, description, tags, System.currentTimeMillis()))
+    }
+
+    fun deleteIncome(income: Income) = write { incomeRepo.delete(income) }
+
     companion object {
         fun parseTags(raw: String): List<String> =
             raw.split(",").map { it.trim().trimStart('#') }.filter { it.isNotBlank() }
 
-        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, mappingRepo: MerchantMappingRepository, appContext: Context, prefs: PreferencesManager) =
+        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, mappingRepo: MerchantMappingRepository, incomeRepo: IncomeRepository, appContext: Context, prefs: PreferencesManager) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T =
-                    ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, appContext, prefs, extras.createSavedStateHandle()) as T
+                    ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, incomeRepo, appContext, prefs, extras.createSavedStateHandle()) as T
             }
     }
 }

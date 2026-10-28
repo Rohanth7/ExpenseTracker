@@ -30,8 +30,11 @@ fun restoreSummary(d: BackupData): String {
         d.bills?.size?.takeIf { it > 0 }?.let { add(part(it, "bill", "bills")) }
         d.loans?.size?.takeIf { it > 0 }?.let { add(part(it, "loan", "loans")) }
         d.savingsGoals?.size?.takeIf { it > 0 }?.let { add(part(it, "savings goal", "savings goals")) }
+        d.incomes?.size?.takeIf { it > 0 }?.let { add(part(it, "income", "incomes")) }
+        d.recurringIncomes?.size?.takeIf { it > 0 }?.let { add(part(it, "recurring income", "recurring incomes")) }
     }.joinToString(", ")
 }
 
-/** True if the backup carried a monthly income, so setup doesn't need to ask for one. */
-fun restoredIncome(d: BackupData): Boolean = (d.settings?.monthlyIncome ?: 0.0) > 0
+/** True if the backup carried income (an expected figure or income records), so setup doesn't need to ask for one. */
+fun restoredIncome(d: BackupData): Boolean =
+    (d.settings?.monthlyIncome ?: 0.0) > 0 || !d.incomes.isNullOrEmpty() || !d.recurringIncomes.isNullOrEmpty()

@@ -2,8 +2,8 @@ package com.example.expensetracker.ui.util
 
 import java.math.BigDecimal
 
-// Shared by every monthly-limit field (Categories dialog, Settings → Category Budgets) so they
-// pre-fill and parse identically.
+// Shared by amount fields where 0 has a meaning (monthly limits, income, filters, bills and loan
+// totals) so they pre-fill and parse identically.
 
 /**
  * Pre-fill text for an existing limit, to the paisa (as saving stores it) so saving without edits
@@ -25,3 +25,7 @@ fun parseLimitInput(text: String, decimalComma: Boolean = AmountCalculator.usesD
     return AmountCalculator.evaluate(trimmed, decimalComma)
 }
 
+
+/** Like [parseLimitInput], but nothing typed isn't an answer: for bills, loan totals and income, where 0 is allowed. */
+fun parseAmountOrZero(text: String, decimalComma: Boolean = AmountCalculator.usesDecimalComma()): Double? =
+    if (text.isBlank()) null else parseLimitInput(text, decimalComma)

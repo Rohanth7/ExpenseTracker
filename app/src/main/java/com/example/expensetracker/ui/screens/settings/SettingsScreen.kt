@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
@@ -57,9 +58,13 @@ import com.example.expensetracker.ui.util.isDebugBuild
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.AmountField
+import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseLimitInput
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.util.parseAmountOrZero
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.LocalAppLocked
 
@@ -293,7 +298,9 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
         count(d.categories?.size, "category", "categories"),
         count(d.bills?.size, "bill", "bills"),
         count(d.loans?.size, "loan", "loans"),
-        count(d.savingsGoals?.size, "savings goal", "savings goals")
+        count(d.savingsGoals?.size, "savings goal", "savings goals"),
+        count(d.incomes?.size, "income", "incomes"),
+        count(d.recurringIncomes?.size, "recurring income", "recurring incomes")
     ).joinToString(", ")
     val kept = d.missingSections
     AppAlertDialog(
@@ -304,7 +311,10 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
             Text(buildString {
                 append("Backup from $date: $contents.\n\n")
                 append("This replaces that data on this phone. If anything goes wrong, nothing is changed.")
-                if (kept.isNotEmpty()) append("\n\nThis is an older backup without ${kept.joinToString(", ")}, so those stay as they are.")
+                if (kept.isNotEmpty()) {
+                    val list = if (kept.size == 1) kept[0] else kept.dropLast(1).joinToString(", ") + " and " + kept.last()
+                    append("\n\nThis is an older backup without $list, so those stay as they are.")
+                }
             })
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text("Restore", color = Jade) } },
@@ -520,8 +530,8 @@ private fun CategoryLimitDialog(
     var limitText by remember {
         mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
-    val parsedLimit = remember(limitText) { parseLimitInput(limitText) }
-    val limitShown = remember(limitText) { AmountCalculator.previewText(limitText, parsedLimit) }
+    val limit = rememberAmountText(limitText) { parseLimitInput(it) }
+    val parsedLimit = limit.value
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -536,12 +546,8 @@ private fun CategoryLimitDialog(
                     placeholder = { Text("e.g. 5000", color = Muted) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    isError = parsedLimit == null,
-                    supportingText = when {
-                        parsedLimit == null -> {{ Text("Enter a valid amount") }}
-                        limitShown != null -> {{ Text(limitShown, color = Muted, fontSize = 12.sp) }}
-                        else -> null
-                    },
+                    isError = limit.invalid,
+                    supportingText = limit.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -569,6 +575,10 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
     var showAddBill by remember { mutableStateOf(false) }
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
     var billToEdit by remember { mutableStateOf<Bill?>(null) }
+    val recurringIncomes by viewModel.recurringIncomes.collectAsState()
+    var showAddIncome by remember { mutableStateOf(false) }
+    var incomeToEdit by remember { mutableStateOf<RecurringIncome?>(null) }
+    var incomeToDelete by remember { mutableStateOf<RecurringIncome?>(null) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Bills & Reminders", onBack) ; Spacer(Modifier.height(8.dp)) }
@@ -592,7 +602,42 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
                 Spacer(Modifier.height(8.dp))
             }
         }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel("RECURRING INCOME")
+                Text("Add +", fontSize = 12.sp, color = Jade, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddIncome = true })
+            }
+        }
+        if (recurringIncomes.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text("No recurring income yet.\nAdd your salary and it's logged as income on its day each month.",
+                        fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
+                }
+            }
+        } else {
+            items(recurringIncomes, key = { "income_${it.id}" }) { r ->
+                RecurringIncomeRow(r, onToggle = { viewModel.toggleRecurringIncome(r) }, onDelete = { incomeToDelete = r }, onClick = { incomeToEdit = r })
+                Spacer(Modifier.height(8.dp))
+            }
+        }
         item { Spacer(Modifier.height(40.dp)) }
+    }
+
+    if (showAddIncome) {
+        RecurringIncomeDialog(existing = null, onDismiss = { showAddIncome = false },
+            onConfirm = { viewModel.addRecurringIncome(it); showAddIncome = false })
+    }
+    incomeToEdit?.let { r ->
+        RecurringIncomeDialog(existing = r, onDismiss = { incomeToEdit = null },
+            onConfirm = { viewModel.updateRecurringIncome(it); incomeToEdit = null })
+    }
+    incomeToDelete?.let { r ->
+        AppAlertDialog(onDismissRequest = { incomeToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Delete recurring income?") },
+            text = { Text("\"${r.name}\" won't be logged any more. Income it already logged stays.") },
+            confirmButton = { TextButton(onClick = { viewModel.deleteRecurringIncome(r); incomeToDelete = null }) { Text("Delete", color = Coral) } },
+            dismissButton = { TextButton(onClick = { incomeToDelete = null }) { Text("Cancel", color = Muted) } })
     }
 
     if (showAddBill) {
@@ -831,7 +876,7 @@ private fun DataSubPage(
                     title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export CSV", subtitle = "Expenses for Excel or Google Sheets", onClick = { showCsvDialog = true })
+                    title = "Export CSV", subtitle = "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
                     title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
@@ -865,14 +910,14 @@ private fun DataSubPage(
     if (showMockDataDialog) {
         AppAlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
-            text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, and savings goals.") },
+            text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, a salary and savings goals.") },
             confirmButton = { TextButton(onClick = { onMockData(); showMockDataDialog = false }) { Text("Load", color = Jade) } },
             dismissButton = { TextButton(onClick = { showMockDataDialog = false }) { Text("Cancel", color = Muted) } })
     }
     if (showResetDialog) {
         AppAlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
-            text = { Text("This permanently deletes all expenses, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
+            text = { Text("This permanently deletes all expenses, income, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
             confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
             dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel", color = Muted) } })
     }
@@ -942,15 +987,77 @@ private fun SettingRow(icon: @Composable () -> Unit, title: String, subtitle: St
 
 // ── Bill / Loan rows & dialogs ───────────────────────────────────────────────
 
+private fun ordinal(day: Int) = when {
+    day in 11..13 -> "${day}th"
+    day % 10 == 1 -> "${day}st"
+    day % 10 == 2 -> "${day}nd"
+    day % 10 == 3 -> "${day}rd"
+    else -> "${day}th"
+}
+
+@Composable
+private fun RecurringIncomeRow(r: RecurringIncome, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Jade.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Text("💰", fontSize = 18.sp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(r.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text("+₹${fmtINR(r.amount)} · logged on the ${ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
+                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+        }
+        Switch(checked = r.isEnabled, onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(18.dp)) }
+    }
+}
+
+/** Add ([existing] null) or edit a recurring income: name, amount, day of the month, on/off. Mirrors the bill dialogs. */
+@Composable
+private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> Unit, onConfirm: (RecurringIncome) -> Unit) {
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    val amount = rememberAmountInputState(existing?.let { AmountCalculator.forEditing(it.amount) } ?: "")
+    var day by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
+    var enabled by remember { mutableStateOf(existing?.isEnabled ?: true) }
+    val dayValue = day.toIntOrNull()?.takeIf { it in 1..31 }
+    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
+
+    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
+        title = { Text(if (existing == null) "Add Recurring Income" else "Edit Recurring Income") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (e.g. Salary)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors)
+                AmountField(amount)
+                OutlinedTextField(value = day, onValueChange = { if (it.length <= 2) day = it.filter { c -> c.isDigit() } },
+                    label = { Text("Day of the month (1–31)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors,
+                    isError = day.isNotEmpty() && dayValue == null,
+                    supportingText = { Text(if (day.isNotEmpty() && dayValue == null) "Enter a day from 1 to 31" else "Logged as income on this day; 31 means the month's last day") })
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (enabled) JadeSoft else Canvas).clickable { enabled = !enabled }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Log it each month", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
+                    Switch(checked = enabled, onCheckedChange = { enabled = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                }
+            }
+        },
+        confirmButton = {
+            val canSave = name.isNotBlank() && dayValue != null
+            TextButton(onClick = {
+                val amt = amount.validated() ?: return@TextButton
+                val d = dayValue ?: return@TextButton
+                val base = existing ?: RecurringIncome(name = "", amount = 0.0, dayOfMonth = 1)
+                onConfirm(base.copy(name = name.trim(), amount = amt, dayOfMonth = d, isEnabled = enabled))
+            }, enabled = canSave) { Text(if (existing == null) "Add" else "Save", color = if (canSave) Jade else Muted) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
+}
+
 @Composable
 private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
-    val ordinal = when {
-        bill.dueDayOfMonth in 11..13 -> "${bill.dueDayOfMonth}th"
-        bill.dueDayOfMonth % 10 == 1 -> "${bill.dueDayOfMonth}st"
-        bill.dueDayOfMonth % 10 == 2 -> "${bill.dueDayOfMonth}nd"
-        bill.dueDayOfMonth % 10 == 3 -> "${bill.dueDayOfMonth}rd"
-        else -> "${bill.dueDayOfMonth}th"
-    }
+    val ordinal = ordinal(bill.dueDayOfMonth)
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
@@ -981,6 +1088,8 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
 private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
+    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
     var dueDay by remember { mutableStateOf("") }
     var reminderDays by remember { mutableStateOf("3") }
     var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
@@ -1007,6 +1116,7 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = amountText.invalid, supportingText = amountText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     if (!autoLog) {
                         OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
@@ -1037,7 +1147,7 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = amount.toDoubleOrNull() ?: return@TextButton
+                val amt = amountText.value ?: return@TextButton
                 if (name.isBlank()) return@TextButton
                 if (autoLog) { onConfirm(name.trim(), amt, 1, 0, selectedCategoryId, true) }
                 else {
@@ -1045,7 +1155,7 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
                     val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
                     onConfirm(name.trim(), amt, day, remind, selectedCategoryId, false)
                 }
-            }) { Text("Add", color = Jade) }
+            }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1086,7 +1196,9 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 @Composable
 private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
     var name by remember { mutableStateOf(bill.name) }
-    var amount by remember { mutableStateOf(bill.amount.toString()) }
+    var amount by remember { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
+    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
+    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
     var dueDay by remember { mutableStateOf(bill.dueDayOfMonth.toString()) }
     var reminderDays by remember { mutableStateOf(bill.reminderDays.toString()) }
     var selectedCategoryId by remember { mutableStateOf(bill.categoryId) }
@@ -1113,6 +1225,7 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = amountText.invalid, supportingText = amountText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     if (!autoLog) {
                         OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
@@ -1143,7 +1256,7 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
         },
         confirmButton = {
             TextButton(onClick = {
-                val amt = amount.toDoubleOrNull() ?: return@TextButton
+                val amt = amountText.value ?: return@TextButton
                 if (name.isBlank()) return@TextButton
                 val updated = if (autoLog) {
                     bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = 1, reminderDays = 0, categoryId = selectedCategoryId, autoLog = true)
@@ -1153,7 +1266,7 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
                     bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = false)
                 }
                 onConfirm(updated)
-            }) { Text("Save", color = Jade) }
+            }, enabled = amountText.value != null) { Text("Save", color = if (amountText.value != null) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1179,8 +1292,13 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
 
     var name by remember { mutableStateOf(loan.name) }
     var emoji by remember { mutableStateOf(loan.emoji) }
-    var totalAmount by remember { mutableStateOf(loan.totalAmount.toLong().toString()) }
-    var monthlyEmi by remember { mutableStateOf(loan.monthlyEmi.toLong().toString()) }
+    // To the paisa: toLong() here cut the paise off an untouched loan when it was saved.
+    var totalAmount by remember { mutableStateOf(AmountCalculator.forEditing(loan.totalAmount)) }
+    var monthlyEmi by remember { mutableStateOf(AmountCalculator.forEditing(loan.monthlyEmi)) }
+    // The total may be 0 (only the EMI known), as before; the EMI may not.
+    val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
+    val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
+    val amountsValid = totalText.value != null && emiText.value != null
     var tenureMonths by remember { mutableStateOf(loan.tenureMonths.toString()) }
     var monthsAgo by remember { mutableStateOf(initialMonthsAgo.toString()) }
     var dueDay by remember { mutableStateOf(loan.dueDayOfMonth.toString()) }
@@ -1207,8 +1325,10 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = totalText.invalid, supportingText = totalText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = emiText.invalid, supportingText = emiText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1223,8 +1343,8 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
         },
         confirmButton = {
             TextButton(onClick = {
-                val total = totalAmount.toDoubleOrNull() ?: return@TextButton
-                val emi = monthlyEmi.toDoubleOrNull() ?: return@TextButton
+                val total = totalText.value ?: return@TextButton
+                val emi = emiText.value ?: return@TextButton
                 val tenure = tenureMonths.toIntOrNull() ?: return@TextButton
                 val ago = monthsAgo.toIntOrNull() ?: 0
                 val due = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: 5
@@ -1236,7 +1356,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                     set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
                 }.timeInMillis
                 onConfirm(loan.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, totalAmount = total, monthlyEmi = emi, tenureMonths = tenure, startDate = newStartDate, dueDayOfMonth = due))
-            }) { Text("Save", color = Jade) }
+            }, enabled = amountsValid) { Text("Save", color = if (amountsValid) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1248,6 +1368,10 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
     var emoji by remember { mutableStateOf("🏦") }
     var totalAmount by remember { mutableStateOf("") }
     var monthlyEmi by remember { mutableStateOf("") }
+    // The total may be 0 (only the EMI known), as before; the EMI may not.
+    val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
+    val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
+    val amountsValid = totalText.value != null && emiText.value != null
     var tenureMonths by remember { mutableStateOf("") }
     var monthsAgo by remember { mutableStateOf("0") }
     var dueDay by remember { mutableStateOf("5") }
@@ -1264,8 +1388,10 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = totalText.invalid, supportingText = totalText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = emiText.invalid, supportingText = emiText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1280,8 +1406,8 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
         },
         confirmButton = {
             TextButton(onClick = {
-                val total = totalAmount.toDoubleOrNull() ?: return@TextButton
-                val emi = monthlyEmi.toDoubleOrNull() ?: return@TextButton
+                val total = totalText.value ?: return@TextButton
+                val emi = emiText.value ?: return@TextButton
                 val tenure = tenureMonths.toIntOrNull() ?: return@TextButton
                 val ago = monthsAgo.toIntOrNull() ?: 0
                 val due = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: 5
@@ -1294,7 +1420,7 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
                     }.timeInMillis
                     onConfirm(name.trim(), emoji.ifBlank { "🏦" }, total, emi, tenure, startDate, due)
                 }
-            }) { Text("Add", color = Jade) }
+            }, enabled = amountsValid) { Text("Add", color = if (amountsValid) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1322,7 +1448,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
                 DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
                     preset = p; custom = c
                 }
-                Text("Includes date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
                     modifier = Modifier.padding(top = 8.dp))
             }
         },

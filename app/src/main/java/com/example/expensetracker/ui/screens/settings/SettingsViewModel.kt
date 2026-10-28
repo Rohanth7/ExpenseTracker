@@ -27,6 +27,7 @@ import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
@@ -35,6 +36,9 @@ import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
+import com.example.expensetracker.data.repository.IncomeRepository
+import com.example.expensetracker.data.recurring.RecurringManager
+import kotlinx.coroutines.NonCancellable
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.data.repository.RecurringTemplateRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
@@ -55,6 +59,7 @@ class SettingsViewModel(
     private val billRepo: BillRepository,
     private val loanRepo: LoanRepository,
     private val savingsGoalRepo: SavingsGoalRepository,
+    private val incomeRepo: IncomeRepository,
     private val backupManager: BackupManager,
     private val prefs: PreferencesManager
 ) : ViewModel() {
@@ -91,6 +96,24 @@ class SettingsViewModel(
     fun deleteBill(bill: Bill) = viewModelScope.launch {
         billRepo.delete(bill)
     }
+
+    // ── Recurring income ───────────────────────────────────────
+
+    val recurringIncomes: StateFlow<List<RecurringIncome>> = incomeRepo.allRecurring
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * Saves, then logs anything now due (a salary on the 1st added on the 28th is logged dated
+     * the 1st), so the forecast doesn't wait for the next launch. Finishes if the screen goes away.
+     */
+    private fun saveRecurringIncome(block: suspend () -> Unit) = viewModelScope.launch {
+        withContext(NonCancellable) { block(); RecurringManager.applyIncomeNow(appContext) }
+    }
+
+    fun addRecurringIncome(r: RecurringIncome) = saveRecurringIncome { incomeRepo.insertRecurring(r) }
+    fun updateRecurringIncome(r: RecurringIncome) = saveRecurringIncome { incomeRepo.updateRecurring(r) }
+    fun toggleRecurringIncome(r: RecurringIncome) = saveRecurringIncome { incomeRepo.updateRecurring(r.copy(isEnabled = !r.isEnabled)) }
+    fun deleteRecurringIncome(r: RecurringIncome) = viewModelScope.launch { withContext(NonCancellable) { incomeRepo.deleteRecurring(r) } }
 
     // ── Preferences ────────────────────────────────────────────
 
@@ -197,10 +220,11 @@ class SettingsViewModel(
             val expenses = if (range == null) expenseRepo.allExpenses.first()
                 else expenseRepo.getByDateRange(range.first, range.second).first()
             val categories = categoryRepo.getAll()
+            val incomes = incomeRepo.allIncomes.first().filter { range == null || it.date in range.first..range.second }
             withContext(Dispatchers.IO) {
                 val out = appContext.contentResolver.openOutputStream(uri) ?: return@withContext null
-                out.bufferedWriter(Charsets.UTF_8).use { CsvExporter.write(it, expenses, categories) }
-                expenses.size
+                out.bufferedWriter(Charsets.UTF_8).use { CsvExporter.write(it, expenses, categories, incomes = incomes) }
+                expenses.size to incomes.size
             }
         } catch (e: CancellationException) {
             throw e
@@ -211,8 +235,11 @@ class SettingsViewModel(
         if (count == null) withContext(Dispatchers.IO) {
             runCatching { DocumentsContract.deleteDocument(appContext.contentResolver, uri) }
         }
-        snackbarMessage = if (count != null) "Exported $count ${if (count == 1) "expense" else "expenses"} to CSV"
-            else "Couldn't save the CSV"
+        snackbarMessage = if (count != null) {
+            val (e, n) = count
+            val incomePart = if (n > 0) " and $n ${if (n == 1) "income" else "incomes"}" else ""
+            "Exported $e ${if (e == 1) "expense" else "expenses"}$incomePart to CSV"
+        } else "Couldn't save the CSV"
     }
 
     /** Reads and checks the file first; nothing is deleted unless the user then confirms. */
@@ -302,6 +329,7 @@ class SettingsViewModel(
         billRepo.deleteAll()
         loanRepo.deleteAll()
         savingsGoalRepo.deleteAll()
+        incomeRepo.deleteAll()
 
         // Categories
         val foodId       = categoryRepo.insert(Category(name = "Food & Dining",  emoji = "🍔", colorHex = "#E53935", monthlyLimit = 8000.0))
@@ -389,6 +417,10 @@ class SettingsViewModel(
         savingsGoalRepo.insert(SavingsGoal(name = "New Laptop",     targetAmount = 80000.0,  currentAmount = 25000.0, colorHex = "#1E88E5"))
         savingsGoalRepo.insert(SavingsGoal(name = "Goa Trip",       targetAmount = 50000.0,  currentAmount = 12000.0, colorHex = "#FB8C00"))
 
+        // Salary, logged on the 1st (this month's is logged straight away)
+        incomeRepo.insertRecurring(RecurringIncome(name = "Salary", amount = 85000.0, dayOfMonth = 1))
+        RecurringManager.applyIncomeNow(appContext)
+
         snackbarMessage = "Mock data loaded — ${(mayExpenses + aprExpenses + marExpenses).size} expenses across 3 months"
     }
 
@@ -399,6 +431,7 @@ class SettingsViewModel(
         billRepo.deleteAll()
         loanRepo.deleteAll()
         savingsGoalRepo.deleteAll()
+        incomeRepo.deleteAll()
         prefs.monthlyIncome = 0.0
         _monthlyIncome.value = 0.0
         setMonthStartDay(1)
@@ -438,12 +471,13 @@ class SettingsViewModel(
             billRepo: BillRepository,
             loanRepo: LoanRepository,
             mappingRepo: MerchantMappingRepository,
+            incomeRepo: IncomeRepository,
             backupManager: BackupManager,
             prefs: PreferencesManager
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                SettingsViewModel(context.applicationContext, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, SavingsGoalRepository(db.savingsGoalDao()), backupManager, prefs) as T
+                SettingsViewModel(context.applicationContext, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, SavingsGoalRepository(db.savingsGoalDao()), incomeRepo, backupManager, prefs) as T
         }
     }
 }

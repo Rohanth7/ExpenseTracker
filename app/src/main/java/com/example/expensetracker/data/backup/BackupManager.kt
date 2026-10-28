@@ -12,11 +12,14 @@ import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRuleStore
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 /** [database] and [preferences] can be swapped out in tests; the app uses the real ones. */
@@ -69,6 +72,9 @@ class BackupManager(
                 savingsGoals = db.savingsGoalDao().getAll().first(),
                 merchantMappings = db.merchantMappingDao().getAllMappings(),
                 parsingRules = rules.rules.value,
+                incomes = db.incomeDao().getAllOnce(),
+                recurringIncomes = db.recurringIncomeDao().getAllOnce(),
+                recurringIncomeMonths = db.recurringIncomeDao().getMonthsOnce(),
                 settings = BackupSettings(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
@@ -95,6 +101,12 @@ class BackupManager(
             data.loans?.let { list -> db.loanDao().deleteAll(); list.forEach { db.loanDao().insert(it) } }
             data.savingsGoals?.let { list -> db.savingsGoalDao().deleteAll(); list.forEach { db.savingsGoalDao().insert(it) } }
             data.merchantMappings?.let { list -> db.merchantMappingDao().deleteAll(); list.forEach { db.merchantMappingDao().insert(it) } }
+            data.incomes?.let { list -> db.incomeDao().deleteAll(); db.incomeDao().insertAll(list) }
+            data.recurringIncomes?.let { list ->
+                db.recurringIncomeDao().deleteAll(); db.recurringIncomeDao().insertAll(list)
+                // The handled months go with the recurring incomes they describe, never the phone's
+                db.recurringIncomeDao().deleteAllMonths(); db.recurringIncomeDao().insertAllMonths(data.recurringIncomeMonths.orEmpty())
+            }
         }
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
@@ -107,6 +119,15 @@ class BackupManager(
             s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
             s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
             s.monthStartDay?.let { p.monthStartDay = it }
+        }
+        // Log recurring income that's due (a backup from before payday). The restore is complete
+        // either way, and the next launch tries again, so a failure here mustn't fail it.
+        if (data.recurringIncomes != null) {
+            try {
+                RecurringManager.applyRecurringIncome(db, Calendar.getInstance())
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
         }
         // Screens follow the month start live; tests use their own prefs and leave the app's alone.
         if (preferences == null) MonthStartDay.reload(context)

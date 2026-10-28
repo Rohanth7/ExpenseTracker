@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.DateRange
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -84,12 +85,18 @@ data class StatisticsUiState(
     val canGoForwardMonth: Boolean = false
 )
 
+/** From the first expense or income to today, or to the last entry if one is dated later. */
+internal fun allTimeRange(expenseDates: List<Long>, incomeDates: List<Long>, now: Long): DateRange {
+    val dates = expenseDates + incomeDates
+    return BudgetPeriod.dayRange(dates.minOrNull() ?: now, maxOf(now, dates.maxOrNull() ?: now))
+}
+
 /** One stretch of days as the Monthly and Range views show it. */
 data class PeriodView(
     val label: String = "",
     val start: Long = 0L,
     val end: Long = 0L,
-    val stats: PeriodStats = PeriodStats(0.0, emptyList(), null, PaymentSplit(), DetectionSplit(), null),
+    val stats: PeriodStats = PeriodStats(0.0, emptyList(), null, PaymentSplit(), DetectionSplit(), null, null),
     /** What the percentage compares with ("last month"), or null when there's nothing before it. */
     val comparedWith: String? = null
 )
@@ -101,7 +108,9 @@ data class PeriodStats(
     val vsPreviousPct: Int?,
     val paymentSplit: PaymentSplit,
     val detectionSplit: DetectionSplit,
-    val insight: MonthlyInsight?
+    val insight: MonthlyInsight?,
+    /** Income, spent and saved; null when no income was logged in the period. */
+    val income: IncomeSummary?
 )
 
 /** Categories (with subcategories), payment split and source split for some expenses. */
@@ -111,7 +120,8 @@ class StatisticsViewModel(
     private val expenseRepo: ExpenseRepository,
     private val categoryRepo: CategoryRepository,
     /** Day the budget month starts (see `BudgetPeriod`); the monthly view follows it. */
-    monthStartDay: Flow<Int>
+    monthStartDay: Flow<Int>,
+    incomes: Flow<List<Income>>
 ) : ViewModel() {
 
     private val MONTHS = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
@@ -133,8 +143,8 @@ class StatisticsViewModel(
         categoryRepo.allCategories,
         _yearOffset,
         _selectedCategoryId,
-        combine(_monthOffset, monthStartDay) { o, d -> o to d }
-    ) { expenses, categories, offset, selectedId, (monthOffset, startDay) ->
+        combine(_monthOffset, monthStartDay, incomes, ::Triple)
+    ) { expenses, categories, offset, selectedId, (monthOffset, startDay, incomeList) ->
         val nowMs = System.currentTimeMillis()
         val year = Calendar.getInstance().apply { timeInMillis = nowMs }.get(Calendar.YEAR) + offset
 
@@ -223,7 +233,7 @@ class StatisticsViewModel(
 
         // ── Monthly stats: one budget month, from the user's start day ──
         val mRange = BudgetPeriod.forOffset(nowMs, startDay, monthOffset)
-        val month = periodStats(expenses, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month", "last month")
+        val month = periodStats(expenses, incomeList, categories, mRange, BudgetPeriod.forOffset(nowMs, startDay, monthOffset - 1), nowMs, "month", "last month")
 
         StatisticsUiState(
             yearLabel = year.toString(),
@@ -252,9 +262,9 @@ class StatisticsViewModel(
      * only worked out while the screen collects it, i.e. while the Range view is shown.
      */
     val rangeState: StateFlow<PeriodView?> = combine(
-        expenseRepo.allExpenses, categoryRepo.allCategories, _range, monthStartDay
-    ) { expenses, categories, r, startDay ->
-        rangeView(r, expenses, categories, System.currentTimeMillis(), startDay)
+        expenseRepo.allExpenses, categoryRepo.allCategories, _range, monthStartDay, incomes
+    ) { expenses, categories, r, startDay, incomeList ->
+        rangeView(r, expenses, incomeList, categories, System.currentTimeMillis(), startDay)
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun goToPreviousYear() { _yearOffset.value-- }
@@ -264,25 +274,25 @@ class StatisticsViewModel(
 
     private fun isAutoSource(s: String) = s != "Manual" && s != "Recurring"
 
-    private fun rangeView(r: StatsRange, expenses: List<Expense>, categories: List<Category>, now: Long, startDay: Int): PeriodView =
+    private fun rangeView(r: StatsRange, expenses: List<Expense>, incomes: List<Income>, categories: List<Category>, now: Long, startDay: Int): PeriodView =
         when (r) {
             is StatsRange.LastMonths -> {
                 // Compared with the n budget months before; this range is still running, so at today's pace
                 val range = BudgetPeriod.lastNMonths(now, startDay, r.n)
                 val vs = "the previous ${r.n} months"
-                val stats = periodStats(expenses, categories, range, BudgetPeriod.monthsBefore(now, startDay, r.n), now, "period", vs)
+                val stats = periodStats(expenses, incomes, categories, range, BudgetPeriod.monthsBefore(now, startDay, r.n), now, "period", vs)
                 PeriodView("Last ${r.n} months", range.start, range.endInclusive, stats, "this point in $vs")
             }
             StatsRange.AllTime -> {
-                val range = BudgetPeriod.dayRange(expenses.minOfOrNull { it.date } ?: now, maxOf(now, expenses.maxOfOrNull { it.date } ?: now))
-                PeriodView("All time", range.start, range.endInclusive, periodStats(expenses, categories, range, null, now, "period", null), null)
+                val range = allTimeRange(expenses.map { it.date }, incomes.map { it.date }, now)
+                PeriodView("All time", range.start, range.endInclusive, periodStats(expenses, incomes, categories, range, null, now, "period", null), null)
             }
             is StatsRange.Custom -> {
                 // Past days only, so there's no pace to adjust for
                 val range = DateRange(r.start, r.end)
                 val days = BudgetPeriod.daysInCycle(range)
                 val vs = if (days == 1) "the day before" else "the $days days before"
-                val stats = periodStats(expenses, categories, range, BudgetPeriod.previousOfSameLength(range), now, "period", vs)
+                val stats = periodStats(expenses, incomes, categories, range, BudgetPeriod.previousOfSameLength(range), now, "period", vs)
                 PeriodView(BudgetPeriod.dayRangeLabel(range.start, range.endInclusive, now), range.start, range.endInclusive, stats, vs)
             }
         }
@@ -294,7 +304,7 @@ class StatisticsViewModel(
      * the insight compare at today's pace (see [BudgetPeriod.comparableTotal]).
      */
     private fun periodStats(
-        expenses: List<Expense>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long,
+        expenses: List<Expense>, incomes: List<Income>, categories: List<Category>, range: DateRange, previous: DateRange?, now: Long,
         word: String, vs: String?
     ): PeriodStats {
         val periodExpenses = expenses.filter { it.date in range }
@@ -308,7 +318,8 @@ class StatisticsViewModel(
             vsPreviousPct = if (comparable > 0) ((total - comparable) / comparable * 100).roundToInt() else null,
             paymentSplit = b.payment,
             detectionSplit = b.detection,
-            insight = buildPeriodInsight(periodExpenses, comparable, vs, b.categories.firstOrNull(), range, now, word)
+            insight = buildPeriodInsight(periodExpenses, comparable, vs, b.categories.firstOrNull(), range, now, word),
+            income = IncomeSummary.of(incomes, range, total)
         )
     }
 
@@ -417,11 +428,11 @@ class StatisticsViewModel(
     }
 
     companion object {
-        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, monthStartDay: Flow<Int>) =
+        fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, monthStartDay: Flow<Int>, incomes: Flow<List<Income>>) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    StatisticsViewModel(expenseRepo, categoryRepo, monthStartDay) as T
+                    StatisticsViewModel(expenseRepo, categoryRepo, monthStartDay, incomes) as T
             }
     }
 }
