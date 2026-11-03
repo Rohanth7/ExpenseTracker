@@ -245,6 +245,8 @@ class ExpensesViewModel(
     fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = expense.paymentMethod) = viewModelScope.launch {
         saveEdit(expense, amount, description, categoryId, date, tags, paymentMethod)
         alertIfOverBudget(categoryId)
+        val edited = expense.copy(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod)
+        if (PriceChangeAlerts.worthCheckingAfterEdit(expense, edited)) alertIfPriceChanged(edited)
     }
 
     private suspend fun saveEdit(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String) {
@@ -260,7 +262,7 @@ class ExpensesViewModel(
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
     }
 
-    /** A new expense (not an edit) may be a subscription's new price. Never fails the add. */
+    /** A new expense, or one renamed or re-priced, may be a subscription's new price. Never fails the save. */
     private suspend fun alertIfPriceChanged(expense: Expense) {
         runCatching { PriceChangeAlerts.checkAfterCapture(appContext, AppDatabase.getInstance(appContext), expense) }
     }

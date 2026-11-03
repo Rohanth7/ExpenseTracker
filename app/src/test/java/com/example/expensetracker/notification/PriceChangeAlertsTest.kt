@@ -32,16 +32,35 @@ class PriceChangeAlertsTest {
         assertEquals("₹999 → ₹1,199 every 3 months · ₹800 more a year", PriceChangeAlerts.text(sub("jio", 999.0, 1199.0, Cadence.QUARTERLY)).second)
     }
 
-    @Test fun `amounts use Indian grouping and paise only when there are some`() {
+    @Test fun `amounts use Indian grouping in whole rupees, like the cards`() {
         // Android also groups lakhs (₹2,40,000); the JVM doesn't
         assertEquals("₹10,000 → ₹12,000 a month · ₹24,000 more a year", PriceChangeAlerts.text(sub("rent", 10000.0, 12000.0)).second)
-        // The yearly figure is an estimate, so it's rounded to rupees
-        assertEquals("₹1,690.40 → ₹1,745 a month · ₹655 more a year", PriceChangeAlerts.text(sub("openai", 1690.4, 1745.0)).second)
+        // Paise are rounded off, and the yearly difference adds up from the prices shown
+        assertEquals("₹1,690 → ₹1,745 a month · ₹660 more a year", PriceChangeAlerts.text(sub("openai", 1690.4, 1745.1)).second)
     }
 
-    @Test fun `names are title-cased from the payee`() {
+    @Test fun `names are the card's, title-cased when all capitals`() {
         assertEquals("Amazon Prime price went up", PriceChangeAlerts.text(sub("amazon prime", 299.0, 349.0)).first)
         assertEquals("*** price went up", PriceChangeAlerts.text(sub("***", 299.0, 349.0)).first)
+        assertEquals("YouTube Premium price went up", PriceChangeAlerts.text(sub("youtube premium", 129.0, 149.0).copy(name = "YouTube Premium")).first)
+    }
+
+    /** SQLite's LIKE ignores case for A–Z only, so the word searched for is plain letters and digits. */
+    @Test fun `the payee is searched for by its longest plain word`() {
+        assertEquals("crunchyroll", PriceChangeAlerts.searchWord("crunchyroll anime"))
+        assertEquals("apple", PriceChangeAlerts.searchWord("apple.com/bill"))
+        assertEquals("coffee", PriceChangeAlerts.searchWord("café coffee day"))
+        assertEquals("cole", PriceChangeAlerts.searchWord("école"))
+        // No upper or lower case to miss
+        assertEquals("नेटफ्लिक्स", PriceChangeAlerts.searchWord("नेटफ्लिक्स"))
+    }
+
+    /** A capture saved as "UPI" and renamed to the payee is that payee's new price. */
+    @Test fun `an edit is checked when the payee or amount changed`() {
+        val upi = Expense(id = 7, amount = 549.0, description = "UPI", date = date(2026, 10, 5), source = "SMS")
+        assertEquals(true, PriceChangeAlerts.worthCheckingAfterEdit(upi, upi.copy(description = "Netflix")))
+        assertEquals(true, PriceChangeAlerts.worthCheckingAfterEdit(upi.copy(description = "Netflix", amount = 499.0), upi.copy(description = "Netflix")))
+        assertEquals(false, PriceChangeAlerts.worthCheckingAfterEdit(upi.copy(description = "NETFLIX"), upi.copy(description = "GPay → Netflix", tags = "tv", categoryId = 3)))
     }
 
     @Test fun `each change has its own alert key`() {

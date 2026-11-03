@@ -16,10 +16,10 @@ import com.example.expensetracker.data.subscriptions.Cadence
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.subscriptions.Subscription
 import com.example.expensetracker.data.subscriptions.SubscriptionDetector
+import com.example.expensetracker.ui.screens.subscriptions.formatRupees
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import java.text.NumberFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -48,21 +48,24 @@ object PriceChangeAlerts {
         }
     }
 
-    /** "Netflix price went up" / "₹499 → ₹549 a month · ₹600 more a year". */
+    /** "Netflix price went up" / "₹499 → ₹549 a month · ₹600 more a year", in whole rupees like the cards. */
     fun text(s: Subscription): Pair<String, String> {
-        val old = s.previousAmount ?: s.amount
-        val up = s.amount > old
-        val name = s.key.split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.titlecase(Locale.ROOT) } }
+        val old = (s.previousAmount ?: s.amount).roundToLong().toDouble()
+        val new = s.amount.roundToLong().toDouble()
+        val up = new > old
+        // The card's name; a bank SMS's "NETFLIX" is title-cased, "YouTube Premium" is kept
+        val name = if (s.name != s.name.uppercase()) s.name
+            else s.name.lowercase().split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.titlecase(Locale.ROOT) } }
         val per = when (s.cadence) {
             Cadence.WEEKLY -> "a week"
             Cadence.MONTHLY -> "a month"
             Cadence.QUARTERLY -> "every 3 months"
             Cadence.YEARLY -> "a year"
         }
-        val prices = "${rupees(old)} → ${rupees(s.amount)} $per"
-        val yearly = abs(s.amount - old) * s.cadence.perYear
+        val prices = "${formatRupees(old)} → ${formatRupees(new)} $per"
+        val yearly = abs(new - old) * s.cadence.perYear
         val body = if (s.cadence == Cadence.YEARLY) prices
-            else "$prices · ${rupees(yearly.roundToLong().toDouble())} ${if (up) "more" else "less"} a year"
+            else "$prices · ${formatRupees(yearly)} ${if (up) "more" else "less"} a year"
         return "$name price went ${if (up) "up" else "down"}" to body
     }
 
@@ -85,6 +88,23 @@ object PriceChangeAlerts {
     private fun isRecent(expense: Expense, now: Long) = abs(now - expense.date) <= CAPTURE_WINDOW_MS
 
     /**
+     * Whether an edit can make [after] a new price [before] wasn't: its payee or amount changed (a
+     * capture saved as "UPI" renamed to "Netflix"). Other edits can't, so they don't load anything.
+     */
+    fun worthCheckingAfterEdit(before: Expense, after: Expense) =
+        after.amount != before.amount || SubscriptionDetector.keyFor(after.description) != SubscriptionDetector.keyFor(before.description)
+
+    private val PLAIN = Regex("[a-z0-9]+")
+
+    /**
+     * The word to find [key]'s payments by: its longest run of a–z and 0–9. SQLite's LIKE ignores
+     * case for those only, so "école" is found by "cole" in "ÉCOLE"; a key without any (Hindi) has
+     * no case to miss.
+     */
+    internal fun searchWord(key: String): String =
+        PLAIN.findAll(key).map { it.value }.maxByOrNull { it.length } ?: key.split(" ").maxBy { it.length }
+
+    /**
      * Call after a new expense is saved (bank SMS, payment app notification, added by hand). Runs
      * off the main thread and finishes even if the caller is cancelled. Paywall gating goes here.
      */
@@ -97,9 +117,8 @@ object PriceChangeAlerts {
         val key = SubscriptionDetector.keyFor(expense.description)
         val dismissed = DismissedSubscriptions.flow(app).value
         if (key.isBlank() || key in dismissed) return@withContext
-        // Only this payee's payments matter: load those containing its longest word, then match exactly.
-        val word = key.split(" ").maxBy { it.length }
-        val payments = db.expenseDao().getWithDescriptionContaining(word).filter { SubscriptionDetector.keyFor(it.description) == key }
+        // Only this payee's payments matter: load those containing one of its words, then match exactly.
+        val payments = db.expenseDao().getWithDescriptionContaining(searchWord(key)).filter { SubscriptionDetector.keyFor(it.description) == key }
         val subscriptions = SubscriptionDetector.detect(payments, now, dismissed, db.billDao().getAllOnce().map { it.name })
         val change = changeToAlert(subscriptions, expense, now) ?: return@withContext
         // Stored even when notifications are off (Android 13+ permission): the change still shows
@@ -145,13 +164,4 @@ object PriceChangeAlerts {
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-
-    /** "₹1,20,000", or "₹1,690.40" when there are paise. */
-    private fun rupees(amount: Double): String {
-        val whole = abs(amount - Math.round(amount)) < 0.005
-        return "₹" + NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-            minimumFractionDigits = if (whole) 0 else 2
-            maximumFractionDigits = if (whole) 0 else 2
-        }.format(amount)
-    }
 }

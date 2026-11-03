@@ -281,4 +281,37 @@ class SubscriptionDetectorTest {
         assertEquals(Cadence.QUARTERLY, s.cadence)
         assertEquals(3, s.payments)
     }
+
+    /** A small change in one amount group gets the same checks as a big one. */
+    @Test fun `an order close to the subscription's price is not a new price`() {
+        val prime = monthly("Amazon", 299.0, 3)
+        // Days before the renewal date: the subscription is still ₹299, due on the 3rd
+        val early = detect(prime + pay("Amazon", 310.0, 2026, 10, 30), at = date(2026, 10, 31)).single()
+        assertEquals(299.0, early.amount, 0.0)
+        assertNull(early.previousAmount)
+        assertEquals(date(2026, 11, 3), early.nextExpected)
+        // On the renewal date, but at a payee you also shop at
+        val orders = listOf(pay("Amazon", 1499.0, 2026, 9, 19), pay("Amazon", 549.0, 2026, 10, 9))
+        assertNull(detect(prime + orders + pay("Amazon", 310.0, 2026, 11, 3), at = date(2026, 11, 4)).single().previousAmount)
+        // On the renewal date with no other orders it is a change
+        assertEquals(299.0, detect(prime + pay("Amazon", 310.0, 2026, 11, 3), at = date(2026, 11, 4)).single().previousAmount!!, 0.0)
+    }
+
+    /** iCloud on the 1st and Apple Music the day before, both "APPLE.COM/BILL": two subscriptions, not one that changed price. */
+    @Test fun `another subscription billed a day apart from the same payee is not a price change`() {
+        val icloud = (7..10).map { pay("APPLE.COM/BILL", 75.0, 2026, it, 1) }
+        val music = listOf(pay("APPLE.COM/BILL", 99.0, 2026, 6, 30), pay("APPLE.COM/BILL", 99.0, 2026, 7, 31),
+            pay("APPLE.COM/BILL", 99.0, 2026, 8, 30), pay("APPLE.COM/BILL", 99.0, 2026, 9, 30), pay("APPLE.COM/BILL", 99.0, 2026, 10, 31))
+        assertNull(detect(icloud + music, at = date(2026, 11, 1)).single().previousAmount)
+    }
+
+    /** Converted charges have paise; the rupee can move more than 2% in a month. */
+    @Test fun `a dollar-billed charge moving with the exchange rate is not a price change`() {
+        val ex = listOf(pay("OPENAI", 1650.40, 2026, 7, 12), pay("OPENAI", 1670.25, 2026, 8, 12),
+            pay("OPENAI", 1690.40, 2026, 9, 12), pay("OPENAI", 1745.10, 2026, 10, 12))
+        assertNull(detect(ex).single().previousAmount)
+        // A real dollar price change is still one ($20 → $25)
+        val rise = ex.dropLast(1) + pay("OPENAI", 2110.50, 2026, 10, 12)
+        assertEquals(1690.40, detect(rise).single().previousAmount!!, 0.0)
+    }
 }
