@@ -10,12 +10,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.example.expensetracker.notification.BudgetAlertHelper
 import com.example.expensetracker.notification.NotificationHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
 
 class ExpenseTrackerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         NotificationHelper.createChannel(this)
         BudgetAlertHelper.createChannel(this)
+        PriceChangeAlerts.createChannel(this)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { MappingCleanup.runOnce(this@ExpenseTrackerApp) }
             // After the cleanup above, which reads captured text. Runs whenever the process starts,

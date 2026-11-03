@@ -9,6 +9,9 @@ interface BillDao {
     @Query("SELECT * FROM bills ORDER BY dueDayOfMonth ASC")
     fun getAll(): Flow<List<Bill>>
 
+    @Query("SELECT * FROM bills")
+    suspend fun getAllOnce(): List<Bill>
+
     @Insert
     suspend fun insert(bill: Bill)
 

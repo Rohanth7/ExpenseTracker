@@ -18,6 +18,9 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE categoryId = :categoryId ORDER BY date DESC")
     fun getByCategory(categoryId: Long): Flow<List<Expense>>
 
+    @Query("SELECT * FROM expenses")
+    suspend fun getAllOnce(): List<Expense>
+
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getById(id: Long): Expense?
 

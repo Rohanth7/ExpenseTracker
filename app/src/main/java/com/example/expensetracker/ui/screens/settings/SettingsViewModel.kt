@@ -125,6 +125,10 @@ class SettingsViewModel(
     val budgetAlertsEnabled: StateFlow<Boolean> = _budgetAlertsEnabled.asStateFlow()
     fun setBudgetAlertsEnabled(enabled: Boolean) { prefs.budgetAlertsEnabled = enabled; _budgetAlertsEnabled.value = enabled }
 
+    private val _priceAlertsEnabled = MutableStateFlow(prefs.priceAlertsEnabled)
+    val priceAlertsEnabled: StateFlow<Boolean> = _priceAlertsEnabled.asStateFlow()
+    fun setPriceAlertsEnabled(enabled: Boolean) { prefs.priceAlertsEnabled = enabled; _priceAlertsEnabled.value = enabled }
+
     private val _budgetAlertThreshold = MutableStateFlow(prefs.budgetAlertThreshold)
     val budgetAlertThreshold: StateFlow<Int> = _budgetAlertThreshold.asStateFlow()
     fun setBudgetAlertThreshold(value: Int) { prefs.budgetAlertThreshold = value; _budgetAlertThreshold.value = value }
@@ -260,6 +264,7 @@ class SettingsViewModel(
             .onSuccess {
                 data.settings?.monthlyIncome?.let { _monthlyIncome.value = it }
                 data.settings?.budgetAlertsEnabled?.let { _budgetAlertsEnabled.value = it }
+                data.settings?.priceAlertsEnabled?.let { _priceAlertsEnabled.value = it }
                 data.settings?.budgetAlertThreshold?.let { _budgetAlertThreshold.value = it }
                 data.settings?.weekStartsOnMonday?.let { _weekStartsOnMonday.value = it }
                 snackbarMessage = "Restored ${data.expenses.orEmpty().size} expenses and ${data.categories.orEmpty().size} categories"

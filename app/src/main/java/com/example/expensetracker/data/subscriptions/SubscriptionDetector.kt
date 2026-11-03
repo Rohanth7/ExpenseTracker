@@ -68,9 +68,11 @@ object SubscriptionDetector {
 
     private val FALLBACK_NAMES = Regex("""^(bank debit|.+ debit|upi|gpay|phonepe|paytm|bhim|amazon pay|cred)$""")
 
+    private val SPACES = Regex("""\s+""")
+
     /** "GPay → Netflix" and "NETFLIX" both become "netflix". */
     fun keyFor(description: String): String =
-        description.substringAfter("→").trim().lowercase().replace(Regex("""\s+"""), " ")
+        description.substringAfter("→").trim().lowercase().replace(SPACES, " ")
 
     fun detect(
         expenses: List<Expense>,

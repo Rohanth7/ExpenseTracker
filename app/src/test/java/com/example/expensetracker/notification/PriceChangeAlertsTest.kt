@@ -1,0 +1,79 @@
+package com.example.expensetracker.notification
+
+import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.subscriptions.Cadence
+import com.example.expensetracker.data.subscriptions.Subscription
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Test
+import java.util.Calendar
+
+class PriceChangeAlertsTest {
+    private fun date(y: Int, m: Int, d: Int, h: Int = 10): Long =
+        Calendar.getInstance().apply { clear(); set(y, m - 1, d, h, 0) }.timeInMillis
+
+    private fun sub(key: String, old: Double, new: Double, cadence: Cadence = Cadence.MONTHLY, changedOn: Long = date(2026, 10, 5)) =
+        Subscription(key = key, name = key.uppercase(), amount = new, cadence = cadence, lastPaid = changedOn,
+            nextExpected = changedOn, payments = 5, categoryId = 4, previousAmount = old, priceChangedOn = changedOn)
+
+    @Test fun `a rise says how much more a year`() =
+        assertEquals("Netflix price went up" to "₹499 → ₹549 a month · ₹600 more a year", PriceChangeAlerts.text(sub("netflix", 499.0, 549.0)))
+
+    @Test fun `a drop says how much less a year`() =
+        assertEquals("Hotstar price went down" to "₹649 → ₹499 a month · ₹1,800 less a year", PriceChangeAlerts.text(sub("hotstar", 649.0, 499.0)))
+
+    @Test fun `a yearly price doesn't repeat the difference`() =
+        assertEquals("₹1,499 → ₹1,799 a year", PriceChangeAlerts.text(sub("domain", 1499.0, 1799.0, Cadence.YEARLY)).second)
+
+    @Test fun `weekly and quarterly wording`() {
+        assertEquals("₹420 → ₹450 a week · ₹1,560 more a year", PriceChangeAlerts.text(sub("milk", 420.0, 450.0, Cadence.WEEKLY)).second)
+        assertEquals("₹999 → ₹1,199 every 3 months · ₹800 more a year", PriceChangeAlerts.text(sub("jio", 999.0, 1199.0, Cadence.QUARTERLY)).second)
+    }
+
+    @Test fun `amounts use Indian grouping and paise only when there are some`() {
+        // Android also groups lakhs (₹2,40,000); the JVM doesn't
+        assertEquals("₹10,000 → ₹12,000 a month · ₹24,000 more a year", PriceChangeAlerts.text(sub("rent", 10000.0, 12000.0)).second)
+        // The yearly figure is an estimate, so it's rounded to rupees
+        assertEquals("₹1,690.40 → ₹1,745 a month · ₹655 more a year", PriceChangeAlerts.text(sub("openai", 1690.4, 1745.0)).second)
+    }
+
+    @Test fun `names are title-cased from the payee`() {
+        assertEquals("Amazon Prime price went up", PriceChangeAlerts.text(sub("amazon prime", 299.0, 349.0)).first)
+        assertEquals("*** price went up", PriceChangeAlerts.text(sub("***", 299.0, 349.0)).first)
+    }
+
+    @Test fun `each change has its own alert key`() {
+        val oct = sub("netflix", 499.0, 549.0, changedOn = date(2026, 10, 5))
+        assertEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(oct.copy(payments = 6)))
+        assertNotEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(sub("netflix", 549.0, 599.0, changedOn = date(2027, 3, 5))))
+        assertNotEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(sub("hotstar", 499.0, 549.0, changedOn = date(2026, 10, 5))))
+    }
+
+    // ── Which capture alerts ────────────────────────────────────────
+
+    private val change = sub("netflix", 499.0, 549.0, changedOn = date(2026, 10, 5))
+    private fun captured(desc: String, at: Long) = Expense(amount = 549.0, description = desc, date = at, source = "SMS")
+
+    @Test fun `the payment that changed the price alerts`() {
+        val now = date(2026, 10, 5, 11)
+        assertSame(change, PriceChangeAlerts.changeToAlert(listOf(change), captured("NETFLIX", date(2026, 10, 5)), now))
+        // The same charge seen again by a notification the next day: same change, so the same key
+        assertSame(change, PriceChangeAlerts.changeToAlert(listOf(change), captured("GPay → Netflix", date(2026, 10, 6)), date(2026, 10, 6, 11)))
+    }
+
+    /** Entering last month's payment today mustn't alert about a change from weeks ago. */
+    @Test fun `a back-dated entry doesn't alert`() =
+        assertNull(PriceChangeAlerts.changeToAlert(listOf(change), captured("Netflix", date(2026, 10, 5)), date(2026, 10, 28)))
+
+    @Test fun `later payments at the new price don't alert`() =
+        assertNull(PriceChangeAlerts.changeToAlert(listOf(change), captured("NETFLIX", date(2026, 11, 5)), date(2026, 11, 5, 11)))
+
+    @Test fun `other payees and steady prices don't alert`() {
+        val now = date(2026, 10, 5, 11)
+        assertNull(PriceChangeAlerts.changeToAlert(listOf(change), captured("Spotify", date(2026, 10, 5)), now))
+        val steady = change.copy(previousAmount = null, priceChangedOn = null)
+        assertNull(PriceChangeAlerts.changeToAlert(listOf(steady), captured("NETFLIX", date(2026, 10, 5)), now))
+    }
+}

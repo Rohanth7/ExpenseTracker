@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.notification.NotificationHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +24,13 @@ class LaunchIntentsTest {
             assertNotEquals("widget + vs notification for expense $expenseId", widgetQuickAddIntent(context), notification)
             assertNotEquals("widget tap vs notification for expense $expenseId", widgetOpenAppIntent(context), notification)
         }
+    }
+
+    @Test fun thePriceAlertIsNotTheSameIntentAsAnyOtherTap() {
+        val alert = PriceChangeAlerts.openSubscriptionsIntent(context)
+        assertNotEquals(widgetQuickAddIntent(context), alert)
+        assertNotEquals(widgetOpenAppIntent(context), alert)
+        for (expenseId in 0L..5L) assertNotEquals("price alert vs notification for expense $expenseId", NotificationHelper.categorizeIntent(context, expenseId), alert)
     }
 
     @Test fun theWidgetsTwoTapsAreDifferentIntents() =
