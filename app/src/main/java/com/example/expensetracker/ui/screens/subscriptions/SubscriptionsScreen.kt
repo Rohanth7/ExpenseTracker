@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -26,11 +28,19 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 internal fun formatRupees(amount: Double): String =
     "₹" + NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 internal fun formatShortDate(millis: Long): String = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(millis))
+
+/** "↑ ₹50 since 5 Oct" for a recent price change, else null. */
+internal fun priceChangeLabel(s: Subscription): String? {
+    val change = s.priceChange ?: return null
+    val since = s.priceChangedOn ?: return null
+    return "${if (change > 0) "↑" else "↓"} ${formatRupees(abs(change))} since ${formatShortDate(since)}"
+}
 
 @Composable
 fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
@@ -111,6 +121,15 @@ private fun SubscriptionCard(s: Subscription, category: Category?, canTrack: Boo
                 Text(formatRupees(s.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
                 Text("${formatRupees(s.yearlyCost)}/yr", fontSize = 11.sp, color = Muted)
             }
+        }
+        priceChangeLabel(s)?.let { label ->
+            val rise = (s.priceChange ?: 0.0) > 0
+            Text(
+                label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (rise) Coral else Jade,
+                modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(if (rise) CoralSoft else JadeSoft)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .semantics { contentDescription = "Price ${if (rise) "up" else "down"} ${label.drop(2)}" }
+            )
         }
         Text("Paid ${s.payments} times, last on ${formatShortDate(s.lastPaid)}", fontSize = 12.sp, color = Muted,
             modifier = Modifier.padding(top = 10.dp))

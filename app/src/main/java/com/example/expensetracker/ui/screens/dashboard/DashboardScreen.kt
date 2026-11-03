@@ -33,6 +33,8 @@ import com.example.expensetracker.ui.screens.dashboard.UpcomingBill
 import com.example.expensetracker.ui.components.PieChart
 import com.example.expensetracker.ui.components.PieSlice
 import com.example.expensetracker.ui.theme.*
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.screens.subscriptions.formatRupees
 import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
@@ -573,7 +575,11 @@ fun DashboardScreen(
                                 Text(s.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1)
                                 Text("${s.cadence.label} · next around ${formatShortDate(s.nextExpected)}", fontSize = 11.5.sp, color = Muted)
                             }
-                            Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                                if ((s.priceChange ?: 0.0) > 0) Text("↑ price up", fontSize = 10.5.sp, color = Coral,
+                                    modifier = Modifier.semantics { contentDescription = "Price up" })
+                            }
                         }
                     }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
