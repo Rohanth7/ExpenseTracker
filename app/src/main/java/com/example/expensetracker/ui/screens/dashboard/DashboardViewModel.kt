@@ -22,6 +22,7 @@ import com.example.expensetracker.data.repository.BillRepository
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
+import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -55,7 +56,12 @@ data class LoanStatus(
 
 data class DashboardUiState(
     val totalSpent: Double = 0.0,
+    /** This budget month's income for the forecast: logged plus recurring still due, or the expected figure (IncomeForecast). */
     val monthlyIncome: Double = 0.0,
+    /** The "Expected monthly income" setting, used until income is logged. */
+    val expectedIncome: Double = 0.0,
+    /** True when [monthlyIncome] comes from income records rather than the expected figure. */
+    val incomeFromRecords: Boolean = false,
     val overBudget: Boolean = false,
     val categorySummaries: List<CategorySummary> = emptyList(),
     val pendingCount: Int = 0,
@@ -85,24 +91,28 @@ class DashboardViewModel(
     private val savingsRepo: SavingsGoalRepository,
     private val billRepo: BillRepository,
     private val loanRepo: LoanRepository,
+    private val incomeRepo: IncomeRepository,
     private val prefs: PreferencesManager
 ) : ViewModel() {
 
-    private val _income = MutableStateFlow(prefs.monthlyIncome)
+    private val _expectedIncome = MutableStateFlow(prefs.monthlyIncome)
     private val _monthOffset = MutableStateFlow(0)
 
     val uiState: StateFlow<DashboardUiState> = combine(
-        combine(categoryRepo.allCategories, expenseRepo.allExpenses, _income, _monthOffset) { cats, exps, inc, off ->
+        combine(categoryRepo.allCategories, expenseRepo.allExpenses, _expectedIncome, _monthOffset) { cats, exps, inc, off ->
             Quad(cats, exps, inc, off)
         },
         combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
         DismissedSubscriptions.flow(context),
-        MonthStartDay.flow(context)
-    ) { quad, (goals, bills, loans), dismissedSubscriptions, startDay ->
-        val (categories, expenses, income, offset) = quad
+        MonthStartDay.flow(context),
+        combine(incomeRepo.allIncomes, incomeRepo.allRecurring, incomeRepo.allMonths, ::Triple)
+    ) { quad, (goals, bills, loans), dismissedSubscriptions, startDay, (incomes, recurringIncomes, recurringMonths) ->
+        val (categories, expenses, expectedIncome, offset) = quad
         val nowMs = System.currentTimeMillis()
         // A budget month runs from the user's start day (1 = calendar month); see BudgetPeriod.
         val cycle = BudgetPeriod.forOffset(nowMs, startDay, offset)
+        val cycleIncome = IncomeForecast.cycleIncome(incomes, recurringIncomes, expectedIncome, nowMs, cycle, recurringMonths)
+        val income = cycleIncome.total
         val start = cycle.start
         val end = cycle.endInclusive
         val allMonthExpenses = expenses.filter { it.date in start..end }
@@ -172,6 +182,8 @@ class DashboardViewModel(
         DashboardUiState(
             totalSpent = total,
             monthlyIncome = income,
+            expectedIncome = expectedIncome,
+            incomeFromRecords = cycleIncome.fromRecords,
             overBudget = income > 0 && total > income,
             categorySummaries = summaries,
             pendingCount = allMonthExpenses.count { it.categoryId == -1L },
@@ -195,9 +207,9 @@ class DashboardViewModel(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
-    fun setIncome(value: Double) {
+    fun setExpectedIncome(value: Double) {
         prefs.monthlyIncome = value
-        _income.value = value
+        _expectedIncome.value = value
     }
 
     fun goToPreviousMonth() { _monthOffset.value-- }
@@ -389,11 +401,12 @@ class DashboardViewModel(
             savingsRepo: SavingsGoalRepository,
             billRepo: BillRepository,
             loanRepo: LoanRepository,
+            incomeRepo: IncomeRepository,
             prefs: PreferencesManager
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                DashboardViewModel(context, categoryRepo, expenseRepo, savingsRepo, billRepo, loanRepo, prefs) as T
+                DashboardViewModel(context, categoryRepo, expenseRepo, savingsRepo, billRepo, loanRepo, incomeRepo, prefs) as T
         }
     }
 }

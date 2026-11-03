@@ -26,4 +26,10 @@ class RecurringScheduleTest {
 
     @Test fun `day 31 in February isn't logged before the last day`() =
         assertNull(RecurringSchedule.dueDateIfReached(dueDayOfMonth = 31, now = day(2027, 2, 27, hour = 23)))
+
+    @Test fun `a calendar month runs from its first midnight to its last millisecond`() {
+        val (start, end) = RecurringSchedule.monthBounds(day(2026, 2, 14, hour = 15))
+        assertEquals(millis(2026, 2, 1), start)
+        assertEquals(millis(2026, 3, 1) - 1, end)
+    }
 }

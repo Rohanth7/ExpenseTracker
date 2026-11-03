@@ -1,0 +1,8 @@
+CREATE TABLE `categories` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `emoji` TEXT NOT NULL, `colorHex` TEXT NOT NULL, `monthlyLimit` REAL NOT NULL, `parentId` INTEGER);
+CREATE TABLE `expenses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `amount` REAL NOT NULL, `description` TEXT NOT NULL, `categoryId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `source` TEXT NOT NULL, `rawSms` TEXT, `tags` TEXT NOT NULL, `paymentMethod` TEXT NOT NULL);
+CREATE INDEX `index_expenses_categoryId` ON `expenses` (`categoryId`);
+CREATE TABLE `recurring_templates` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `categoryId` INTEGER NOT NULL, `enabled` INTEGER NOT NULL);
+CREATE TABLE `merchant_mappings` (`merchantName` TEXT NOT NULL, `categoryId` INTEGER NOT NULL, PRIMARY KEY(`merchantName`));
+CREATE TABLE `savings_goals` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `targetAmount` REAL NOT NULL, `currentAmount` REAL NOT NULL, `colorHex` TEXT NOT NULL);
+CREATE TABLE `bills` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `amount` REAL NOT NULL, `dueDayOfMonth` INTEGER NOT NULL, `reminderDays` INTEGER NOT NULL, `categoryId` INTEGER NOT NULL, `isEnabled` INTEGER NOT NULL, `autoLog` INTEGER NOT NULL);
+CREATE TABLE `loans` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `emoji` TEXT NOT NULL, `totalAmount` REAL NOT NULL, `monthlyEmi` REAL NOT NULL, `tenureMonths` INTEGER NOT NULL, `startDate` INTEGER NOT NULL, `dueDayOfMonth` INTEGER NOT NULL, `isActive` INTEGER NOT NULL);

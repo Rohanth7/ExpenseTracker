@@ -20,27 +20,17 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.widget.BudgetPulseRepository
 import java.text.NumberFormat
 import java.util.*
 
 class ExpenseWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val db = AppDatabase.getInstance(context)
         val prefs = PreferencesManager(context)
-
-        val cal = Calendar.getInstance()
-        val start = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val end = (cal.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
-        }.timeInMillis
-
-        val spent = db.expenseDao().getTotalSpentInRange(start, end)
+        // The budget month and forecast income, like the Budget Pulse widget and the Overview.
+        val data = BudgetPulseRepository(AppDatabase.getInstance(context), prefs).load()
         provideContent {
-            WidgetContent(spent, prefs.monthlyIncome, prefs.widgetEnabled, prefs.privacyMode)
+            WidgetContent(data.spent, data.income, prefs.widgetEnabled, prefs.privacyMode)
         }
     }
 
