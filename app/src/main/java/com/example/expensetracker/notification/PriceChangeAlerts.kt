@@ -16,7 +16,7 @@ import com.example.expensetracker.data.subscriptions.Cadence
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.subscriptions.Subscription
 import com.example.expensetracker.data.subscriptions.SubscriptionDetector
-import com.example.expensetracker.ui.screens.subscriptions.formatRupees
+import com.example.expensetracker.ui.util.formatRupees
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -123,14 +123,26 @@ object PriceChangeAlerts {
         if (!(expense.amount > 0) || expense.source == "Recurring" || !isRecent(expense, now)) return@withContext
         val key = SubscriptionDetector.keyFor(expense.description)
         val dismissed = DismissedSubscriptions.flow(app).value
-        if (key.isBlank() || key in dismissed) return@withContext
+        // A payee detection would leave out ("UPI", "HDFC debit", a bill) loads nothing.
+        if (!SubscriptionDetector.canBeSubscription(key) || key in dismissed) return@withContext
+        val bills = db.billDao().getAllOnce().map { it.name }
+        if (SubscriptionDetector.coveredByBill(key, bills)) return@withContext
         // Only this payee's payments matter: load those containing one of its words, then match exactly.
         val payments = db.expenseDao().getWithDescriptionContaining(searchWord(key)).filter { SubscriptionDetector.keyFor(it.description) == key }
-        val subscriptions = SubscriptionDetector.detect(payments, now, dismissed, db.billDao().getAllOnce().map { it.name })
+        val subscriptions = SubscriptionDetector.detect(payments, now, dismissed, bills)
         val change = changeToAlert(subscriptions, expense, now) ?: return@withContext
         // Stored even when notifications are off (Android 13+ permission): the change still shows
         // on the cards, and turning them on later shouldn't bring back an old alert.
         if (claim(app, change)) post(app, change)
+    }
+
+    /**
+     * Call after an expense is edited: [after] is checked if the edit could make it a new price
+     * ([worthCheckingAfterEdit]). Never fails the save.
+     */
+    suspend fun checkAfterEdit(context: Context, before: Expense, after: Expense) {
+        if (worthCheckingAfterEdit(before, after))
+            runCatching { checkAfterCapture(context, AppDatabase.getInstance(context.applicationContext), after) }
     }
 
     /**

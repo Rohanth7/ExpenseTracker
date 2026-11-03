@@ -340,4 +340,31 @@ class SubscriptionDetectorTest {
     /** Two payments are enough for quarterly and yearly, so they must match as closely as before, paise or not. */
     @Test fun `two purchases with paise a quarter apart are not a subscription`() =
         assertTrue(detect(listOf(pay("STORE", 1000.50, 2026, 6, 1), pay("STORE", 1045.0, 2026, 8, 30)), at = date(2026, 9, 5)).isEmpty())
+
+    /** Prepaid recharges renew every 28 days, not on a calendar date. */
+    @Test fun `a 28-day recharge's price change is reported`() {
+        // 30 Aug to 27 Sep is 28 days, 3 short of the calendar month
+        val days28 = listOf(pay("JIO", 239.0, 2026, 7, 5), pay("JIO", 239.0, 2026, 8, 2), pay("JIO", 239.0, 2026, 8, 30))
+        val rise = detect(days28 + pay("JIO", 299.0, 2026, 9, 27), at = date(2026, 9, 28)).single()
+        assertEquals(239.0, rise.previousAmount!!, 0.0)
+        // A small one too (same amount group)
+        val small = detect(days28 + pay("JIO", 249.0, 2026, 9, 27), at = date(2026, 9, 28)).single()
+        assertEquals(239.0, small.previousAmount!!, 0.0)
+    }
+
+    /** The payment before a pause doesn't make the subscription look quarterly. */
+    @Test fun `a monthly subscription paused for a quarter isn't quarterly`() {
+        val ex = listOf(pay("NETFLIX", 499.0, 2026, 1, 5), pay("NETFLIX", 499.0, 2026, 2, 5), pay("NETFLIX", 499.0, 2026, 3, 5),
+            pay("NETFLIX", 499.0, 2026, 6, 5), pay("NETFLIX", 499.0, 2026, 7, 5))
+        assertTrue(detect(ex, at = date(2026, 7, 10)).isEmpty())
+        // Listed again, monthly, after 3 payments
+        val back = detect(ex + pay("NETFLIX", 499.0, 2026, 8, 5), at = date(2026, 8, 10)).single()
+        assertEquals(Cadence.MONTHLY, back.cadence)
+        assertEquals(3, back.payments)
+    }
+
+    @Test fun `only payees that can be subscriptions are looked up`() {
+        assertTrue(SubscriptionDetector.canBeSubscription("netflix"))
+        listOf("upi", "hdfc debit", "bank debit", "gpay", "ab", "").forEach { assertTrue(it, !SubscriptionDetector.canBeSubscription(it)) }
+    }
 }

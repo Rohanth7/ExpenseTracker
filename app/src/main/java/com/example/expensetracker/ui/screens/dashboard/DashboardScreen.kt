@@ -36,7 +36,7 @@ import com.example.expensetracker.ui.theme.*
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.example.expensetracker.ui.util.parseColor
-import com.example.expensetracker.ui.screens.subscriptions.formatRupees
+import com.example.expensetracker.ui.util.formatRupees
 import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
 import java.text.NumberFormat
 import java.util.Calendar

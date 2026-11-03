@@ -24,22 +24,21 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.subscriptions.Subscription
 import com.example.expensetracker.ui.theme.*
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
-
-internal fun formatRupees(amount: Double): String =
-    "₹" + NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
+import kotlin.math.roundToLong
+import com.example.expensetracker.ui.util.formatRupees
 
 internal fun formatShortDate(millis: Long): String = SimpleDateFormat("d MMM", Locale.getDefault()).format(Date(millis))
 
-/** "↑ ₹50 since 5 Oct" for a recent price change, else null. */
+/** "↑ ₹50 since 5 Oct" for a recent price change, else null; from the prices as shown, like the alert. */
 internal fun priceChangeLabel(s: Subscription): String? {
-    val change = s.priceChange ?: return null
+    val previous = s.previousAmount ?: return null
     val since = s.priceChangedOn ?: return null
-    return "${if (change > 0) "↑" else "↓"} ${formatRupees(abs(change))} since ${formatShortDate(since)}"
+    val change = s.amount.roundToLong() - previous.roundToLong()
+    return "${if (change > 0) "↑" else "↓"} ${formatRupees(abs(change).toDouble())} since ${formatShortDate(since)}"
 }
 
 @Composable

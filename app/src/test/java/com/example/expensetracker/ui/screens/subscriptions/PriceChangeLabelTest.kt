@@ -19,6 +19,8 @@ class PriceChangeLabelTest {
         try {
             assertEquals("↑ ₹50 since 5 Oct", priceChangeLabel(sub(549.0, 499.0)))
             assertEquals("↓ ₹150 since 5 Oct", priceChangeLabel(sub(499.0, 649.0)))
+            // From the prices as shown (₹499 → ₹550), like the notification
+            assertEquals("↑ ₹51 since 5 Oct", priceChangeLabel(sub(549.6, 499.4)))
         } finally { Locale.setDefault(locale) }
     }
 
