@@ -259,4 +259,26 @@ class SubscriptionDetectorTest {
         assertEquals(499.0, s.amount, 0.0)
         assertEquals(4, s.payments)
     }
+
+    /** Each month a little more than the last: never 2% from one charge to the next, so never a change. */
+    @Test fun `a slowly drifting dollar-billed charge is not a price change`() {
+        val ex = listOf(pay("OPENAI", 1690.0, 2026, 7, 12), pay("OPENAI", 1700.0, 2026, 8, 12),
+            pay("OPENAI", 1720.0, 2026, 9, 12), pay("OPENAI", 1730.0, 2026, 10, 12))
+        assertNull(detect(ex).single().previousAmount)
+    }
+
+    /** A new price arrives on or after the renewal date; an order days before it is something else. */
+    @Test fun `a purchase days before the renewal date is not a new price`() {
+        val prime = monthly("Amazon", 299.0, 3)
+        val s = detect(prime + pay("Amazon", 450.0, 2026, 10, 29), at = date(2026, 10, 30)).single()
+        assertEquals(299.0, s.amount, 0.0)
+        assertNull(s.previousAmount)
+    }
+
+    @Test fun `a change of cadence starts from the last payment of the old one`() {
+        val ex = monthly("Insurance", 2500.0, 10, months = 1..3) + pay("Insurance", 2500.0, 2026, 6, 10) + pay("Insurance", 2500.0, 2026, 9, 10)
+        val s = detect(ex, at = date(2026, 9, 16)).single()
+        assertEquals(Cadence.QUARTERLY, s.cadence)
+        assertEquals(3, s.payments)
+    }
 }

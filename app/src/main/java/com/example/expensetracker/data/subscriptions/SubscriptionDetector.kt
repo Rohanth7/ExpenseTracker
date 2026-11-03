@@ -63,6 +63,8 @@ object SubscriptionDetector {
     private const val CHANGE_SHOWN_CYCLES = 2
     /** More than double (or under half) the old price is another purchase or plan, not a price change. */
     private const val MAX_CHANGE_RATIO = 2.0
+    /** A new price is charged on its renewal date or later (bank SMS can be a day off); see [extend]. */
+    private val EARLY_MS = TimeUnit.DAYS.toMillis(SAME_PAYMENT_DAYS.toLong())
     /** Another purchase from the payee this many cycles before a new price makes it doubtful (see [extend]). */
     private const val OTHER_PURCHASE_CYCLES = 2
 
@@ -130,9 +132,9 @@ object SubscriptionDetector {
         }
 
     /**
-     * The unbroken runs in one amount group: consecutive payments at one cadence. A gap that fits
-     * no cadence (a missed month, an extra purchase) ends a run, so it doesn't hide the payments
-     * after it for good.
+     * The unbroken runs in one amount group: consecutive payments at one cadence. A gap that doesn't
+     * fit it (a missed month, an extra purchase) ends a run, so it doesn't hide the payments after
+     * it for good.
      */
     private fun runs(unique: List<Expense>): List<Run> {
         val result = mutableListOf<Run>()
@@ -143,7 +145,8 @@ object SubscriptionDetector {
             var j = i + 1
             while (j < unique.lastIndex && fits(unique[j], unique[j + 1], cadence)) j++
             qualifying(unique.subList(i, j + 1), cadence)?.let { result += it }
-            i = j + 1
+            // The last payment may start a run at another cadence (monthly, then quarterly).
+            i = j
         }
         return result
     }
@@ -161,12 +164,15 @@ object SubscriptionDetector {
         return if (kept.size >= cadence.minPayments) Run(kept, cadence) else null
     }
 
-    /** Splits payments into consecutive stretches at one price ([samePrice] as the stretch's first). */
+    /**
+     * Splits payments into consecutive stretches at one price: each [samePrice] as the payment
+     * before it, so a charge that drifts a little every month (exchange rate) stays one price.
+     */
     private fun byPrice(payments: List<Expense>): List<List<Expense>> {
         val prices = mutableListOf<MutableList<Expense>>()
         for (p in payments) {
             val current = prices.lastOrNull()
-            if (current != null && samePrice(p.amount, current.first().amount)) current += p else prices += mutableListOf(p)
+            if (current != null && samePrice(p.amount, current.last().amount)) current += p else prices += mutableListOf(p)
         }
         return prices
     }
@@ -174,9 +180,10 @@ object SubscriptionDetector {
     /**
      * Follows [run] into other amount groups: a payment at the cadence after its last one is the
      * next price (a rise over 10% lands in another group), with that group's run from there. Only
-     * when the new price is plausible: at most double or half, and the payee had no other
-     * purchases in the cycles before it (at a shop you also buy from, an order around the renewal
-     * date could be taken for a new price). A one-off purchase off the cadence never counts.
+     * when the new price is plausible: at most double or half, charged no earlier than 2 days before
+     * the renewal date, and the payee had no other purchases in the cycles before it (at a shop you
+     * also buy from, an order around the renewal date could be taken for a new price). A one-off
+     * purchase off the cadence never counts.
      */
     private fun extend(run: Run, groups: List<List<Expense>>, all: List<Expense>): Run {
         val cadence = run.cadence
@@ -187,6 +194,7 @@ object SubscriptionDetector {
             val (group, next) = groups.asSequence().filter { it !== lastGroup }
                 .flatMap { g -> g.asSequence().map { g to it } }
                 .filter { (_, p) -> fits(last, p, cadence) && plausible(last.amount, p.amount) }
+                .filter { (_, p) -> samePrice(last.amount, p.amount) || p.date >= nextAfter(last.date, cadence) - EARLY_MS }
                 .minByOrNull { (_, p) -> p.date } ?: break
             if (!samePrice(last.amount, next.amount) && otherPurchasesBefore(next, timeline, all, cadence)) break
             val from = group.indexOfFirst { it === next }

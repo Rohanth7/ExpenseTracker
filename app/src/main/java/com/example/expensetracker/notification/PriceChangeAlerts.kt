@@ -75,12 +75,14 @@ object PriceChangeAlerts {
      * doesn't alert about a change from weeks ago.
      */
     fun changeToAlert(subscriptions: List<Subscription>, expense: Expense, now: Long): Subscription? {
-        if (abs(now - expense.date) > CAPTURE_WINDOW_MS) return null
+        if (!isRecent(expense, now)) return null
         val key = SubscriptionDetector.keyFor(expense.description)
         return subscriptions.firstOrNull { s ->
             s.key == key && s.previousAmount != null && s.priceChangedOn?.let { abs(it - expense.date) <= CAPTURE_WINDOW_MS } == true
         }
     }
+
+    private fun isRecent(expense: Expense, now: Long) = abs(now - expense.date) <= CAPTURE_WINDOW_MS
 
     /**
      * Call after a new expense is saved (bank SMS, payment app notification, added by hand). Runs
@@ -90,12 +92,14 @@ object PriceChangeAlerts {
         val app = context.applicationContext
         if (!PreferencesManager(app).priceAlertsEnabled) return@withContext
         val now = System.currentTimeMillis()
-        if (!(expense.amount > 0) || expense.source == "Recurring" || abs(now - expense.date) > CAPTURE_WINDOW_MS) return@withContext
+        // Cheap checks first, so most captures never load anything.
+        if (!(expense.amount > 0) || expense.source == "Recurring" || !isRecent(expense, now)) return@withContext
         val key = SubscriptionDetector.keyFor(expense.description)
         val dismissed = DismissedSubscriptions.flow(app).value
-        if (key in dismissed) return@withContext
-        // Only this payee's payments matter, which keeps it quick inside an SMS receiver.
-        val payments = db.expenseDao().getAllOnce().filter { SubscriptionDetector.keyFor(it.description) == key }
+        if (key.isBlank() || key in dismissed) return@withContext
+        // Only this payee's payments matter: load those containing its longest word, then match exactly.
+        val word = key.split(" ").maxBy { it.length }
+        val payments = db.expenseDao().getWithDescriptionContaining(word).filter { SubscriptionDetector.keyFor(it.description) == key }
         val subscriptions = SubscriptionDetector.detect(payments, now, dismissed, db.billDao().getAllOnce().map { it.name })
         val change = changeToAlert(subscriptions, expense, now) ?: return@withContext
         // Stored even when notifications are off (Android 13+ permission): the change still shows
