@@ -5,6 +5,8 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
+import android.service.notification.StatusBarNotification
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -62,6 +64,13 @@ class PriceChangeAlertsDeviceTest {
         it.tag == "price_change" && it.notification.extras.getString(Notification.EXTRA_TITLE)?.startsWith(payee) == true
     }
 
+    /** Posting reaches the notification list a moment after notify(): wait for [count] of ours, up to 5 s. */
+    private fun awaitOurs(count: Int): List<StatusBarNotification> {
+        val until = SystemClock.uptimeMillis() + 5_000
+        while (ours().size < count && SystemClock.uptimeMillis() < until) Thread.sleep(50)
+        return ours()
+    }
+
     private fun monthsAgo(n: Int) = Calendar.getInstance().apply { add(Calendar.MONTH, -n) }.timeInMillis
 
     /** Four months at ₹499, then today's charge at ₹549 seen by both the bank SMS and the payment app. */
@@ -76,7 +85,7 @@ class PriceChangeAlertsDeviceTest {
     @Test fun bothCapturesOfOneChargeAlertOnce() = runBlocking {
         val captures = seedRise()
         (1..4).flatMap { captures }.map { async(Dispatchers.Default) { PriceChangeAlerts.checkAfterCapture(context, db, it) } }.awaitAll()
-        val posted = ours()
+        val posted = awaitOurs(1)
         assertEquals(1, posted.size)
         assertEquals("₹499 → ₹549 a month · ₹600 more a year", posted.single().notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
         assertEquals(PriceChangeAlerts.CHANNEL_ID, posted.single().notification.channelId)
@@ -90,6 +99,6 @@ class PriceChangeAlertsDeviceTest {
         // Turned on again, the same change still alerts: nothing was stored while it was off
         prefs.priceAlertsEnabled = true
         PriceChangeAlerts.checkAfterCapture(context, db, capture)
-        assertEquals(1, ours().size)
+        assertEquals(1, awaitOurs(1).size)
     }
 }

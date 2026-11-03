@@ -63,11 +63,19 @@ class PriceChangeAlertsTest {
         assertEquals(false, PriceChangeAlerts.worthCheckingAfterEdit(upi.copy(description = "NETFLIX"), upi.copy(description = "GPay → Netflix", tags = "tv", categoryId = 3)))
     }
 
-    @Test fun `each change has its own alert key`() {
+    @Test fun `one alert key per payee`() {
         val oct = sub("netflix", 499.0, 549.0, changedOn = date(2026, 10, 5))
-        assertEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(oct.copy(payments = 6)))
-        assertNotEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(sub("netflix", 549.0, 599.0, changedOn = date(2027, 3, 5))))
+        assertEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(sub("netflix", 549.0, 599.0, changedOn = date(2027, 3, 5))))
         assertNotEquals(PriceChangeAlerts.alertKey(oct), PriceChangeAlerts.alertKey(sub("hotstar", 499.0, 549.0, changedOn = date(2026, 10, 5))))
+    }
+
+    /** The same charge saved again a little earlier (by hand, or a late SMS) moves the change's date; it's still the same change. */
+    @Test fun `a change is alerted once even if its date moves a little`() {
+        val alerted = date(2026, 10, 5, 10)
+        assertEquals(true, PriceChangeAlerts.alreadyAlerted(alerted, alerted))
+        assertEquals(true, PriceChangeAlerts.alreadyAlerted(alerted, alerted - 7 * 60_000))
+        assertEquals(false, PriceChangeAlerts.alreadyAlerted(alerted, date(2027, 3, 5)))
+        assertEquals(false, PriceChangeAlerts.alreadyAlerted(null, alerted))
     }
 
     // ── Which capture alerts ────────────────────────────────────────

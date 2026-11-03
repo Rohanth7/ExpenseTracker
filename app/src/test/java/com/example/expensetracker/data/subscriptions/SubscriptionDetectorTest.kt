@@ -314,4 +314,30 @@ class SubscriptionDetectorTest {
         val rise = ex.dropLast(1) + pay("OPENAI", 2110.50, 2026, 10, 12)
         assertEquals(1690.40, detect(rise).single().previousAmount!!, 0.0)
     }
+
+    /** A change that fails the checks isn't reported, but the subscription stays listed. */
+    @Test fun `a doubtful change still leaves the subscription listed`() {
+        // A one-off ₹59 purchase in the cycles before the ₹140 price
+        val play = (1..6).map { pay("Google Play", 130.0, 2026, it, 5) } + pay("Google Play", 59.0, 2026, 6, 20) +
+            (7..10).map { pay("Google Play", 140.0, 2026, it, 5) }
+        val s = detect(play).single()
+        assertEquals(140.0, s.amount, 0.0)
+        assertNull(s.previousAmount)
+        // The new price charged 4 days before the renewal date, twice
+        val moved = (6..9).map { pay("NETFLIX", 499.0, 2026, it, 10) } + pay("NETFLIX", 520.0, 2026, 10, 6) + pay("NETFLIX", 520.0, 2026, 11, 6)
+        val m = detect(moved, at = date(2026, 11, 7)).single()
+        assertEquals(520.0, m.amount, 0.0)
+        assertNull(m.previousAmount)
+    }
+
+    /** Weekly charges with paise are shopping; only monthly and longer get the exchange-rate allowance. */
+    @Test fun `weekly shopping with paise doesn't get a price change`() {
+        val ex = listOf(pay("DMART", 1812.40, 2026, 9, 1), pay("DMART", 1850.10, 2026, 9, 8), pay("DMART", 1890.75, 2026, 9, 15),
+            pay("DMART", 1925.30, 2026, 9, 22), pay("DMART", 2040.60, 2026, 9, 29))
+        assertNull(detect(ex, at = date(2026, 10, 1)).singleOrNull()?.previousAmount)
+    }
+
+    /** Two payments are enough for quarterly and yearly, so they must match as closely as before, paise or not. */
+    @Test fun `two purchases with paise a quarter apart are not a subscription`() =
+        assertTrue(detect(listOf(pay("STORE", 1000.50, 2026, 6, 1), pay("STORE", 1045.0, 2026, 8, 30)), at = date(2026, 9, 5)).isEmpty())
 }

@@ -32,6 +32,7 @@ data class Subscription(
     val yearlyCost: Double get() = amount * cadence.perYear
     /** New price minus old: positive for a rise. */
     val priceChange: Double? get() = previousAmount?.let { amount - it }
+    val priceRose: Boolean get() = (priceChange ?: 0.0) > 0
 }
 
 /**
@@ -51,15 +52,16 @@ object SubscriptionDetector {
     private const val AMOUNT_TOLERANCE = 0.10
     /** Quarterly and yearly need only 2 payments, so their amounts must match closely. */
     private const val STRICT_AMOUNT_TOLERANCE = 0.02
-    /** A charge converted from another currency (it has paise) can move this much with the exchange rate. */
+    /** A monthly or longer charge converted from another currency (it has paise) can move this much with the exchange rate. */
     private const val CONVERTED_AMOUNT_TOLERANCE = 0.05
     /** Payments this close together are the same charge seen twice. */
     private const val SAME_PAYMENT_DAYS = 2
     /** A subscription stays listed for this long after its payment was due. */
     private const val GRACE_DAYS = 10
     /**
-     * Amounts within ₹1 or 2% of each other are the same price (5% for charges with paise). Charges
-     * billed in dollars move with the exchange rate every month, and that isn't a price change.
+     * Amounts within ₹1 or 2% of each other are the same price (5% for monthly and longer charges
+     * with paise). Charges billed in dollars move with the exchange rate every month, and that isn't
+     * a price change; weekly charges with paise are shopping.
      */
     private const val SAME_PRICE_RUPEES = 1.0
     /** A change is shown for this many billing cycles from the first charge at the new price. */
@@ -101,12 +103,36 @@ object SubscriptionDetector {
     /** Payments at one cadence, oldest first; possibly at more than one price. */
     private class Run(val payments: List<Expense>, val cadence: Cadence)
 
+    /** Payments by date, so those in a time window are found without going through them all. */
+    private class ByDate(payments: List<Expense>) {
+        private val sorted = payments.sortedBy { it.date }
+        private val dates = LongArray(sorted.size) { sorted[it].date }
+
+        /** Payments dated from [from] up to, not including, [until]. */
+        fun between(from: Long, until: Long): List<Expense> {
+            val start = firstFrom(from)
+            return sorted.subList(start, maxOf(start, firstFrom(until)))
+        }
+
+        private fun firstFrom(date: Long): Int {
+            var lo = 0
+            var hi = dates.size
+            while (lo < hi) {
+                val mid = (lo + hi) ushr 1
+                if (dates[mid] < date) lo = mid + 1 else hi = mid
+            }
+            return lo
+        }
+    }
+
     private fun best(key: String, payments: List<Expense>, now: Long): Subscription? {
         val groups = clusterByAmount(payments).map { merged(it) }
         val groupOf = IdentityHashMap<Expense, List<Expense>>().apply { groups.forEach { g -> g.forEach { put(it, g) } } }
+        val grouped = ByDate(groups.flatten())
+        val all = ByDate(payments)
         return groups.flatMap { runs(it) }
-            .map { extend(it, groups, groupOf, payments) }
-            .mapNotNull { subscription(key, it, payments, now) }
+            .map { extend(it, grouped, groupOf, all) }
+            .mapNotNull { subscription(key, it, all, now) }
             .maxByOrNull { it.payments }
     }
 
@@ -122,8 +148,11 @@ object SubscriptionDetector {
 
     private fun within(a: Double, b: Double, tolerance: Double) = abs(a - b) <= tolerance * maxOf(a, b)
 
-    private fun samePrice(a: Double, b: Double) = abs(a - b) <= SAME_PRICE_RUPEES ||
-        within(a, b, if (converted(a) || converted(b)) CONVERTED_AMOUNT_TOLERANCE else STRICT_AMOUNT_TOLERANCE)
+    private fun samePrice(a: Double, b: Double, cadence: Cadence) = abs(a - b) <= SAME_PRICE_RUPEES ||
+        within(a, b, if (cadence != Cadence.WEEKLY && (converted(a) || converted(b))) CONVERTED_AMOUNT_TOLERANCE else STRICT_AMOUNT_TOLERANCE)
+
+    /** The same price for finding a subscription, which needs only 2 quarterly or yearly payments: no exchange-rate allowance. */
+    private fun matches(a: Double, b: Double) = abs(a - b) <= SAME_PRICE_RUPEES || within(a, b, STRICT_AMOUNT_TOLERANCE)
 
     /** Rupee prices are whole rupees; a charge with paise was converted from another currency. */
     private fun converted(amount: Double) = abs(amount - Math.round(amount)) >= 0.005
@@ -165,7 +194,7 @@ object SubscriptionDetector {
         if (cadence.minPayments == 2) {
             // Only 2 payments are needed, so each earlier price must have been paid that often too;
             // a price paid once before (899, then 950) isn't part of it.
-            val prices = byPrice(payments)
+            val prices = byPrice(payments, ::matches)
             val lastShort = prices.dropLast(1).indexOfLast { it.size < cadence.minPayments }
             kept = prices.drop(lastShort + 1).flatten()
         }
@@ -173,14 +202,14 @@ object SubscriptionDetector {
     }
 
     /**
-     * Splits payments into consecutive stretches at one price: each [samePrice] as the payment
-     * before it, so a charge that drifts a little every month (exchange rate) stays one price.
+     * Splits payments into consecutive stretches at one price: each [same] as the payment before
+     * it, so a charge that drifts a little every month (exchange rate) stays one price.
      */
-    private fun byPrice(payments: List<Expense>): List<List<Expense>> {
+    private fun byPrice(payments: List<Expense>, same: (Double, Double) -> Boolean): List<List<Expense>> {
         val prices = mutableListOf<MutableList<Expense>>()
         for (p in payments) {
             val current = prices.lastOrNull()
-            if (current != null && samePrice(p.amount, current.last().amount)) current += p else prices += mutableListOf(p)
+            if (current != null && same(p.amount, current.last().amount)) current += p else prices += mutableListOf(p)
         }
         return prices
     }
@@ -193,18 +222,20 @@ object SubscriptionDetector {
      * also buy from, an order around the renewal date could be taken for a new price). A one-off
      * purchase off the cadence never counts.
      */
-    private fun extend(run: Run, groups: List<List<Expense>>, groupOf: Map<Expense, List<Expense>>, all: List<Expense>): Run {
+    private fun extend(run: Run, grouped: ByDate, groupOf: Map<Expense, List<Expense>>, all: ByDate): Run {
         val cadence = run.cadence
         val timeline = run.payments.toMutableList()
         while (true) {
             val last = timeline.last()
             val lastGroup = groupOf.getValue(last)
-            val (group, next) = groups.asSequence().filter { it !== lastGroup }
-                .flatMap { g -> g.asSequence().map { g to it } }
-                .filter { (_, p) -> fits(last, p, cadence) && plausible(last.amount, p.amount) }
-                .filter { (_, p) -> samePrice(last.amount, p.amount) || renewal(last, p, cadence) }
-                .minByOrNull { (_, p) -> p.date } ?: break
-            if (!samePrice(last.amount, next.amount) && otherPurchasesBefore(next, timeline, all, cadence)) break
+            val next = grouped.between(last.date + TimeUnit.DAYS.toMillis(cadence.minGapDays.toLong()),
+                    last.date + TimeUnit.DAYS.toMillis(cadence.maxGapDays + 1L))
+                .firstOrNull { p ->
+                    groupOf.getValue(p) !== lastGroup && plausible(last.amount, p.amount) &&
+                        (samePrice(last.amount, p.amount, cadence) || renewal(last, p, cadence))
+                } ?: break
+            if (!samePrice(last.amount, next.amount, cadence) && otherPurchasesBefore(next, timeline, all, cadence)) break
+            val group = groupOf.getValue(next)
             val from = group.indexOfFirst { it === next }
             var to = from
             while (to < group.lastIndex && fits(group[to], group[to + 1], cadence)) to++
@@ -223,26 +254,27 @@ object SubscriptionDetector {
      * 2 days of a subscription payment at the same price is that charge seen twice; at another
      * price it's something else (a second subscription from the payee billed a day apart).
      */
-    private fun otherPurchasesBefore(next: Expense, timeline: List<Expense>, all: List<Expense>, cadence: Cadence): Boolean {
+    private fun otherPurchasesBefore(next: Expense, timeline: List<Expense>, all: ByDate, cadence: Cadence): Boolean {
         val since = shift(next.date, cadence, -OTHER_PURCHASE_CYCLES)
         val near = (timeline + next).filter { it.date >= since - EARLY_MS && it.date <= next.date }
-        return all.any { p ->
-            p.date >= since && p.date < next.date &&
-                near.none { abs(days(p.date - it.date)) <= SAME_PAYMENT_DAYS && samePrice(p.amount, it.amount) }
+        return all.between(since, next.date).any { p ->
+            near.none { abs(days(p.date - it.date)) <= SAME_PAYMENT_DAYS && samePrice(p.amount, it.amount, cadence) }
         }
     }
 
-    private fun subscription(key: String, run: Run, all: List<Expense>, now: Long): Subscription? {
+    private fun subscription(key: String, run: Run, all: ByDate, now: Long): Subscription? {
         val cadence = run.cadence
-        val prices = byPrice(run.payments)
+        val prices = byPrice(run.payments) { a, b -> samePrice(a, b, cadence) }
         val newPrice = prices.last()
         val oldPrice = prices.getOrNull(prices.size - 2)
+        // A change within one amount group gets the checks [extend] makes across groups
         val changed = oldPrice != null && oldPrice.size >= cadence.minPayments
-        // A change within one amount group gets the checks [extend] makes across groups; if it
-        // fails them, the new "price" is another purchase, and the subscription is the payments before it.
-        if (changed && !(renewal(oldPrice!!.last(), newPrice.first(), cadence) &&
-                !otherPurchasesBefore(newPrice.first(), run.payments, all, cadence)))
-            return subscription(key, Run(run.payments.dropLast(newPrice.size), cadence), all, now)
+        val believable = changed && renewal(oldPrice!!.last(), newPrice.first(), cadence) &&
+            !otherPurchasesBefore(newPrice.first(), run.payments, all, cadence)
+        // A single payment that fails them is another purchase: leave it out while the subscription
+        // is current without it. Otherwise keep every payment and report no change.
+        if (changed && !believable && newPrice.size == 1)
+            subscription(key, Run(run.payments.dropLast(1), cadence), all, now)?.let { return it }
 
         val last = run.payments.last()
         val next = nextAfter(last.date, cadence)
@@ -250,7 +282,7 @@ object SubscriptionDetector {
         if (now > next + TimeUnit.DAYS.toMillis(GRACE_DAYS.toLong())) return null
 
         val changedOn = newPrice.first().date
-        val change = changed && now < shift(changedOn, cadence, CHANGE_SHOWN_CYCLES)
+        val change = believable && now < shift(changedOn, cadence, CHANGE_SHOWN_CYCLES)
 
         return Subscription(
             key = key,

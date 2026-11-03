@@ -31,7 +31,7 @@ import kotlin.math.roundToLong
  */
 object PriceChangeAlerts {
     const val CHANNEL_ID = "subscription_alerts"
-    /** Which changes have been alerted. Not in backups: a restore isn't a capture, so it can't alert. */
+    /** When each payee's last alerted change was first charged. Not in backups: a restore isn't a capture, so it can't alert. */
     private const val PREFS = "price_alert_prefs"
     /** Notifications are told apart by tag and id, so these ids can't clash with other alerts'. */
     private const val TAG = "price_change"
@@ -69,8 +69,15 @@ object PriceChangeAlerts {
         return "$name price went ${if (up) "up" else "down"}" to body
     }
 
-    /** One key per change, so the same change never alerts twice. */
-    fun alertKey(s: Subscription): String = "price_alert_${s.key}_${s.priceChangedOn}"
+    /** One entry per payee, holding its last alerted change; so the file doesn't grow with every change. */
+    fun alertKey(s: Subscription): String = "price_alert_${s.key}"
+
+    /**
+     * Whether the change first charged at [changedOn] is the one alerted at [alerted]. The same
+     * charge saved again a little earlier (by hand, or an SMS after the payment app's notification)
+     * moves the change's date; a later change is days or months away.
+     */
+    internal fun alreadyAlerted(alerted: Long?, changedOn: Long) = alerted != null && abs(alerted - changedOn) <= CAPTURE_WINDOW_MS
 
     /**
      * The change [expense] is the new price of, if any: its payee's subscription changed price within
@@ -123,18 +130,20 @@ object PriceChangeAlerts {
         val change = changeToAlert(subscriptions, expense, now) ?: return@withContext
         // Stored even when notifications are off (Android 13+ permission): the change still shows
         // on the cards, and turning them on later shouldn't bring back an old alert.
-        if (claim(app, alertKey(change))) post(app, change)
+        if (claim(app, change)) post(app, change)
     }
 
     /**
-     * True for the first caller with [key]. The bank SMS and the payment app's notification for one
-     * charge are handled at the same time, so checking and storing happen together; commit() so
-     * the key is on disk before the alert is shown.
+     * True for the first caller with this change. The bank SMS and the payment app's notification
+     * for one charge are handled at the same time, so checking and storing happen together; commit()
+     * so it's on disk before the alert is shown.
      */
-    internal fun claim(context: Context, key: String): Boolean = synchronized(claimLock) {
+    internal fun claim(context: Context, change: Subscription): Boolean = synchronized(claimLock) {
+        val changedOn = change.priceChangedOn ?: return false
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(key, false)) return false
-        prefs.edit().putBoolean(key, true).commit()
+        val key = alertKey(change)
+        if (alreadyAlerted(if (prefs.contains(key)) prefs.getLong(key, 0) else null, changedOn)) return false
+        prefs.edit().putLong(key, changedOn).commit()
         true
     }
 

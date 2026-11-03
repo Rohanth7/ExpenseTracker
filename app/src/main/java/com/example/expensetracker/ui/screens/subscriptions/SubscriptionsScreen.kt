@@ -123,7 +123,7 @@ private fun SubscriptionCard(s: Subscription, category: Category?, canTrack: Boo
             }
         }
         priceChangeLabel(s)?.let { label ->
-            val rise = (s.priceChange ?: 0.0) > 0
+            val rise = s.priceRose
             Text(
                 label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (rise) Coral else Jade,
                 modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(if (rise) CoralSoft else JadeSoft)

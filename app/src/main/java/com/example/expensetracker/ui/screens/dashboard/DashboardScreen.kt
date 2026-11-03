@@ -577,7 +577,7 @@ fun DashboardScreen(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                                if ((s.priceChange ?: 0.0) > 0) Text("↑ price up", fontSize = 10.5.sp, color = Coral,
+                                if (s.priceRose) Text("↑ price up", fontSize = 10.5.sp, color = Coral,
                                     modifier = Modifier.semantics { contentDescription = "Price up" })
                             }
                         }
