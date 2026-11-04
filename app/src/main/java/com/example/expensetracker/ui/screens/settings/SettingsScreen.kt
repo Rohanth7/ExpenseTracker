@@ -93,6 +93,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val driveConnected by viewModel.driveConnected.collectAsState()
     val driveAccountEmail by viewModel.driveAccountEmail.collectAsState()
     val budgetAlertsEnabled by viewModel.budgetAlertsEnabled.collectAsState()
+    val priceAlertsEnabled by viewModel.priceAlertsEnabled.collectAsState()
     val budgetAlertThreshold by viewModel.budgetAlertThreshold.collectAsState()
     val weekStartsOnMonday by viewModel.weekStartsOnMonday.collectAsState()
     val monthStartDay by viewModel.monthStartDay.collectAsState()
@@ -207,6 +208,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
             SettingsPage.Preferences -> PreferencesSubPage(
                 budgetAlertsEnabled = budgetAlertsEnabled,
                 budgetAlertThreshold = budgetAlertThreshold,
+                priceAlertsEnabled = priceAlertsEnabled,
                 weekStartsOnMonday = weekStartsOnMonday,
                 monthStartDay = monthStartDay,
                 privacyMode = privacyMode,
@@ -216,6 +218,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onBack = { currentPage = null },
                 onSetBudgetAlerts = { viewModel.setBudgetAlertsEnabled(it) },
                 onSetBudgetThreshold = { viewModel.setBudgetAlertThreshold(it) },
+                onSetPriceAlerts = { viewModel.setPriceAlertsEnabled(it) },
                 onSetWeekStart = { viewModel.setWeekStartsOnMonday(it) },
                 onSetMonthStart = { viewModel.setMonthStartDay(it) },
                 onSetPrivacyMode = { viewModel.setPrivacyMode(it) },
@@ -767,10 +770,10 @@ private fun CloudSubPage(
 
 @Composable
 private fun PreferencesSubPage(
-    budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int,
+    budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int, priceAlertsEnabled: Boolean,
     weekStartsOnMonday: Boolean, monthStartDay: Int, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
-    onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit,
+    onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit, onSetPriceAlerts: (Boolean) -> Unit,
     onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
@@ -803,6 +806,15 @@ private fun PreferencesSubPage(
                             }
                         }
                     }
+                }
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Subscription price alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
+                        Text("Tell me when a subscription's price changes", fontSize = 11.5.sp, color = Muted)
+                    }
+                    Switch(checked = priceAlertsEnabled, onCheckedChange = onSetPriceAlerts,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                 }
             }
             Spacer(Modifier.height(20.dp))

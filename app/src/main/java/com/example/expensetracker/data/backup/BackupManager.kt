@@ -80,7 +80,8 @@ class BackupManager(
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
                     budgetAlertThreshold = p.budgetAlertThreshold,
                     weekStartsOnMonday = p.weekStartsOnMonday,
-                    monthStartDay = p.monthStartDay
+                    monthStartDay = p.monthStartDay,
+                    priceAlertsEnabled = p.priceAlertsEnabled
                 )
             )
         }
@@ -119,6 +120,7 @@ class BackupManager(
             s.budgetAlertThreshold?.let { p.budgetAlertThreshold = it }
             s.weekStartsOnMonday?.let { p.weekStartsOnMonday = it }
             s.monthStartDay?.let { p.monthStartDay = it }
+            s.priceAlertsEnabled?.let { p.priceAlertsEnabled = it }
         }
         // Log recurring income that's due (a backup from before payday). The restore is complete
         // either way, and the next launch tries again, so a failure here mustn't fail it.

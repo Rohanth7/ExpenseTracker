@@ -18,7 +18,9 @@ import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
+import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.notification.BudgetAlertHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -212,12 +214,14 @@ class ExpensesViewModel(
         // Read at the tap, as the dialog showed them: by the time the insert returns they may have loaded.
         val categoriesLoaded = categories.value.isNotEmpty()
         viewModelScope.launch {
-            expenseRepo.insert(Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod))
+            val expense = Expense(amount = amount, description = description, categoryId = categoryId, date = date, tags = tags, paymentMethod = paymentMethod)
+            val id = expenseRepo.insert(expense)
             // Choosing "Choose later" makes it the next default too (see shouldRememberCategory).
             if (shouldRememberCategory(categoryId, categoriesLoaded)) {
                 prefs.lastManualCategoryId = categoryId; _lastManualCategoryId.value = categoryId
             }
             alertIfOverBudget(categoryId)
+            alertIfPriceChanged(expense.copy(id = id))
         }
     }
 
@@ -232,8 +236,10 @@ class ExpensesViewModel(
      */
     fun duplicateExpense(original: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String, paymentMethod: String, saveEdits: Boolean) = viewModelScope.launch {
         if (saveEdits) saveEdit(original, amount, description, categoryId, date, tags, paymentMethod)
-        expenseRepo.insert(original.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis()))
+        val copy = original.duplicateWithEdits(amount, description, categoryId, tags, paymentMethod, System.currentTimeMillis())
+        val id = expenseRepo.insert(copy)
         alertIfOverBudget(categoryId)
+        alertIfPriceChanged(copy.copy(id = id))
     }
 
     fun updateExpense(expense: Expense, amount: Double, description: String, categoryId: Long, date: Long, tags: String = "", paymentMethod: String = expense.paymentMethod) = viewModelScope.launch {
@@ -252,6 +258,11 @@ class ExpensesViewModel(
     private suspend fun alertIfOverBudget(categoryId: Long) {
         if (categoryId != -1L && prefs.budgetAlertsEnabled)
             BudgetAlertHelper.checkAndNotify(appContext, categoryId, categoryRepo, expenseRepo, prefs.budgetAlertThreshold)
+    }
+
+    /** A new expense may be a subscription's new price (edits are checked by [ExpenseRepository.update]). Never fails the add. */
+    private suspend fun alertIfPriceChanged(expense: Expense) {
+        runCatching { PriceChangeAlerts.checkAfterCapture(appContext, AppDatabase.getInstance(appContext), expense) }
     }
 
     fun deleteExpense(expense: Expense) = viewModelScope.launch {

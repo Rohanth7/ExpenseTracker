@@ -24,6 +24,7 @@ import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -205,7 +206,8 @@ class DashboardViewModel(
                 SubscriptionDetector.detect(expenses, System.currentTimeMillis(), dismissedSubscriptions, bills.map { it.name })
             else emptyList()
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
+    // Off the main thread: subscription detection goes through the whole history.
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
     fun setExpectedIncome(value: Double) {
         prefs.monthlyIncome = value

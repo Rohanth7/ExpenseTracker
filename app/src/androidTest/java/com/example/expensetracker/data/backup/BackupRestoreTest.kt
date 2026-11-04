@@ -74,6 +74,7 @@ class BackupRestoreTest {
         source.recurringIncomeDao().insertMonth(RecurringIncomeMonth(4, 2026, 9, byHand = true))
         sourcePrefs.monthlyIncome = 75000.0
         sourcePrefs.budgetAlertThreshold = 85
+        sourcePrefs.priceAlertsEnabled = false
         sourceRules.add(ParsingRule("r1", ParsingRule.Kind.IGNORE, "^Promo\\s+\\d+$", label = "Promo #", createdAt = 1L))
     }
 
@@ -104,6 +105,7 @@ class BackupRestoreTest {
         assertEquals(source.recurringIncomeDao().getMonthsOnce().toSet(), target.recurringIncomeDao().getMonthsOnce().toSet())
         assertEquals(75000.0, targetPrefs.monthlyIncome, 0.0)
         assertEquals(85, targetPrefs.budgetAlertThreshold)
+        assertEquals(false, targetPrefs.priceAlertsEnabled)
         assertEquals(sourceRules.rules.value, targetRules.rules.value)
         // Old data is gone, not merged
         assertTrue(target.expenseDao().getAll().first().none { it.description == "Old expense" })
@@ -117,6 +119,15 @@ class BackupRestoreTest {
         assertEquals(listOf("Food"), target.categoryDao().getAllOnce().map { it.name })
         // The v1 file had no bills, so the phone's bill is kept
         assertEquals(listOf("Old bill"), target.billDao().getAll().first().map { it.name })
+    }
+
+    @Test fun backupWithoutPriceAlertsLeavesThePhonesSetting() = runBlocking {
+        targetPrefs.priceAlertsEnabled = false
+        val old = BackupCodec.parse("""{"version":3,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],
+            "settings":{"monthlyIncome":50000.0,"budgetAlertsEnabled":true}}""") as ParseResult.Ok
+        manager(target, targetPrefs).restore(old.data)
+        assertEquals(50000.0, targetPrefs.monthlyIncome, 0.0)
+        assertEquals(false, targetPrefs.priceAlertsEnabled)
     }
 
     @Test fun version2BackupLeavesThePhonesIncomeAlone() = runBlocking {

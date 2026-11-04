@@ -3,6 +3,7 @@ package com.example.expensetracker.data.repository
 import android.content.Context
 import com.example.expensetracker.data.db.dao.ExpenseDao
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.flow.Flow
 
@@ -21,9 +22,12 @@ class ExpenseRepository(private val dao: ExpenseDao, private val context: Contex
         WidgetUpdateHelper.update(context)
     }
 
+    /** Every edit comes through here, so a capture renamed or re-priced ("UPI" → "Netflix") is checked for a new price. */
     suspend fun update(expense: Expense) {
+        val before = dao.getById(expense.id)
         dao.update(expense)
         WidgetUpdateHelper.update(context)
+        if (before != null) PriceChangeAlerts.checkAfterEdit(context, before, expense)
     }
 
     suspend fun delete(expense: Expense) {

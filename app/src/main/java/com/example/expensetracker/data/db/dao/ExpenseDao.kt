@@ -18,6 +18,10 @@ interface ExpenseDao {
     @Query("SELECT * FROM expenses WHERE categoryId = :categoryId ORDER BY date DESC")
     fun getByCategory(categoryId: Long): Flow<List<Expense>>
 
+    /** Expenses whose description contains [word] (ASCII case ignored): a quick superset of one payee's. */
+    @Query("SELECT * FROM expenses WHERE description LIKE '%' || :word || '%'")
+    suspend fun getWithDescriptionContaining(word: String): List<Expense>
+
     @Query("SELECT * FROM expenses WHERE id = :id")
     suspend fun getById(id: Long): Expense?
 

@@ -18,6 +18,11 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
         get() = prefs.getBoolean("budget_alerts_enabled", true)
         set(value) = prefs.edit().putBoolean("budget_alerts_enabled", value).apply()
 
+    /** Subscription price-change alerts (PriceChangeAlerts). */
+    var priceAlertsEnabled: Boolean
+        get() = prefs.getBoolean("price_alerts_enabled", true)
+        set(value) = prefs.edit().putBoolean("price_alerts_enabled", value).apply()
+
     var budgetAlertThreshold: Int
         get() = prefs.getInt("budget_alert_threshold", 80)
         set(value) = prefs.edit().putInt("budget_alert_threshold", value).apply()

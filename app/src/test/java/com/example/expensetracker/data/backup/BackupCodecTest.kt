@@ -34,7 +34,7 @@ class BackupCodecTest {
             loans = listOf(Loan(id = 2, name = "Car", totalAmount = 500000.0, monthlyEmi = 12000.0, tenureMonths = 48, startDate = 1L)),
             savingsGoals = listOf(SavingsGoal(id = 4, name = "Trip", targetAmount = 50000.0, currentAmount = 1200.0)),
             merchantMappings = listOf(MerchantMapping("Swiggy", 1)),
-            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true, monthStartDay = 25),
+            settings = BackupSettings(monthlyIncome = 75000.0, budgetAlertsEnabled = true, budgetAlertThreshold = 85, weekStartsOnMonday = true, monthStartDay = 25, priceAlertsEnabled = false),
             parsingRules = listOf(com.example.expensetracker.sms.ParsingRule("r1", com.example.expensetracker.sms.ParsingRule.Kind.PAYMENT,
                 "^Paid\\s+Rs\\s+(\\d[\\d,]*)\\s+to\\s+(.+)$", 1, 2, "Paid Rs <amount> to <payee>", 1L)),
             incomes = listOf(Income(id = 8, amount = 50000.0, description = "Salary", date = 1_760_000_000_000, source = "Recurring", recurringIncomeId = 9),
@@ -51,6 +51,13 @@ class BackupCodecTest {
         val v2 = """{"version":2,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],
             "settings":{"monthlyIncome":50000.0,"weekStartsOnMonday":true}}"""
         assertEquals(null, ok(v2).settings!!.monthStartDay)
+    }
+
+    /** No format version change: a file from before price alerts just doesn't have the setting. */
+    @Test fun `backups from before price alerts leave the setting unset`() {
+        val v3 = """{"version":3,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],
+            "settings":{"monthlyIncome":50000.0,"budgetAlertsEnabled":false,"monthStartDay":1}}"""
+        assertEquals(null, ok(v3).settings!!.priceAlertsEnabled)
     }
 
     @Test fun `backups never contain the captured SMS or notification text`() {

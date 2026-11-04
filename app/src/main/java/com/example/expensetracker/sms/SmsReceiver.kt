@@ -8,6 +8,7 @@ import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.dao.MappingHelper
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.notification.NotificationHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.notification.QuickCategories
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +48,7 @@ class SmsReceiver : BroadcastReceiver() {
             try {
                 val db = AppDatabase.getInstance(context)
                 // With no categories yet the expense is still saved, as pending (categoryId -1).
+                val saved = mutableListOf<Expense>()
 
                 transactions.forEach { (transaction, body, _) ->
                     val isCc = SmsParser.isCreditCardSms(body)
@@ -69,8 +71,11 @@ class SmsReceiver : BroadcastReceiver() {
                         context, id, transaction.amount, transaction.description,
                         QuickCategories.forNewExpense(db, mappedCategoryId)
                     )
+                    saved += expense.copy(id = id)
                 }
                 WidgetUpdateHelper.update(context)
+                // After everything is saved and shown; a problem in price-change detection mustn't affect it.
+                saved.forEach { runCatching { PriceChangeAlerts.checkAfterCapture(context, db, it) } }
             } finally {
                 pendingResult.finish()
             }
