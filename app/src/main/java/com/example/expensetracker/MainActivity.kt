@@ -46,7 +46,6 @@ import com.example.expensetracker.ui.navigation.AppNavGraph
 import com.example.expensetracker.ui.theme.ExpenseTrackerTheme
 import com.example.expensetracker.ui.util.BiometricUtil
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -87,9 +86,8 @@ class MainActivity : FragmentActivity() {
             BackupManager(this).scheduleAutoBackup()
         }
 
-        MainScope().launch {
-            WidgetUpdateHelper.update(applicationContext)
-        }
+        // Off the main thread inside (it asks the system for the widget ids).
+        WidgetUpdateHelper.update(applicationContext)
 
         pendingAction = LaunchAction.onCreate(
             recreated = savedInstanceState != null,
