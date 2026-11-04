@@ -1,7 +1,12 @@
 package com.example.expensetracker.data.preferences
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.example.expensetracker.data.period.BudgetPeriod
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 class PreferencesManager(context: Context, fileName: String = "expense_tracker_prefs") {
     private val prefs = context.getSharedPreferences(fileName, Context.MODE_PRIVATE)
@@ -9,6 +14,21 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
     var monthlyIncome: Double
         get() = Double.fromBits(prefs.getLong("monthly_income", 0L))
         set(value) = prefs.edit().putLong("monthly_income", value.toBits()).apply()
+
+    /**
+     * [monthlyIncome] as it changes, whoever writes it: a restore, a reset, setup or another
+     * screen. A copy read once went stale until the app restarted.
+     */
+    fun monthlyIncomeFlow(): Flow<Double> = callbackFlow {
+        // A null key is clear() (Android 11+).
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == "monthly_income") trySend(monthlyIncome)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        // Read after registering, so a write in between isn't missed.
+        send(monthlyIncome)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
 
     var privacyMode: Boolean
         get() = prefs.getBoolean("privacy_mode", false)

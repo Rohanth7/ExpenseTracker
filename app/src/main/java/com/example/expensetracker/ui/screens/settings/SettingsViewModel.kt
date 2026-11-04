@@ -185,9 +185,9 @@ class SettingsViewModel(
         snackbarMessage = "Google Drive disconnected"
     }
 
-    private val _monthlyIncome = MutableStateFlow(prefs.monthlyIncome)
-    val monthlyIncome: StateFlow<Double> = _monthlyIncome.asStateFlow()
-    fun setMonthlyIncome(value: Double) { prefs.monthlyIncome = value; _monthlyIncome.value = value }
+    // Live, so a change made on the Overview, by a restore or by a reset shows here too.
+    val monthlyIncome: StateFlow<Double> = prefs.monthlyIncomeFlow().stateIn(viewModelScope, SharingStarted.Eagerly, prefs.monthlyIncome)
+    fun setMonthlyIncome(value: Double) { prefs.monthlyIncome = value }
 
     // ── Backup / restore ────────────────────────────────────────
 
@@ -262,7 +262,6 @@ class SettingsViewModel(
         val data = pending.data
         runCatching { backupManager.restore(data) }
             .onSuccess {
-                data.settings?.monthlyIncome?.let { _monthlyIncome.value = it }
                 data.settings?.budgetAlertsEnabled?.let { _budgetAlertsEnabled.value = it }
                 data.settings?.priceAlertsEnabled?.let { _priceAlertsEnabled.value = it }
                 data.settings?.budgetAlertThreshold?.let { _budgetAlertThreshold.value = it }
@@ -438,7 +437,6 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         incomeRepo.deleteAll()
         prefs.monthlyIncome = 0.0
-        _monthlyIncome.value = 0.0
         setMonthStartDay(1)
         // Show first-run setup again on next launch, which recreates the starter categories.
         prefs.onboardingCompleted = false
