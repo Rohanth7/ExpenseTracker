@@ -31,8 +31,9 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 
-    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
-    suspend fun getRecentByAmountFromDifferentSource(amount: Double, source: String, since: Long): Int
+    /** Captured (SMS, card SMS or payment app) only: one added by hand or an auto-logged bill isn't the same payment seen twice. */
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source IN ('SMS', 'CC-SMS', 'UPI') AND source != :source AND date >= :since")
+    suspend fun countRecentCapturesFromOtherSource(amount: Double, source: String, since: Long): Int
 
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND description = :description AND source != :source AND date >= :since")
     suspend fun getRecentByAmountAndDescriptionFromDifferentSource(amount: Double, description: String, source: String, since: Long): Int

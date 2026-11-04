@@ -6,6 +6,7 @@ import android.service.notification.StatusBarNotification
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.dao.MappingHelper
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.sms.CaptureDuplicates
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,14 +40,8 @@ class TransactionNotificationListener : NotificationListenerService() {
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
             // With no categories yet the expense is still saved, as pending (categoryId -1).
-            val now = System.currentTimeMillis()
-            // Cross-source: bank SMS + UPI notification arrive within seconds for the same transaction.
-            // Descriptions differ between sources, so match on amount only within 3 minutes.
-            if (db.expenseDao().getRecentByAmountFromDifferentSource(transaction.amount, "UPI", now - 3 * 60 * 1000L) > 0) return@launch
-            
-            // Same-source: UPI app notification fired twice (30-sec window)
-            if (db.expenseDao().getRecentByAmountAndContentFromSameSource(transaction.amount, "UPI", body, now - 30 * 1000L) > 0) return@launch
-            
+            if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, "UPI", body, System.currentTimeMillis())) return@launch
+
             // Smart auto-categorization with fuzzy matching
             val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)
             val finalCategoryId = mappedCategoryId ?: -1L
