@@ -62,8 +62,6 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.glance.appwidget)
-    implementation(libs.androidx.glance.material3)
     implementation(libs.androidx.work.runtime)
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android)

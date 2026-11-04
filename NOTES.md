@@ -96,7 +96,6 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **Not tested yet:** Google Drive end to end (needs an OAuth client registered for the final package name and signing key — Phase 1); GPay/PhonePe capture and quick actions on a real phone; fingerprint/face unlock (only PIN tested); Android 9–10 lock path; Android 7–8.1 fingerprint dialog order over the lock window (no emulator image here).
 - **`READ_SMS`** is declared but never requested — use it for "import past transactions" or remove it before the Play SMS declaration.
 - **Other amount fields still use `toDoubleOrNull`** (no ₹, grouping, sums or decimal comma): savings goal target and deposit, bill and loan amounts/EMI (Settings), dashboard quick inputs, the Expenses min/max filter. Pre-existing, outside F1; move them to `AmountField`/`AmountCalculator` in their own PR.
-- **Dead code:** `MerchantMappingRepository.getCategoryId` (duplicate of `MappingHelper.getCategoryId`, no callers); `ui/widgets/ExpenseWidget.kt` (not registered in the manifest).
 - **Splash icon** is still pixelated — waiting on a high-res icon from the user.
 - **Notification keyword allowlist** (only treat as expense if it contains debit words like "debited", "paid", …) — discussed, user chose to leave it for now.
 - **Feature ideas not built:** payment-method breakdown chart, merchant mapping management screen (`MerchantMapping` table exists, no UI), PDF export, weekly spending digest notification, no-spend streaks, net worth snapshot, year-over-year comparison, receipt photo attachment.
