@@ -14,6 +14,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextRange
@@ -29,6 +32,18 @@ import com.example.expensetracker.ui.theme.Muted
  */
 @Stable
 class AmountInputState(initial: String) {
+    companion object {
+        val Saver: Saver<AmountInputState, Any> = listSaver(
+            save = { listOf(it.value.text, it.value.selection.start, it.value.selection.end, it.error) },
+            restore = { saved ->
+                AmountInputState(saved[0] as String).apply {
+                    value = TextFieldValue(value.text, TextRange(saved[1] as Int, saved[2] as Int))
+                    error = saved[3] as String
+                }
+            }
+        )
+    }
+
     var value by mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
     var error by mutableStateOf("")
 
@@ -75,8 +90,10 @@ private const val UNFINISHED_ENDINGS = ",.+-−×÷*/xX"
 @Composable
 fun rememberAmountText(text: String, parse: (String) -> Double?): AmountText = remember(text) { readAmountText(text, parse) }
 
+/** Kept across rotation and Android closing the app: the text, its cursor and the error. */
 @Composable
-fun rememberAmountInputState(initial: String = ""): AmountInputState = remember { AmountInputState(initial) }
+fun rememberAmountInputState(initial: String = ""): AmountInputState =
+    rememberSaveable(saver = AmountInputState.Saver) { AmountInputState(initial) }
 
 /**
  * An amount field that takes sums like "120+45" or "3×40" (see [AmountCalculator]). The number

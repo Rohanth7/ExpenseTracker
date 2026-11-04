@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.categories
 
+import com.example.expensetracker.ui.util.rememberSaveableItem
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,12 +56,12 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     val categories by viewModel.categories.collectAsState()
     val groupedCategories by viewModel.groupedCategories.collectAsState()
     val tagSummaries by viewModel.allTagSummaries.collectAsState()
-    var showDialog by remember { mutableStateOf(false) }
-    var editTarget by remember { mutableStateOf<Category?>(null) }
-    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
-    var addSubcategoryFor by remember { mutableStateOf<Category?>(null) }
-    var tagToRename by remember { mutableStateOf<String?>(null) }
-    var tagToDelete by remember { mutableStateOf<String?>(null) }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    var editTarget by rememberSaveableItem(categories) { it.id }
+    var categoryToDelete by rememberSaveableItem(categories) { it.id }
+    var addSubcategoryFor by rememberSaveableItem(categories) { it.id }
+    var tagToRename by rememberSaveable { mutableStateOf<String?>(null) }
+    var tagToDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(Canvas)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -572,7 +574,7 @@ private fun RenameTagDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var newName by remember { mutableStateOf(currentName) }
+    var newName by rememberSaveable { mutableStateOf(currentName) }
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -615,9 +617,9 @@ private fun CategoryDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var selectedEmoji by remember { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
-    var selectedColor by remember { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
+    var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
+    var selectedEmoji by rememberSaveable { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
+    var selectedColor by rememberSaveable { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
     var limitText by remember {
         mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }

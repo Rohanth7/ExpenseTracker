@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.statistics
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -76,7 +77,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
     val viewMode by viewModel.viewMode.collectAsState()
     // Collected (and so worked out) only while the Range view is shown
     val range = if (viewMode == ViewMode.RANGE) viewModel.rangeState.collectAsState().value else null
-    var showRangeSheet by remember { mutableStateOf(false) }
+    var showRangeSheet by rememberSaveable { mutableStateOf(false) }
     val headerLabel = when (viewMode) {
         ViewMode.MONTHLY -> state.month.label
         ViewMode.RANGE -> range?.label.orEmpty()
@@ -537,7 +538,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (StatsRange) -> Unit) {
-    var showPicker by remember { mutableStateOf(false) }
+    var showPicker by rememberSaveable { mutableStateOf(false) }
     AppModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
             Text("SHOW", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
@@ -1215,7 +1216,7 @@ private fun CategoryAccordionRow(stat: CategoryYearlyStat, grandTotal: Double, o
     val fraction = if (grandTotal > 0) (stat.total / grandTotal).coerceIn(0.0, 1.0).toFloat() else 0f
     val pct = (fraction * 100).toInt()
     val hasSubcats = stat.subcategories.isNotEmpty()
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(

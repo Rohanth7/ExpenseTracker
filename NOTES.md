@@ -39,6 +39,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - PhonePe recipient phrasing ("sent you", "paid to you", …) treated as credit.
 - Weekend insight counts today in the day denominator.
 - Bottom nav "Overview" tab returns to Overview from nested screens.
+- Screen and dialog state survives rotation and Android closing the app: use `rememberSaveable` for it, `rememberSaveableItem(list) { it.id }` for the item a dialog is open for (only the id is saved; the dialog closes if the item is deleted elsewhere), and `rememberAmountInputState` (saveable) for amounts. The open Settings page is an enum for the same reason.
 - A recreated activity (rotation, Android restoring it) doesn't act on its launch intent again (`LaunchAction.onCreate`); before F1 a rotation after a notification tap reopened Categorize.
 
 ### Merged PRs (2026-10-15/16, each tested on the emulator against `main`)
@@ -95,9 +96,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **Not tested yet:** Google Drive end to end (needs an OAuth client registered for the final package name and signing key — Phase 1); GPay/PhonePe capture and quick actions on a real phone; fingerprint/face unlock (only PIN tested); Android 9–10 lock path; Android 7–8.1 fingerprint dialog order over the lock window (no emulator image here).
 - **`READ_SMS`** is declared but never requested — use it for "import past transactions" or remove it before the Play SMS declaration.
 - **Widget refresh on the main thread at startup**: `MainActivity.onCreate` → `WidgetUpdateHelper.update` → `AppWidgetManager.getAppWidgetIds` is a binder call on the main thread; with a slow system (Mac under load) it caused an "Input dispatching timed out" ANR on the emulator. Move it to a background dispatcher.
-- **Add/Edit dialogs close on rotation** (`showAddDialog` etc. use `remember`, not `rememberSaveable`), losing what was typed.
 - **Other amount fields still use `toDoubleOrNull`** (no ₹, grouping, sums or decimal comma): savings goal target and deposit, bill and loan amounts/EMI (Settings), dashboard quick inputs, the Expenses min/max filter. Pre-existing, outside F1; move them to `AmountField`/`AmountCalculator` in their own PR.
-- **Settings** loses its open sub-page on rotation (`currentPage` isn't saved).
 - **Dead code:** `MerchantMappingRepository.getCategoryId` (duplicate of `MappingHelper.getCategoryId`, no callers); `ui/widgets/ExpenseWidget.kt` (not registered in the manifest).
 - **Splash icon** is still pixelated — waiting on a high-res icon from the user.
 - **Notification keyword allowlist** (only treat as expense if it contains debit words like "debited", "paid", …) — discussed, user chose to leave it for now.
