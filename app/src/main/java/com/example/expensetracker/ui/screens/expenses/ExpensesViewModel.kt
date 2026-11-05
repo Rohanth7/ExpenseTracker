@@ -41,7 +41,9 @@ class ExpensesViewModel(
     private val _categoryFilter = saved.getMutableStateFlow<Long?>("category", -1L)
     private val _tagFilter = saved.getMutableStateFlow<String?>("tag", null)
     private val _sortByAmount = saved.getMutableStateFlow("sort_by_amount", false)
-    private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
+    // Saved too: the bulk Categorize dialog comes back after Android closes the app, and acted on
+    // an empty selection (nothing changed, with no word).
+    private val _selectedIds = MutableStateFlow(saved.get<LongArray>("selected_ids")?.toSet() ?: emptySet())
     private val _dateFilter = saved.getMutableStateFlow<DateFilter?>("date_filter", null)
     /** Refreshed when the screen comes back, so "This month" moves on when the month does. */
     private val _now = MutableStateFlow(System.currentTimeMillis())
@@ -55,6 +57,10 @@ class ExpensesViewModel(
     val tagFilter: StateFlow<String?> = _tagFilter.asStateFlow()
     val sortByAmount: StateFlow<Boolean> = _sortByAmount.asStateFlow()
     val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
+
+    init {
+        viewModelScope.launch { _selectedIds.collect { saved["selected_ids"] = it.toLongArray() } }
+    }
     val dateFilter: StateFlow<DateFilter?> = _dateFilter.asStateFlow()
     /** The dates [dateFilter] covers now. */
     val dateRange: StateFlow<Pair<Long, Long>?> = combine(_dateFilter, _now, MonthStartDay.flow(appContext)) { filter, now, startDay ->

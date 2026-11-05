@@ -525,7 +525,7 @@ private fun CategoryLimitDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
-    var limitText by remember {
+    var limitText by rememberSaveable {
         mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }

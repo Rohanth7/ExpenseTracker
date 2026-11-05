@@ -58,6 +58,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     val tagSummaries by viewModel.allTagSummaries.collectAsState()
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var editTarget by rememberSaveableItem(categories) { it.id }
+    var editingExisting by rememberSaveable { mutableStateOf(false) }
     var categoryToDelete by rememberSaveableItem(categories) { it.id }
     var addSubcategoryFor by rememberSaveableItem(categories) { it.id }
     var tagToRename by rememberSaveable { mutableStateOf<String?>(null) }
@@ -133,7 +134,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                                     }
                                     CategoryRow(
                                         category = group.parent,
-                                        onEdit = { editTarget = group.parent; showDialog = true },
+                                        onEdit = { editTarget = group.parent; editingExisting = true; showDialog = true },
                                         onDelete = { categoryToDelete = group.parent },
                                         onAddSubcategory = { addSubcategoryFor = group.parent }
                                     )
@@ -141,7 +142,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                                         HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                                         SubcategoryRow(
                                             category = child,
-                                            onEdit = { editTarget = child; showDialog = true },
+                                            onEdit = { editTarget = child; editingExisting = true; showDialog = true },
                                             onDelete = { categoryToDelete = child }
                                         )
                                     }
@@ -263,7 +264,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                 .size(58.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Jade)
-                .clickable { editTarget = null; showDialog = true },
+                .clickable { editTarget = null; editingExisting = false; showDialog = true },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -330,7 +331,9 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
         )
     }
 
-    if (showDialog) {
+    // Editing a category that's gone (deleted elsewhere, or not loaded yet after Android closed
+    // the app) shows nothing, rather than a "New Category" form that would add a copy.
+    if (showDialog && (!editingExisting || editTarget != null)) {
         CategoryDialog(
             initial = editTarget,
             onDismiss = { showDialog = false; editTarget = null },
@@ -620,7 +623,7 @@ private fun CategoryDialog(
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var selectedEmoji by rememberSaveable { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
     var selectedColor by rememberSaveable { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
-    var limitText by remember {
+    var limitText by rememberSaveable {
         mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }

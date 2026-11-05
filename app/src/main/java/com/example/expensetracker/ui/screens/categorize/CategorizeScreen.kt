@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -55,27 +56,31 @@ fun CategorizeScreen(
 
     var expense by remember { mutableStateOf<Expense?>(null) }
     var loaded by remember { mutableStateOf(false) }
-    var mode by remember { mutableStateOf(CategorizeMode.Category) }
+    var mode by rememberSaveable { mutableStateOf(CategorizeMode.Category) }
 
     // Category mode state
-    var selectedCategoryId by remember { mutableStateOf(-1L) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(-1L) }
     val amount = rememberAmountInputState()
-    var tags by remember { mutableStateOf("") }
+    var tags by rememberSaveable { mutableStateOf("") }
 
     // EMI mode state
-    var selectedLoanId by remember { mutableStateOf(-1L) }
+    var selectedLoanId by rememberSaveable { mutableStateOf(-1L) }
 
     // Savings mode state
-    var selectedGoalId by remember { mutableStateOf(-1L) }
+    var selectedGoalId by rememberSaveable { mutableStateOf(-1L) }
     val savingsAmount = rememberAmountInputState()
 
+    // Filled from the expense once: after a rotation (or Android closing the app) the fields
+    // come back as the user left them, and refilling them would undo their edits.
+    var filled by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(expenseId) {
         expense = viewModel.getExpense(expenseId)
-        expense?.let {
+        expense?.takeIf { !filled }?.let {
             // Locale-free, so a comma-decimal phone shows 180.00 rather than 180,00.
             amount.setText(AmountCalculator.forEditing(it.amount))
             savingsAmount.setText(AmountCalculator.forEditing(it.amount))
             tags = it.tags
+            filled = true
         }
         loaded = true
     }

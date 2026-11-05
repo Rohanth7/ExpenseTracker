@@ -39,7 +39,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - PhonePe recipient phrasing ("sent you", "paid to you", …) treated as credit.
 - Weekend insight counts today in the day denominator.
 - Bottom nav "Overview" tab returns to Overview from nested screens.
-- Screen and dialog state survives rotation and Android closing the app: use `rememberSaveable` for it, `rememberSaveableItem(list) { it.id }` for the item a dialog is open for (only the id is saved; the dialog closes if the item is deleted elsewhere), and `rememberAmountInputState` (saveable) for amounts. The open Settings page is an enum for the same reason.
+- Screen and dialog state survives rotation and Android closing the app: use `rememberSaveable` for it, `rememberSaveableItem(list) { it.id }` for the item a dialog is open for (only the id is saved; the dialog closes if the item is deleted elsewhere), and `rememberAmountInputState` (saveable) for amounts. The open Settings page is an enum for the same reason, and returning to the Settings tab shows the page last open there (tabs keep their state, like Expenses' filters). The Expenses selection is in `SavedStateHandle`, so bulk Categorize still has it. Screens filled from the database once (Categorize) guard with a saved `filled` flag, or a refill undoes the user's edits. A dialog that edits *or* adds (Categories) saves which it was, so an edit whose item is gone shows nothing rather than an Add form.
 - A recreated activity (rotation, Android restoring it) doesn't act on its launch intent again (`LaunchAction.onCreate`); before F1 a rotation after a notification tap reopened Categorize.
 
 ### Merged PRs (2026-10-15/16, each tested on the emulator against `main`)
