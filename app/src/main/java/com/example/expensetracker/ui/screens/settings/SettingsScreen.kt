@@ -924,7 +924,7 @@ private fun DataSubPage(
     if (showResetDialog) {
         AppAlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
-            text = { Text("This permanently deletes all expenses, income, categories, bills, loans and savings goals on this phone. Backups aren't affected.") },
+            text = { Text("This permanently deletes all expenses, income, categories, bills, loans, savings goals and message rules on this phone. Auto backup is turned off, so your backups keep your data. App Lock, privacy mode and Google Drive stay as they are.") },
             confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
             dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel", color = Muted) } })
     }

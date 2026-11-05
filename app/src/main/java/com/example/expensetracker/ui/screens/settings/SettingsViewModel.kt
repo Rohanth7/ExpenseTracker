@@ -42,6 +42,10 @@ import kotlinx.coroutines.NonCancellable
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.data.repository.RecurringTemplateRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
+import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.notification.BudgetAlertHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
+import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,7 +65,8 @@ class SettingsViewModel(
     private val savingsGoalRepo: SavingsGoalRepository,
     private val incomeRepo: IncomeRepository,
     private val backupManager: BackupManager,
-    private val prefs: PreferencesManager
+    private val prefs: PreferencesManager,
+    private val ruleStore: ParsingRuleStore = ParsingRuleStore.get(appContext)
 ) : ViewModel() {
 
     val categories: StateFlow<List<Category>> = categoryRepo.allCategories
@@ -440,6 +445,15 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         incomeRepo.deleteAll()
         prefs.monthlyIncome = 0.0
+        // The next automatic backup would replace the user's backup with this empty phone.
+        setAutoBackupEnabled(false)
+        // Learned from the deleted data. App Lock, privacy mode and the Drive account are this
+        // phone's settings and stay (the dialog says so).
+        ruleStore.replaceAll(emptyList())
+        DismissedSubscriptions.clear(appContext)
+        PriceChangeAlerts.forgetAlerts(appContext)
+        BudgetAlertHelper.forgetAlerts(appContext)
+        prefs.lastManualCategoryId = -1L
         com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
         setMonthStartDay(1)
         // Show first-run setup again on next launch, which recreates the starter categories.

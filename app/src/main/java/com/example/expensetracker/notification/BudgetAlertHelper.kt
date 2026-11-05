@@ -26,6 +26,11 @@ object BudgetAlertHelper {
         }
     }
 
+    /** Reset everything: which alerts were sent this month, so a new budget alerts again. */
+    fun forgetAlerts(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
     suspend fun checkAndNotify(
         context: Context,
         categoryId: Long,

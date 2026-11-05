@@ -12,7 +12,15 @@ import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.sms.ParsingRule
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
+import com.google.gson.TypeAdapter
+import com.google.gson.TypeAdapterFactory
+import com.google.gson.reflect.TypeToken
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonWriter
+import java.io.StringReader
 
 /** Settings that belong to the user's data rather than to this phone. */
 data class BackupSettings(
@@ -62,6 +70,13 @@ data class BackupData(
             if (incomes == null) add("income records")
             if (recurringIncomes == null) add("recurring income")
         }
+
+    /**
+     * Anything the user entered (starter categories, learned categories and settings don't count).
+     * A reset phone's snapshot has none.
+     */
+    val hasRecords: Boolean
+        get() = listOf(expenses, incomes, bills, loans, savingsGoals, recurringIncomes, recurringTemplates).any { !it.isNullOrEmpty() }
 }
 
 sealed class ParseResult {
@@ -71,7 +86,17 @@ sealed class ParseResult {
 
 object BackupCodec {
     const val CURRENT_VERSION = 3
-    private val gson = Gson()
+    private val gson = GsonBuilder().registerTypeAdapterFactory(EntityDefaults).create()
+
+    /**
+     * Whether an automatic backup may replace the backup [existing] (a file's text, null if there
+     * is none) with [next]: never one with records by one without, as after "Reset everything".
+     */
+    fun mayReplace(existing: String?, next: BackupData): Boolean {
+        if (next.hasRecords || existing == null) return true
+        val old = parse(existing) as? ParseResult.Ok ?: return true
+        return !old.data.hasRecords
+    }
 
     /** Captured SMS/notification text never goes into a backup; parsed amount and payee do. */
     fun toJson(data: BackupData): String =
@@ -105,28 +130,36 @@ object BackupCodec {
     }
 
     private fun Double?.ok() = this != null && isFinite()
+    private fun Double?.atLeastZero() = ok() && this!! >= 0
+    private val COLOUR = Regex("^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")
 
     // Gson can leave null in fields Kotlin says are non-null, so cast to Any? before checking.
     @Suppress("USELESS_CAST", "SENSELESS_COMPARISON")
     private fun problem(d: BackupData): String? {
+        // Ranges are the ones the app's own screens allow, so a file the app wrote always passes.
         d.categories!!.forEachIndexed { i, c ->
             if ((c as Any?) == null || (c.name as String?) == null) return "category ${i + 1} has no name"
+            if (!c.monthlyLimit.atLeastZero() || !COLOUR.matches(c.colorHex)) return "category ${i + 1} has an invalid limit or colour"
         }
         d.expenses!!.forEachIndexed { i, e ->
             if ((e as Any?) == null || !(e.amount as Double?).ok() || (e.description as String?) == null)
                 return "expense ${i + 1} is incomplete"
+            if (e.date <= 0) return "expense ${i + 1} has no date"
         }
         d.recurringTemplates?.forEachIndexed { i, t ->
             if ((t as Any?) == null || (t.name as String?) == null || !(t.amount as Double?).ok()) return "recurring item ${i + 1} is incomplete"
         }
         d.bills?.forEachIndexed { i, b ->
             if ((b as Any?) == null || (b.name as String?) == null || !(b.amount as Double?).ok()) return "bill ${i + 1} is incomplete"
+            if (b.dueDayOfMonth !in 1..31 || b.reminderDays !in 0..14) return "bill ${i + 1} has an invalid due day or reminder"
         }
         d.loans?.forEachIndexed { i, l ->
             if ((l as Any?) == null || (l.name as String?) == null || !(l.monthlyEmi as Double?).ok()) return "loan ${i + 1} is incomplete"
+            if (l.tenureMonths < 1 || l.dueDayOfMonth !in 1..31) return "loan ${i + 1} has an invalid tenure or due day"
         }
         d.savingsGoals?.forEachIndexed { i, g ->
             if ((g as Any?) == null || (g.name as String?) == null || !(g.targetAmount as Double?).ok()) return "savings goal ${i + 1} is incomplete"
+            if (g.targetAmount <= 0 || !COLOUR.matches(g.colorHex)) return "savings goal ${i + 1} has an invalid target or colour"
         }
         d.parsingRules?.forEachIndexed { i, r ->
             if ((r as Any?) == null || (r.pattern as String?) == null || (r.kind as ParsingRule.Kind?) == null ||
@@ -135,6 +168,7 @@ object BackupCodec {
         d.incomes?.forEachIndexed { i, n ->
             if ((n as Any?) == null || !(n.amount as Double?).ok() || (n.description as String?) == null ||
                 (n.source as String?) == null || (n.tags as String?) == null) return "income ${i + 1} is incomplete"
+            if (n.date <= 0) return "income ${i + 1} has no date"
         }
         d.recurringIncomes?.forEachIndexed { i, r ->
             if ((r as Any?) == null || (r.name as String?) == null || !(r.amount as Double?).ok() || r.dayOfMonth !in 1..31)
@@ -146,6 +180,54 @@ object BackupCodec {
         d.merchantMappings?.forEachIndexed { i, m ->
             if ((m as Any?) == null || (m.merchantName as String?) == null) return "learned category ${i + 1} is incomplete"
         }
+        d.settings?.let { s ->
+            if (s.budgetAlertThreshold != null && s.budgetAlertThreshold !in 50..95) return "the budget alert threshold is out of range"
+            if (s.monthlyIncome != null && !s.monthlyIncome.atLeastZero()) return "the expected income is invalid"
+        }
         return null
+    }
+}
+
+/**
+ * Gson builds entities without calling their constructors, so a field missing from an older or
+ * hand-made file would be null (or 0), not the entity's default. This fills those in from a
+ * default instance. Fields without a default (a name, an amount, a date) stay missing, for
+ * [BackupCodec.parse] to refuse.
+ */
+private object EntityDefaults : TypeAdapterFactory {
+    private class Defaults(val instance: Any, vararg val required: String)
+
+    private val defaults: Map<Class<*>, Defaults> = mapOf(
+        Category::class.java to Defaults(Category(name = ""), "name"),
+        Expense::class.java to Defaults(Expense(amount = 0.0, description = "", date = 0), "amount", "description", "date"),
+        RecurringTemplate::class.java to Defaults(RecurringTemplate(name = "", amount = 0.0), "name", "amount"),
+        Bill::class.java to Defaults(Bill(name = "", amount = 0.0, dueDayOfMonth = 0), "name", "amount", "dueDayOfMonth"),
+        Loan::class.java to Defaults(Loan(name = "", totalAmount = 0.0, monthlyEmi = 0.0, tenureMonths = 0, startDate = 0),
+            "name", "totalAmount", "monthlyEmi", "tenureMonths", "startDate"),
+        SavingsGoal::class.java to Defaults(SavingsGoal(name = "", targetAmount = 0.0), "name", "targetAmount"),
+        Income::class.java to Defaults(Income(amount = 0.0, description = "", date = 0), "amount", "description", "date"),
+        RecurringIncome::class.java to Defaults(RecurringIncome(name = "", amount = 0.0, dayOfMonth = 0), "name", "amount", "dayOfMonth")
+    )
+
+    override fun <T> create(gson: Gson, type: TypeToken<T>): TypeAdapter<T>? {
+        val d = defaults[type.rawType] ?: return null
+        val delegate = gson.getDelegateAdapter(this, type)
+        val elements = gson.getAdapter(JsonElement::class.java)
+        @Suppress("UNCHECKED_CAST")
+        val filled = delegate.toJsonTree(d.instance as T).asJsonObject
+        return object : TypeAdapter<T>() {
+            override fun write(out: JsonWriter, value: T) = delegate.write(out, value)
+            override fun read(reader: JsonReader): T? {
+                val json = elements.read(reader)
+                if (json.isJsonObject) {
+                    val o = json.asJsonObject
+                    filled.entrySet().forEach { (key, value) ->
+                        if (key !in d.required && o.get(key)?.isJsonNull != false) o.add(key, value)
+                    }
+                }
+                // Read leniently like the file itself, so a NaN amount reaches the checks.
+                return delegate.read(JsonReader(StringReader(json.toString())).apply { isLenient = true })
+            }
+        }
     }
 }

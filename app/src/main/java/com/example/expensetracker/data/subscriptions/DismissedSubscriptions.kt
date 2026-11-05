@@ -21,6 +21,8 @@ object DismissedSubscriptions {
 
     fun dismiss(context: Context, key: String) = update(context) { it + key }
     fun restore(context: Context, key: String) = update(context) { it - key }
+    /** Reset everything. */
+    fun clear(context: Context) = update(context) { emptySet() }
 
     private fun update(context: Context, change: (Set<String>) -> Set<String>) {
         val s = state(context.applicationContext)
