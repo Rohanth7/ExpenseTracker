@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.categories
 
+import com.example.expensetracker.ui.util.rememberSaveableItem
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,12 +56,13 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     val categories by viewModel.categories.collectAsState()
     val groupedCategories by viewModel.groupedCategories.collectAsState()
     val tagSummaries by viewModel.allTagSummaries.collectAsState()
-    var showDialog by remember { mutableStateOf(false) }
-    var editTarget by remember { mutableStateOf<Category?>(null) }
-    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
-    var addSubcategoryFor by remember { mutableStateOf<Category?>(null) }
-    var tagToRename by remember { mutableStateOf<String?>(null) }
-    var tagToDelete by remember { mutableStateOf<String?>(null) }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    var editTarget by rememberSaveableItem(categories) { it.id }
+    var editingExisting by rememberSaveable { mutableStateOf(false) }
+    var categoryToDelete by rememberSaveableItem(categories) { it.id }
+    var addSubcategoryFor by rememberSaveableItem(categories) { it.id }
+    var tagToRename by rememberSaveable { mutableStateOf<String?>(null) }
+    var tagToDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(Canvas)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -131,7 +134,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                                     }
                                     CategoryRow(
                                         category = group.parent,
-                                        onEdit = { editTarget = group.parent; showDialog = true },
+                                        onEdit = { editTarget = group.parent; editingExisting = true; showDialog = true },
                                         onDelete = { categoryToDelete = group.parent },
                                         onAddSubcategory = { addSubcategoryFor = group.parent }
                                     )
@@ -139,7 +142,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                                         HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                                         SubcategoryRow(
                                             category = child,
-                                            onEdit = { editTarget = child; showDialog = true },
+                                            onEdit = { editTarget = child; editingExisting = true; showDialog = true },
                                             onDelete = { categoryToDelete = child }
                                         )
                                     }
@@ -261,7 +264,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                 .size(58.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Jade)
-                .clickable { editTarget = null; showDialog = true },
+                .clickable { editTarget = null; editingExisting = false; showDialog = true },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -328,7 +331,9 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
         )
     }
 
-    if (showDialog) {
+    // Editing a category that's gone (deleted elsewhere, or not loaded yet after Android closed
+    // the app) shows nothing, rather than a "New Category" form that would add a copy.
+    if (showDialog && (!editingExisting || editTarget != null)) {
         CategoryDialog(
             initial = editTarget,
             onDismiss = { showDialog = false; editTarget = null },
@@ -572,7 +577,7 @@ private fun RenameTagDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    var newName by remember { mutableStateOf(currentName) }
+    var newName by rememberSaveable { mutableStateOf(currentName) }
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -615,10 +620,10 @@ private fun CategoryDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var selectedEmoji by remember { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
-    var selectedColor by remember { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
-    var limitText by remember {
+    var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
+    var selectedEmoji by rememberSaveable { mutableStateOf(initial?.emoji ?: PRESET_EMOJIS.first()) }
+    var selectedColor by rememberSaveable { mutableStateOf(initial?.colorHex ?: PRESET_COLORS.first()) }
+    var limitText by rememberSaveable {
         mutableStateOf(formatLimitInput(initial?.monthlyLimit ?: 0.0))
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }

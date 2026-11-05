@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.ui.util.rememberSaveableItem
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,10 +61,10 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    var showIncomeDialog by remember { mutableStateOf(false) }
-    var showAddGoalDialog by remember { mutableStateOf(false) }
-    var showNotifCenter by remember { mutableStateOf(false) }
-    var goalToUpdate by remember { mutableStateOf<SavingsGoal?>(null) }
+    var showIncomeDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddGoalDialog by rememberSaveable { mutableStateOf(false) }
+    var showNotifCenter by rememberSaveable { mutableStateOf(false) }
+    var goalToUpdate by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
 
@@ -752,8 +754,8 @@ private fun SavingsGoalCard(
 
 @Composable
 private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var target by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var target by rememberSaveable { mutableStateOf("") }
     val targetText = rememberAmountText(target) { AmountCalculator.evaluate(it) }
     
     AppAlertDialog(
@@ -802,7 +804,7 @@ private fun DepositDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
-    var amount by remember { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
     val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
 
     AppAlertDialog(
@@ -1009,7 +1011,7 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
 @Composable
 private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     // Was "%.0f": rounded off the paise and wrote the phone's own digits.
-    var text by remember { mutableStateOf(formatLimitInput(currentIncome)) }
+    var text by rememberSaveable { mutableStateOf(formatLimitInput(currentIncome)) }
     // 0 clears the income. Blank did nothing before, so a cleared field can't wipe it by accident.
     val income = rememberAmountText(text) { parseAmountOrZero(it) }
     AppAlertDialog(

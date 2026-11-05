@@ -31,8 +31,9 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 
-    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
-    suspend fun getRecentByAmountFromDifferentSource(amount: Double, source: String, since: Long): Int
+    /** For the capture dedupe (see CaptureDuplicates): same amount, another source, recent. */
+    @Query("SELECT * FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
+    suspend fun getRecentByAmountFromOtherSource(amount: Double, source: String, since: Long): List<Expense>
 
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND description = :description AND source != :source AND date >= :since")
     suspend fun getRecentByAmountAndDescriptionFromDifferentSource(amount: Double, description: String, source: String, since: Long): Int

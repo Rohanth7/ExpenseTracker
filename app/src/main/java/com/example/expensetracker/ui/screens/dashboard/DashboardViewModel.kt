@@ -27,6 +27,7 @@ import com.example.expensetracker.data.repository.SavingsGoalRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import java.util.Calendar
 
 data class CategorySummary(
@@ -96,11 +97,10 @@ class DashboardViewModel(
     private val prefs: PreferencesManager
 ) : ViewModel() {
 
-    private val _expectedIncome = MutableStateFlow(prefs.monthlyIncome)
     private val _monthOffset = MutableStateFlow(0)
 
     val uiState: StateFlow<DashboardUiState> = combine(
-        combine(categoryRepo.allCategories, expenseRepo.allExpenses, _expectedIncome, _monthOffset) { cats, exps, inc, off ->
+        combine(categoryRepo.allCategories, expenseRepo.allExpenses, prefs.monthlyIncomeFlow(), _monthOffset) { cats, exps, inc, off ->
             Quad(cats, exps, inc, off)
         },
         combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
@@ -209,9 +209,10 @@ class DashboardViewModel(
     // Off the main thread: subscription detection goes through the whole history.
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
 
+    /** The Overview follows it through [PreferencesManager.monthlyIncomeFlow]; the widget needs telling. */
     fun setExpectedIncome(value: Double) {
         prefs.monthlyIncome = value
-        _expectedIncome.value = value
+        viewModelScope.launch { WidgetUpdateHelper.update(context) }
     }
 
     fun goToPreviousMonth() { _monthOffset.value-- }

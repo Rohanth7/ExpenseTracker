@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.expenses
 
+import com.example.expensetracker.ui.util.rememberSaveableItem
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,15 +89,16 @@ fun ExpensesScreen(
     val dateFilter by viewModel.dateFilter.collectAsState()
     val hasAnyExpenses by viewModel.hasAnyExpenses.collectAsState()
     val lastManualCategoryId by viewModel.lastManualCategoryId.collectAsState()
-    var showAddDialog by remember { mutableStateOf(false) }
+    val incomes by viewModel.incomes.collectAsState()
+    var showAddDialog by rememberSaveable { mutableStateOf(false) }
     // Which type the add dialog starts on: the list on show, or Expense for the widget's "+".
-    var addAsIncome by remember { mutableStateOf(false) }
-    var editingExpense by remember { mutableStateOf<Expense?>(null) }
-    var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
-    var editingIncome by remember { mutableStateOf<Income?>(null) }
-    var incomeToDelete by remember { mutableStateOf<Income?>(null) }
-    var showBulkCategorize by remember { mutableStateOf(false) }
-    var showAdvancedFilters by remember { mutableStateOf(false) }
+    var addAsIncome by rememberSaveable { mutableStateOf(false) }
+    var editingExpense by rememberSaveableItem(expenses) { it.id }
+    var expenseToDelete by rememberSaveableItem(expenses) { it.id }
+    var editingIncome by rememberSaveableItem(incomes) { it.id }
+    var incomeToDelete by rememberSaveableItem(incomes) { it.id }
+    var showBulkCategorize by rememberSaveable { mutableStateOf(false) }
+    var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     // The widget's "+": a one-shot request, consumed here so it can't fire twice. It replaces any
     // dialog left open (Edit, Delete, filters) or selection, so two dialogs never stack.
     LaunchedEffect(openAdd) {
@@ -130,7 +133,6 @@ fun ExpensesScreen(
     }
     val grouped = remember(expenses, sortByAmount) { groupByDay(expenses, sortByAmount, { it.date }, { it.amount }) }
     val showIncome by viewModel.showIncome.collectAsState()
-    val incomes by viewModel.incomes.collectAsState()
     val hasAnyIncome by viewModel.hasAnyIncome.collectAsState()
     val incomeGroups = remember(incomes, sortByAmount) { groupByDay(incomes, sortByAmount, { it.date }, { it.amount }) }
     val weekIncome = remember(incomes, weekStartsOnMonday) { incomes.filter { it.date >= weekStart(weekStartsOnMonday) }.sumOf { it.amount } }
@@ -555,8 +557,8 @@ private fun AdvancedFiltersDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double?, Double?, DateFilter?) -> Unit
 ) {
-    var minText by remember { mutableStateOf(formatLimitInput(minAmount ?: 0.0)) }
-    var maxText by remember { mutableStateOf(formatLimitInput(maxAmount ?: 0.0)) }
+    var minText by rememberSaveable { mutableStateOf(formatLimitInput(minAmount ?: 0.0)) }
+    var maxText by rememberSaveable { mutableStateOf(formatLimitInput(maxAmount ?: 0.0)) }
     // Blank or 0 means no bound. Unreadable text used to drop the bound without a word.
     val min = rememberAmountText(minText) { parseLimitInput(it) }
     val max = rememberAmountText(maxText) { parseLimitInput(it) }
@@ -565,8 +567,8 @@ private fun AdvancedFiltersDialog(
     // An inverted range hid every expense without a word.
     val inverted = minValue != null && maxValue != null && minValue > 0 && maxValue > 0 && minValue > maxValue
     // Dates: ALL means no date filter. A preset stays a preset ("This month" moves on with the month).
-    var preset by remember { mutableStateOf(dateFilter?.preset ?: ExportPreset.ALL) }
-    var custom by remember { mutableStateOf(dateFilter?.custom) }
+    var preset by rememberSaveable { mutableStateOf(dateFilter?.preset ?: ExportPreset.ALL) }
+    var custom by rememberSaveable { mutableStateOf(dateFilter?.custom) }
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -663,8 +665,8 @@ private fun BulkCategorizeDialog(
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
     val bulkParents = remember(categories) { categories.filter { it.parentId == null } }
     val bulkChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
@@ -953,16 +955,16 @@ private fun AddExpenseDialog(
     onConfirm: (Double, String, Long, Long, String, String) -> Unit,
     onConfirmIncome: (amount: Double, description: String, date: Long, tags: String) -> Unit
 ) {
-    var isIncome by remember { mutableStateOf(startAsIncome) }
+    var isIncome by rememberSaveable { mutableStateOf(startAsIncome) }
     val amount = rememberAmountInputState()
-    var description by remember { mutableStateOf("") }
-    var tags by remember { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var tags by rememberSaveable { mutableStateOf("") }
     // null until the user picks one, so the last-used default can appear once categories load.
-    var userCategoryChoice by remember { mutableStateOf<Long?>(null) }
+    var userCategoryChoice by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedCategoryId = startingCategoryId(userCategoryChoice, categories, lastUsedCategoryId)
-    var expanded by remember { mutableStateOf(false) }
-    var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
-    var selectedPaymentMethod by remember { mutableStateOf("UPI") }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
+    var selectedPaymentMethod by rememberSaveable { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AppAlertDialog(
@@ -1069,16 +1071,16 @@ private fun EditExpenseDialog(
 ) {
     // Locale-free: "%.2f" gave "180,00" on comma-decimal phones.
     val amount = rememberAmountInputState(AmountCalculator.forEditing(expense.amount))
-    var description by remember { mutableStateOf(expense.description) }
-    var tags by remember { mutableStateOf(expense.tags) }
-    var selectedCategoryId by remember { mutableStateOf(expense.categoryId) }
-    var expanded by remember { mutableStateOf(false) }
-    var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(expense.date)) }
+    var description by rememberSaveable { mutableStateOf(expense.description) }
+    var tags by rememberSaveable { mutableStateOf(expense.tags) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(expense.categoryId) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(expense.date)) }
     // Same day: keep the exact original time (buildTimestamp drops milliseconds, which made an
     // untouched SMS expense look edited). Another day: that day at the original time of day.
     val formDate = if (selectedDateUtcMidnight == toUtcMidnight(expense.date)) expense.date
         else buildTimestamp(selectedDateUtcMidnight, expense.date)
-    var selectedPaymentMethod by remember { mutableStateOf(expense.paymentMethod) }
+    var selectedPaymentMethod by rememberSaveable { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AppAlertDialog(
@@ -1180,9 +1182,9 @@ private fun EditIncomeDialog(
     onDuplicate: (amount: Double, description: String, date: Long, tags: String, alsoSaved: Boolean) -> Unit
 ) {
     val amount = rememberAmountInputState(AmountCalculator.forEditing(income.amount))
-    var description by remember { mutableStateOf(income.description) }
-    var tags by remember { mutableStateOf(income.tags) }
-    var selectedDateUtcMidnight by remember { mutableStateOf(toUtcMidnight(income.date)) }
+    var description by rememberSaveable { mutableStateOf(income.description) }
+    var tags by rememberSaveable { mutableStateOf(income.tags) }
+    var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(income.date)) }
     // Same day keeps the exact time, as in EditExpenseDialog.
     val formDate = if (selectedDateUtcMidnight == toUtcMidnight(income.date)) income.date
         else buildTimestamp(selectedDateUtcMidnight, income.date)
@@ -1360,7 +1362,7 @@ private const val CHOOSE_LATER = "Choose later (pending)"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) -> Unit) {
-    var showPicker by remember { mutableStateOf(false) }
+    var showPicker by rememberSaveable { mutableStateOf(false) }
     val displayText = remember(selectedUtcMidnight) {
         SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
             .apply { timeZone = TimeZone.getTimeZone("UTC") }

@@ -53,7 +53,7 @@ class SmsReceiver : BroadcastReceiver() {
                 transactions.forEach { (transaction, body, _) ->
                     val isCc = SmsParser.isCreditCardSms(body)
                     val source = if (isCc) "CC-SMS" else "SMS"
-                    if (isDuplicate(db, transaction.amount, transaction.description, body, source)) return@forEach
+                    if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, source, transaction.description, body, System.currentTimeMillis())) return@forEach
 
                     // Smart auto-categorization with fuzzy matching
                     val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)
@@ -80,15 +80,5 @@ class SmsReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
-    }
-
-    private suspend fun isDuplicate(db: AppDatabase, amount: Double, description: String, body: String, source: String): Boolean {
-        val now = System.currentTimeMillis()
-        // Cross-source: UPI notification + bank SMS arrive within seconds for the same transaction.
-        // Use the actual source so CC-SMS is excluded, not "SMS".
-        if (db.expenseDao().getRecentByAmountFromDifferentSource(amount, source, now - 3 * 60 * 1000L) > 0) return true
-        // Same-source: SMS broadcast fired twice or identical message received (30-sec window).
-        if (db.expenseDao().getRecentByAmountAndContentFromSameSource(amount, source, body, now - 30 * 1000L) > 0) return true
-        return false
     }
 }

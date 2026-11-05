@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.ui.util.rememberSaveableItem
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -68,14 +69,8 @@ import com.example.expensetracker.ui.util.parseAmountOrZero
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.LocalAppLocked
 
-private sealed class SettingsPage {
-    object Bills : SettingsPage()
-    object Loans : SettingsPage()
-    object CategoryBudgets : SettingsPage()
-    object Cloud : SettingsPage()
-    object Preferences : SettingsPage()
-    object Data : SettingsPage()
-}
+// An enum so the open page survives rotation and Android closing the app (rememberSaveable).
+private enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
 
 private fun fmtINR(amount: Double): String =
     NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
@@ -101,7 +96,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     val pendingRestore = viewModel.pendingRestore
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var currentPage by remember { mutableStateOf<SettingsPage?>(null) }
+    var currentPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
 
     val context = LocalContext.current
     val activity = context as? Activity
@@ -443,7 +438,7 @@ private fun CategoryBudgetsSubPage(
     modifier: Modifier = Modifier,
     onBack: () -> Unit
 ) {
-    var categoryToEdit by remember { mutableStateOf<Category?>(null) }
+    var categoryToEdit by rememberSaveableItem(categories) { it.id }
     val parentCategories = categories.filter { it.parentId == null }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
@@ -530,7 +525,7 @@ private fun CategoryLimitDialog(
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
-    var limitText by remember {
+    var limitText by rememberSaveable {
         mutableStateOf(formatLimitInput(category.monthlyLimit))
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }
@@ -575,13 +570,13 @@ private fun CategoryLimitDialog(
 
 @Composable
 private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewModel: SettingsViewModel, modifier: Modifier = Modifier, onBack: () -> Unit) {
-    var showAddBill by remember { mutableStateOf(false) }
-    var billToDelete by remember { mutableStateOf<Bill?>(null) }
-    var billToEdit by remember { mutableStateOf<Bill?>(null) }
+    var showAddBill by rememberSaveable { mutableStateOf(false) }
+    var billToDelete by rememberSaveableItem(bills) { it.id }
+    var billToEdit by rememberSaveableItem(bills) { it.id }
     val recurringIncomes by viewModel.recurringIncomes.collectAsState()
-    var showAddIncome by remember { mutableStateOf(false) }
-    var incomeToEdit by remember { mutableStateOf<RecurringIncome?>(null) }
-    var incomeToDelete by remember { mutableStateOf<RecurringIncome?>(null) }
+    var showAddIncome by rememberSaveable { mutableStateOf(false) }
+    var incomeToEdit by rememberSaveableItem(recurringIncomes) { it.id }
+    var incomeToDelete by rememberSaveableItem(recurringIncomes) { it.id }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Bills & Reminders", onBack) ; Spacer(Modifier.height(8.dp)) }
@@ -663,9 +658,9 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
 
 @Composable
 private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifier: Modifier = Modifier, onBack: () -> Unit) {
-    var showAddLoan by remember { mutableStateOf(false) }
-    var loanToDelete by remember { mutableStateOf<Loan?>(null) }
-    var loanToEdit by remember { mutableStateOf<Loan?>(null) }
+    var showAddLoan by rememberSaveable { mutableStateOf(false) }
+    var loanToDelete by rememberSaveableItem(loans) { it.id }
+    var loanToEdit by rememberSaveableItem(loans) { it.id }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Loans & EMIs", onBack) ; Spacer(Modifier.height(8.dp)) }
@@ -822,7 +817,7 @@ private fun PreferencesSubPage(
         item {
             SectionLabel("DISPLAY")
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                var showWeekStartInfo by remember { mutableStateOf(false) }
+                var showWeekStartInfo by rememberSaveable { mutableStateOf(false) }
                 Row(modifier = Modifier.fillMaxWidth().clickable { onSetWeekStart(!weekStartsOnMonday) }.padding(vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -839,7 +834,7 @@ private fun PreferencesSubPage(
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
                 }
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                var showMonthStart by remember { mutableStateOf(false) }
+                var showMonthStart by rememberSaveable { mutableStateOf(false) }
                 Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
@@ -875,9 +870,9 @@ private fun DataSubPage(
     onExport: () -> Unit, onImport: () -> Unit, onExportCsv: (ExportPreset, Pair<Long, Long>?, Int) -> Unit,
     showMockData: Boolean, onMockData: () -> Unit, onReset: () -> Unit
 ) {
-    var showMockDataDialog by remember { mutableStateOf(false) }
-    var showCsvDialog by remember { mutableStateOf(false) }
-    var showResetDialog by remember { mutableStateOf(false) }
+    var showMockDataDialog by rememberSaveable { mutableStateOf(false) }
+    var showCsvDialog by rememberSaveable { mutableStateOf(false) }
+    var showResetDialog by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Data & Backup", onBack) ; Spacer(Modifier.height(8.dp)) }
@@ -1028,10 +1023,10 @@ private fun RecurringIncomeRow(r: RecurringIncome, onToggle: () -> Unit, onDelet
 /** Add ([existing] null) or edit a recurring income: name, amount, day of the month, on/off. Mirrors the bill dialogs. */
 @Composable
 private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> Unit, onConfirm: (RecurringIncome) -> Unit) {
-    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
     val amount = rememberAmountInputState(existing?.let { AmountCalculator.forEditing(it.amount) } ?: "")
-    var day by remember { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
-    var enabled by remember { mutableStateOf(existing?.isEnabled ?: true) }
+    var day by rememberSaveable { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
+    var enabled by rememberSaveable { mutableStateOf(existing?.isEnabled ?: true) }
     val dayValue = day.toIntOrNull()?.takeIf { it in 1..31 }
     val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
 
@@ -1098,15 +1093,15 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var amount by rememberSaveable { mutableStateOf("") }
     // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
     val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
-    var dueDay by remember { mutableStateOf("") }
-    var reminderDays by remember { mutableStateOf("3") }
-    var selectedCategoryId by remember { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
-    var expanded by remember { mutableStateOf(false) }
-    var autoLog by remember { mutableStateOf(false) }
+    var dueDay by rememberSaveable { mutableStateOf("") }
+    var reminderDays by rememberSaveable { mutableStateOf("3") }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var autoLog by rememberSaveable { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
@@ -1207,15 +1202,15 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
-    var name by remember { mutableStateOf(bill.name) }
-    var amount by remember { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
+    var name by rememberSaveable { mutableStateOf(bill.name) }
+    var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
     // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
     val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
-    var dueDay by remember { mutableStateOf(bill.dueDayOfMonth.toString()) }
-    var reminderDays by remember { mutableStateOf(bill.reminderDays.toString()) }
-    var selectedCategoryId by remember { mutableStateOf(bill.categoryId) }
-    var expanded by remember { mutableStateOf(false) }
-    var autoLog by remember { mutableStateOf(bill.autoLog) }
+    var dueDay by rememberSaveable { mutableStateOf(bill.dueDayOfMonth.toString()) }
+    var reminderDays by rememberSaveable { mutableStateOf(bill.reminderDays.toString()) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(bill.categoryId) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
@@ -1302,18 +1297,18 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
             (now.get(java.util.Calendar.MONTH) - start.get(java.util.Calendar.MONTH))).coerceAtLeast(0)
     }
 
-    var name by remember { mutableStateOf(loan.name) }
-    var emoji by remember { mutableStateOf(loan.emoji) }
+    var name by rememberSaveable { mutableStateOf(loan.name) }
+    var emoji by rememberSaveable { mutableStateOf(loan.emoji) }
     // To the paisa: toLong() here cut the paise off an untouched loan when it was saved.
-    var totalAmount by remember { mutableStateOf(AmountCalculator.forEditing(loan.totalAmount)) }
-    var monthlyEmi by remember { mutableStateOf(AmountCalculator.forEditing(loan.monthlyEmi)) }
+    var totalAmount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(loan.totalAmount)) }
+    var monthlyEmi by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(loan.monthlyEmi)) }
     // The total may be 0 (only the EMI known), as before; the EMI may not.
     val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
     val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
     val amountsValid = totalText.value != null && emiText.value != null
-    var tenureMonths by remember { mutableStateOf(loan.tenureMonths.toString()) }
-    var monthsAgo by remember { mutableStateOf(initialMonthsAgo.toString()) }
-    var dueDay by remember { mutableStateOf(loan.dueDayOfMonth.toString()) }
+    var tenureMonths by rememberSaveable { mutableStateOf(loan.tenureMonths.toString()) }
+    var monthsAgo by rememberSaveable { mutableStateOf(initialMonthsAgo.toString()) }
+    var dueDay by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Loan") },
@@ -1376,17 +1371,17 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, Double, Int, Long, Int) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var emoji by remember { mutableStateOf("🏦") }
-    var totalAmount by remember { mutableStateOf("") }
-    var monthlyEmi by remember { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var emoji by rememberSaveable { mutableStateOf("🏦") }
+    var totalAmount by rememberSaveable { mutableStateOf("") }
+    var monthlyEmi by rememberSaveable { mutableStateOf("") }
     // The total may be 0 (only the EMI known), as before; the EMI may not.
     val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
     val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
     val amountsValid = totalText.value != null && emiText.value != null
-    var tenureMonths by remember { mutableStateOf("") }
-    var monthsAgo by remember { mutableStateOf("0") }
-    var dueDay by remember { mutableStateOf("5") }
+    var tenureMonths by rememberSaveable { mutableStateOf("") }
+    var monthsAgo by rememberSaveable { mutableStateOf("0") }
+    var dueDay by rememberSaveable { mutableStateOf("5") }
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Loan / EMI") },
@@ -1448,8 +1443,8 @@ private fun DetailRow(label: String, value: String) {
 /** Pick what to export: a preset range, or any dates with the date-range picker. */
 @Composable
 private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair<Long, Long>?, monthStartDay: Int) -> Unit) {
-    var preset by remember { mutableStateOf(ExportPreset.THIS_MONTH) }
-    var custom by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var preset by rememberSaveable { mutableStateOf(ExportPreset.THIS_MONTH) }
+    var custom by rememberSaveable { mutableStateOf<Pair<Long, Long>?>(null) }
     val context = LocalContext.current
 
     AppAlertDialog(

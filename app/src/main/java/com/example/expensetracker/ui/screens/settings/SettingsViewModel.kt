@@ -140,7 +140,7 @@ class SettingsViewModel(
     val monthStartDay: StateFlow<Int> = MonthStartDay.flow(appContext)
     fun setMonthStartDay(day: Int) {
         MonthStartDay.set(appContext, day)
-        com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
+        refreshWidget()
     }
 
     private val _biometricLockEnabled = MutableStateFlow(prefs.biometricLockEnabled)
@@ -152,7 +152,7 @@ class SettingsViewModel(
     fun setWidgetEnabled(enabled: Boolean) {
         prefs.widgetEnabled = enabled
         _widgetEnabled.value = enabled
-        com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
+        refreshWidget()
     }
 
     private val _autoBackupEnabled = MutableStateFlow(prefs.autoBackupEnabled)
@@ -185,9 +185,12 @@ class SettingsViewModel(
         snackbarMessage = "Google Drive disconnected"
     }
 
-    private val _monthlyIncome = MutableStateFlow(prefs.monthlyIncome)
-    val monthlyIncome: StateFlow<Double> = _monthlyIncome.asStateFlow()
-    fun setMonthlyIncome(value: Double) { prefs.monthlyIncome = value; _monthlyIncome.value = value }
+    // Live, so a change made on the Overview, by a restore or by a reset shows here too.
+    val monthlyIncome: StateFlow<Double> = prefs.monthlyIncomeFlow().stateIn(viewModelScope, SharingStarted.Eagerly, prefs.monthlyIncome)
+    // The widget falls back to it too, so it's refreshed like the screens are.
+    fun setMonthlyIncome(value: Double) { prefs.monthlyIncome = value; refreshWidget() }
+
+    private fun refreshWidget() = viewModelScope.launch { com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext) }
 
     // ── Backup / restore ────────────────────────────────────────
 
@@ -262,7 +265,6 @@ class SettingsViewModel(
         val data = pending.data
         runCatching { backupManager.restore(data) }
             .onSuccess {
-                data.settings?.monthlyIncome?.let { _monthlyIncome.value = it }
                 data.settings?.budgetAlertsEnabled?.let { _budgetAlertsEnabled.value = it }
                 data.settings?.priceAlertsEnabled?.let { _priceAlertsEnabled.value = it }
                 data.settings?.budgetAlertThreshold?.let { _budgetAlertThreshold.value = it }
@@ -438,7 +440,7 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         incomeRepo.deleteAll()
         prefs.monthlyIncome = 0.0
-        _monthlyIncome.value = 0.0
+        com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
         setMonthStartDay(1)
         // Show first-run setup again on next launch, which recreates the starter categories.
         prefs.onboardingCompleted = false
