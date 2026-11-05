@@ -14,6 +14,8 @@ import java.util.Calendar
 object BudgetAlertHelper {
     const val CHANNEL_ID = "budget_alerts"
     private const val PREFS = "budget_alert_prefs"
+    /** Own tag, like the other features' notifications; the ids below only need to differ within it. */
+    const val TAG = "budget_alert"
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -103,6 +105,6 @@ object BudgetAlertHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        context.getSystemService(NotificationManager::class.java).notify(id, notification)
+        context.getSystemService(NotificationManager::class.java).notify(TAG, id, notification)
     }
 }

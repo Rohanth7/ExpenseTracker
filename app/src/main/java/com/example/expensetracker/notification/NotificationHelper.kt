@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.expensetracker.MainActivity
@@ -12,6 +13,8 @@ import com.example.expensetracker.MainActivity
 object NotificationHelper {
     const val CHANNEL_ID = "expense_categorization"
     const val EXTRA_EXPENSE_ID = "expense_id"
+    /** Each feature posts with its own tag, so ids from different features can't replace each other (as in PriceChangeAlerts). */
+    const val TAG = "capture"
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -59,19 +62,26 @@ object NotificationHelper {
         // button used to take one slot and hide the third category). Tapping the notification
         // opens the full category picker.
         categories.take(QuickCategories.MAX_BUTTONS).forEach { category ->
-            val actionIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-                action = NotificationActionReceiver.ACTION_CATEGORIZE
-                putExtra(NotificationActionReceiver.EXTRA_EXPENSE_ID, expenseId)
-                putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, category.id)
-            }
-            val actionPendingIntent = PendingIntent.getBroadcast(
-                context, ((expenseId * 100 + category.id) and 0x7FFFFFFF).toInt(), actionIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            builder.addAction(0, category.name, actionPendingIntent)
+            builder.addAction(0, category.name, categoryActionIntent(context, expenseId, category.id))
         }
 
         context.getSystemService(NotificationManager::class.java)
-            .notify((expenseId and 0x7FFFFFFF).toInt(), builder.build())
+            .notify(TAG, (expenseId and 0x7FFFFFFF).toInt(), builder.build())
     }
+
+    /**
+     * A category button. The data Uri names the expense and the category, so no two buttons are
+     * the same PendingIntent. A request code built from both (expense × 100 + category) collided:
+     * expense 1 + category 101 = expense 2 + category 1, and the newer button replaced the older.
+     */
+    internal fun categoryActionIntent(context: Context, expenseId: Long, categoryId: Long): PendingIntent = PendingIntent.getBroadcast(
+        context, 0,
+        Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_CATEGORIZE
+            data = Uri.parse("mymoney://categorize/$expenseId/$categoryId")
+            putExtra(NotificationActionReceiver.EXTRA_EXPENSE_ID, expenseId)
+            putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, categoryId)
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 }
