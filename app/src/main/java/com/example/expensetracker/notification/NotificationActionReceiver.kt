@@ -56,7 +56,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 
                 // Cancel the notification
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                notificationManager.cancel((expenseId and 0x7FFFFFFF).toInt())
+                notificationManager.cancel(NotificationHelper.TAG, (expenseId and 0x7FFFFFFF).toInt())
                 
             } finally {
                 pendingResult.finish()

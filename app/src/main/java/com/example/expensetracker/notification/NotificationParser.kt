@@ -32,23 +32,39 @@ object NotificationParser {
         "payment successful", "payment done", "payment complete", "successfully paid"
     )
 
+    // "Received" alone isn't a credit: "Ramesh received your money" is a payment. These say the
+    // money came to the user.
     private val CREDIT_KEYWORDS = listOf(
-        "received", "credited", "added", "refund", "cashback",
-        "you received", "sent you", "paid you", "paid to you",
+        "credited", "added", "refund", "cashback",
+        "you received", "you've received", "you have received", "sent you", "paid you", "paid to you",
         "to your account", "to your wallet", "money received", "amount received",
         "transfer received", "credit received"
     )
+    private val RECEIVED_FROM = Regex("""\breceived\s+(?:(?:Rs\.?|INR|₹)\s*[\d,]+(?:\.\d{1,2})?\s+)?from\b""", RegexOption.IGNORE_CASE)
 
-    // Notifications with any of these are reminders/offers, not completed transactions
+    // A payment that went through: "Paid ₹250 to Swiggy", "₹500 paid to Ramesh", "Sent ₹99 to X".
+    // Checked first, so a reward line ("You won a scratch card!") or an app tip ("Pay bills before
+    // the due date") under it doesn't drop it. Never "… to you".
+    private val PAID_TO = Regex(
+        """(?:\b(?:paid|sent)\s+(?:Rs\.?|INR|₹)\s*[\d,]+(?:\.\d{1,2})?|(?:Rs\.?|INR|₹)\s*[\d,]+(?:\.\d{1,2})?\s+(?:paid|sent))\s+to\s+(?!you\b|your\b)""",
+        RegexOption.IGNORE_CASE
+    )
+    private val COMPLETED_KEYWORDS = listOf("payment successful", "payment done", "payment complete", "successfully paid", "paid successfully")
+
+    // Never a completed payment, whatever else the notification says.
+    private val NOT_COMPLETED = listOf(
+        "will be debited", "will be deducted", "scheduled", "failed", "declined", "unsuccessful",
+        "pending", "processing"
+    )
+
+    // Reminders, offers and requests; ignored only when the notification isn't a completed payment.
     private val EXCLUDE_KEYWORDS = listOf(
         "is due", "due date", "due on", "due by", "bill due", "overdue",
         "payment due", "payment reminder", "upcoming payment", "upcoming bill",
         "reminder", "pay now", "pay before", "last date", "due amount",
         "promo", "discount", "win", "won",
         "expiring", "expires soon",
-        // Not a completed payment
-        "will be debited", "will be deducted", "scheduled", "failed", "declined", "unsuccessful",
-        "pending", "processing", "requested", "request", "collect request", "approve",
+        "requested", "request", "collect request", "approve",
         "otp", "verification code", "mandate", "autopay set up", "autopay setup"
     )
 
@@ -58,24 +74,38 @@ object NotificationParser {
 
     fun parse(title: String, body: String, packageName: String): ParsedTransaction? {
         val fullText = "$title $body"
+        if (TextRules.containsAnyWord(fullText, NOT_COMPLETED)) return null
 
+        val paidTo = PAID_TO.containsMatchIn(fullText)
+        val completed = paidTo || TextRules.containsAnyWord(fullText, COMPLETED_KEYWORDS)
         // Reject bill reminders, offers, and promotions
-        if (TextRules.containsAnyWord(fullText, EXCLUDE_KEYWORDS)) return null
+        if (!completed && TextRules.containsAnyWord(fullText, EXCLUDE_KEYWORDS)) return null
 
         // Must have a confirmed debit keyword — amount alone is not enough
         val isDebit = TextRules.containsAnyWord(fullText, DEBIT_KEYWORDS)
         if (!isDebit) return null
 
-        // Skip credits
-        val isCredit = TextRules.containsAnyWord(fullText, CREDIT_KEYWORDS)
-        if (isCredit) return null
+        // Skip credits. "Paid ₹250 to Swiggy … ₹10 cashback" is still the ₹250 payment.
+        val isCredit = TextRules.containsAnyWord(fullText, CREDIT_KEYWORDS) || RECEIVED_FROM.containsMatchIn(fullText)
+        if (isCredit && !paidTo) return null
 
         val amount = TextRules.extractAmount(fullText, TextRules.AMOUNT_PATTERNS) ?: return null
-        val description = extractDescription(title, body, packageName)
+        val description = describe(packageName, title, merchant(title, body), body)
         return ParsedTransaction(amount, description)
     }
 
-    private fun extractDescription(title: String, body: String, packageName: String): String {
+    /**
+     * The payee, from a line that says who was paid first ("₹500 paid to Ramesh" over "Ramesh
+     * received your money", "Paid ₹430 to Dominos" over "Tap to view details"), then the text
+     * before the title as before.
+     */
+    private fun merchant(title: String, body: String): String? {
+        val lines = (body.lines() + title).filter { it.isNotBlank() }.sortedByDescending { PAID_TO.containsMatchIn(it) }
+        return lines.firstNotNullOfOrNull { MerchantExtractor.extract(it) }
+    }
+
+    /** "GPay → Swiggy": the app's name, then [payee] if known (also for a message rule's payee). */
+    fun describe(packageName: String, title: String, payee: String?, body: String = ""): String {
         val appName = when (packageName) {
             "com.google.android.apps.nbu.paisa.user" -> "GPay"
             "com.phonepe.app" -> "PhonePe"
@@ -86,8 +116,7 @@ object NotificationParser {
             else -> title.ifBlank { "UPI" }
         }
 
-        val merchant = MerchantExtractor.extract(body) ?: MerchantExtractor.extract(title)
-        if (merchant != null) return "$appName → $merchant"
+        if (payee != null) return "$appName → $payee"
 
         return if (body.isNotBlank()) "$appName: ${body.take(50)}" else appName
     }
