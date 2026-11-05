@@ -25,12 +25,12 @@ class CaptureDuplicatesTest {
     @Before fun setUp() { db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build() }
     @After fun tearDown() { db.close() }
 
-    private fun saved(source: String, secondsAgo: Long, amount: Double = 149.0, raw: String? = null) = runBlocking {
-        db.expenseDao().insert(Expense(amount = amount, description = "x", categoryId = -1, date = now - secondsAgo * 1000, source = source, rawSms = raw))
+    private fun saved(source: String, secondsAgo: Long, amount: Double = 149.0, raw: String? = null, description: String = "x") = runBlocking {
+        db.expenseDao().insert(Expense(amount = amount, description = description, categoryId = -1, date = now - secondsAgo * 1000, source = source, rawSms = raw))
     }
 
-    private fun duplicate(source: String, content: String = sms) =
-        runBlocking { CaptureDuplicates.isDuplicate(db.expenseDao(), 149.0, source, content, now) }
+    private fun duplicate(source: String, content: String = sms, payee: String = "CRUNCHYROLL") =
+        runBlocking { CaptureDuplicates.isDuplicate(db.expenseDao(), 149.0, source, payee, content, now) }
 
     @Test fun theSamePaymentSeenByTheUpiAppIsADuplicate() {
         saved("UPI", secondsAgo = 20)
@@ -42,15 +42,32 @@ class CaptureDuplicatesTest {
         assertTrue(duplicate("UPI", content = "Paid ₹149 to Crunchyroll"))
     }
 
-    @Test fun anExpenseAddedByHandDoesNotSwallowAnSms() {
-        saved("Manual", secondsAgo = 20)
+    @Test fun anExpenseAddedByHandDoesNotSwallowAnSmsFromAnotherPayee() {
+        saved("Manual", secondsAgo = 20, description = "YouTube Premium")
         assertFalse(duplicate("SMS"))
         assertFalse(duplicate("UPI", content = "Paid ₹149 to Crunchyroll"))
     }
 
-    @Test fun anAutoLoggedBillDoesNotSwallowAnSms() {
-        saved("Recurring", secondsAgo = 20)
+    @Test fun anAutoLoggedBillDoesNotSwallowAnSmsFromAnotherPayee() {
+        saved("Recurring", secondsAgo = 20, description = "Netflix")
         assertFalse(duplicate("SMS"))
+    }
+
+    /** Paid, added it by hand straight away, then the bank's SMS came: one payment, not two. */
+    @Test fun theSamePaymentAddedByHandFirstIsADuplicate() {
+        saved("Manual", secondsAgo = 40, description = "Crunchyroll")
+        assertTrue(duplicate("SMS"))
+        assertTrue(duplicate("UPI", content = "Paid ₹149 to Crunchyroll", payee = "GPay → Crunchyroll"))
+    }
+
+    @Test fun anAutoLoggedBillForTheSamePayeeIsADuplicate() {
+        saved("Recurring", secondsAgo = 60, description = "Netflix")
+        assertTrue(duplicate("SMS", payee = "NETFLIX ENTERTAINMENT"))
+    }
+
+    @Test fun aNoteAddedByHandIsNotThePayee() {
+        saved("Manual", secondsAgo = 20, description = "Lunch")
+        assertFalse(duplicate("SMS", payee = "SWIGGY"))
     }
 
     @Test fun anOtherSourceCaptureOlderThan3MinutesIsNotADuplicate() {

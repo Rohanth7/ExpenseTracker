@@ -40,7 +40,7 @@ class TransactionNotificationListener : NotificationListenerService() {
         serviceScope.launch {
             val db = AppDatabase.getInstance(applicationContext)
             // With no categories yet the expense is still saved, as pending (categoryId -1).
-            if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, "UPI", body, System.currentTimeMillis())) return@launch
+            if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, "UPI", transaction.description, body, System.currentTimeMillis())) return@launch
 
             // Smart auto-categorization with fuzzy matching
             val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)

@@ -53,7 +53,7 @@ class SmsReceiver : BroadcastReceiver() {
                 transactions.forEach { (transaction, body, _) ->
                     val isCc = SmsParser.isCreditCardSms(body)
                     val source = if (isCc) "CC-SMS" else "SMS"
-                    if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, source, body, System.currentTimeMillis())) return@forEach
+                    if (CaptureDuplicates.isDuplicate(db.expenseDao(), transaction.amount, source, transaction.description, body, System.currentTimeMillis())) return@forEach
 
                     // Smart auto-categorization with fuzzy matching
                     val mappedCategoryId = MappingHelper.getCategoryId(db, transaction.description)
