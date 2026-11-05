@@ -87,7 +87,7 @@ class MainActivity : FragmentActivity() {
         }
 
         // Off the main thread inside (it asks the system for the widget ids).
-        WidgetUpdateHelper.update(applicationContext)
+        lifecycleScope.launch { WidgetUpdateHelper.update(applicationContext) }
 
         pendingAction = LaunchAction.onCreate(
             recreated = savedInstanceState != null,

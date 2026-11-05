@@ -3,23 +3,29 @@ package com.example.expensetracker.ui.widgets
 import android.content.Context
 import androidx.annotation.VisibleForTesting
 import com.example.expensetracker.widget.BudgetPulseWidgetReceiver
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object WidgetUpdateHelper {
     @VisibleForTesting
     internal var request: (Context) -> Unit = BudgetPulseWidgetReceiver::requestUpdate
 
-    // One background thread, so updates keep their order. Asking Android for the widget ids is a
-    // call into the system that can stall when it's busy; on the main thread (at startup, after
-    // every save) it froze the app ("Input dispatching timed out").
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
-
-    /** Returns at once. A widget that can't refresh mustn't fail what asked for it. */
-    fun update(context: Context) {
+    /**
+     * Asks the widget to refresh, off the main thread: asking Android for the widget ids is a call
+     * into the system that can stall when it's busy, and on the main thread (at startup, after
+     * every save) it froze the app ("Input dispatching timed out"). Suspends until it's done, so
+     * an SMS receiver's refresh finishes before the receiver says it's finished. A widget that
+     * can't refresh mustn't fail what asked for it.
+     */
+    suspend fun update(context: Context) {
         val appContext = context.applicationContext ?: context
-        scope.launch { runCatching { request(appContext) } }
+        withContext(Dispatchers.IO) {
+            try {
+                request(appContext)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
+        }
     }
 }

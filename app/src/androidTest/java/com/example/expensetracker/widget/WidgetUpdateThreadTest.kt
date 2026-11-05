@@ -1,13 +1,16 @@
 package com.example.expensetracker.widget
 
 import android.content.Context
+import android.os.Handler
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,7 +20,9 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Asking Android for the widget ids is a call into the system that can stall when it's busy;
- * made on the main thread at startup it froze the app ("Input dispatching timed out").
+ * made on the main thread at startup it froze the app ("Input dispatching timed out"). The caller
+ * still waits for it (off the main thread), so an SMS receiver's refresh finishes before the
+ * receiver tells Android it's done.
  */
 @RunWith(AndroidJUnit4::class)
 class WidgetUpdateThreadTest {
@@ -27,34 +32,33 @@ class WidgetUpdateThreadTest {
     @After fun tearDown() { WidgetUpdateHelper.request = original }
 
     @Test fun anUpdateAskedForOnTheMainThreadRunsOffIt() {
-        val done = CountDownLatch(1)
         var onMain = true
-        WidgetUpdateHelper.request = { onMain = Looper.myLooper() == Looper.getMainLooper(); done.countDown() }
-        InstrumentationRegistry.getInstrumentation().runOnMainSync { WidgetUpdateHelper.update(context) }
-        assertTrue("update never ran", done.await(5, TimeUnit.SECONDS))
+        WidgetUpdateHelper.request = { onMain = Looper.myLooper() == Looper.getMainLooper() }
+        runBlocking(Dispatchers.Main) { WidgetUpdateHelper.update(context) }
         assertFalse("ran on the main thread", onMain)
     }
 
-    @Test fun aSlowSystemDoesNotHoldUpTheCaller() {
+    @Test fun theMainThreadStaysFreeWhileTheSystemIsSlow() {
         val release = CountDownLatch(1)
-        WidgetUpdateHelper.request = { release.await(5, TimeUnit.SECONDS) }
-        val started = System.nanoTime()
-        InstrumentationRegistry.getInstrumentation().runOnMainSync { WidgetUpdateHelper.update(context) }
-        val tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+        WidgetUpdateHelper.request = { release.await(10, TimeUnit.SECONDS) }
+        CoroutineScope(Dispatchers.Main).launch { WidgetUpdateHelper.update(context) }
+        // Something else the main thread has to do (a tap, a frame) runs while the refresh waits.
+        val mainRan = CountDownLatch(1)
+        Handler(Looper.getMainLooper()).post { mainRan.countDown() }
+        val free = mainRan.await(1, TimeUnit.SECONDS)
         release.countDown()
-        assertTrue("the caller waited ${tookMs}ms", tookMs < 1000)
+        assertTrue("the main thread was blocked", free)
     }
 
-    @Test fun aFailingUpdateDoesNotCrashTheApp() {
-        val done = CountDownLatch(2)
-        WidgetUpdateHelper.request = { done.countDown(); error("system busy") }
-        WidgetUpdateHelper.update(context)
-        WidgetUpdateHelper.update(context)
-        assertTrue(done.await(5, TimeUnit.SECONDS))
-        // The process is still here to run the next one.
-        val next = CountDownLatch(1)
-        WidgetUpdateHelper.request = { next.countDown() }
-        WidgetUpdateHelper.update(context)
-        assertEquals(true, next.await(5, TimeUnit.SECONDS))
+    @Test fun theCallerWaitsUntilTheRefreshIsDone() {
+        var done = false
+        WidgetUpdateHelper.request = { Thread.sleep(200); done = true }
+        runBlocking { WidgetUpdateHelper.update(context) }
+        assertTrue("returned before the refresh finished", done)
+    }
+
+    @Test fun aFailingUpdateDoesNotReachTheCaller() {
+        WidgetUpdateHelper.request = { error("system busy") }
+        runBlocking { WidgetUpdateHelper.update(context) }
     }
 }
