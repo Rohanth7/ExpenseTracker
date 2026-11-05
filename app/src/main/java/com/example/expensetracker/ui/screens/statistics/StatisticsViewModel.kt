@@ -35,9 +35,10 @@ data class SubcategoryBreakdown(val category: Category, val amount: Double, val 
 data class PaymentSplit(
     val upiAmount: Double = 0.0,
     val creditCardAmount: Double = 0.0,
-    val cashAmount: Double = 0.0
+    val cashAmount: Double = 0.0,
+    val debitCardAmount: Double = 0.0
 ) {
-    val total get() = upiAmount + creditCardAmount + cashAmount
+    val total get() = upiAmount + creditCardAmount + cashAmount + debitCardAmount
     fun fraction(amount: Double) = if (total > 0) (amount / total).toFloat().coerceIn(0f, 1f) else 0f
 }
 
@@ -338,7 +339,8 @@ class StatisticsViewModel(
             payment = PaymentSplit(
                 upiAmount = exps.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
                 creditCardAmount = exps.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
-                cashAmount = exps.filter { it.paymentMethod == "Cash" }.sumOf { it.amount }
+                cashAmount = exps.filter { it.paymentMethod == "Cash" }.sumOf { it.amount },
+                debitCardAmount = exps.filter { it.paymentMethod == "Debit Card" }.sumOf { it.amount }
             ),
             detection = DetectionSplit(
                 autoAmount = exps.filter { isAutoSource(it.source) }.sumOf { it.amount },

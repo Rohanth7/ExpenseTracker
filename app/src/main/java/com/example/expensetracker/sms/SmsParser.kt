@@ -21,9 +21,16 @@ object SmsParser {
 
     private val KNOWN_SENDERS = listOf(
         "hdfcbk", "sbiinb", "sbiupi", "sbipsg", "sbicrd", "icicib", "icicit", "axisbk", "kotakb", "yesbnk",
-        "pnbsms", "bobsms", "bobtxn", "indbnk", "paytm", "phonepe", "gpay",
-        "amazon", "juspay", "razorpay", "upi", "idfcbk", "idfcfb", "scbank"
+        "pnbsms", "bobsms", "bobtxn", "indbnk", "upi", "idfcbk", "idfcfb", "scbank"
     )
+
+    // Merchants, payment apps and gateways aren't banks: their order and payment confirmations
+    // repeat the bank's SMS. They count only with an account, card or wallet reference.
+    private val MERCHANT_SENDERS = listOf("amazon", "amzn", "flipkart", "juspay", "razorpay", "rzrpay", "paytm", "phonepe", "gpay")
+
+    // Money coming back: a refund or reversal that was credited, whatever else the SMS says
+    // ("Refund of Rs 1,200 for txn debited on 02-Nov has been credited").
+    private val REFUND_KEYWORDS = listOf("refund", "refunded", "reversal", "reversed")
 
     // Words that signal a promotional/marketing SMS even if it contains an amount
     private val PROMO_EXCLUSION_KEYWORDS = listOf(
@@ -39,7 +46,7 @@ object SmsParser {
     // because masked numbers look like "XXXX1234".
     private val ACCOUNT_REFERENCE_KEYWORDS = listOf(
         "a/c", "acct", "account", "ac no", "ac-", "xxxx",
-        "ending with", "ending in", "card no", "wallet", "your upi"
+        "ending with", "ending in", "card no", "card xx", "card ending", "wallet", "your upi"
     )
 
     // Always rejected: money hasn't moved yet, or the payment didn't go through.
@@ -68,16 +75,18 @@ object SmsParser {
         val senderLower = sender.lowercase()
         val bodyLower = body.lowercase()
         val fromKnownSender = KNOWN_SENDERS.any { senderLower.contains(it) }
+        val fromMerchant = MERCHANT_SENDERS.any { senderLower.contains(it) }
         val hasAmount = TextRules.extractAmount(body, TextRules.AMOUNT_PATTERNS) != null
         val hasDebitKeyword = TextRules.containsAnyWord(body, DEBIT_KEYWORDS)
+        val hasAccountRef = ACCOUNT_REFERENCE_KEYWORDS.any { bodyLower.contains(it) }
 
-        if (!hasAmount || !(fromKnownSender || hasDebitKeyword)) return false
+        if (!hasAmount || !(fromKnownSender || fromMerchant || hasDebitKeyword)) return false
+        if (fromMerchant && !hasAccountRef) return false
 
         // Promotional SMS filter: if the message contains promo signals and no account
         // reference, and is not from a known bank/payment sender, reject it.
         if (!fromKnownSender) {
             val hasPromoKeyword = TextRules.containsAnyWord(body, PROMO_EXCLUSION_KEYWORDS)
-            val hasAccountRef = ACCOUNT_REFERENCE_KEYWORDS.any { bodyLower.contains(it) }
             if (hasPromoKeyword && !hasAccountRef) return false
         }
 
@@ -90,6 +99,7 @@ object SmsParser {
         if (!TextRules.containsAnyWord(body, DEBIT_KEYWORDS)) return null
         if (TextRules.containsAnyWord(body, NOT_YET_DEBITED)) return null
         if (TextRules.containsAnyWord(body, REMINDER_KEYWORDS)) return null
+        if (TextRules.containsAnyWord(body, REFUND_KEYWORDS) && TextRules.containsWord(body, "credited")) return null
 
         val hasStrongDebit = TextRules.containsAnyWord(body, STRONG_DEBIT_KEYWORDS)
         if (!hasStrongDebit && TextRules.containsAnyWord(body, SOFT_EXCLUSIONS)) return null
@@ -101,8 +111,12 @@ object SmsParser {
         return ParsedTransaction(amount, description)
     }
 
+    fun isDebitCardSms(body: String): Boolean = body.lowercase().contains("debit card")
+
+    /** "Card ending 1234" alone is read as a credit card; a debit card says so. */
     fun isCreditCardSms(body: String): Boolean {
         val lower = body.lowercase()
+        if (isDebitCardSms(body) && !lower.contains("credit card")) return false
         return lower.contains("credit card") ||
             lower.contains("credit a/c") ||
             lower.contains("cc a/c") ||
@@ -112,6 +126,9 @@ object SmsParser {
             lower.contains("credit acct")
     }
 
-    fun detectPaymentMethod(body: String): String =
-        if (isCreditCardSms(body)) "Credit Card" else "UPI"
+    fun detectPaymentMethod(body: String): String = when {
+        isCreditCardSms(body) -> "Credit Card"
+        isDebitCardSms(body) -> "Debit Card"
+        else -> "UPI"
+    }
 }

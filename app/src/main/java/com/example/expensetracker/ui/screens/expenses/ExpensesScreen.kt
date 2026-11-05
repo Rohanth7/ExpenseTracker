@@ -935,6 +935,9 @@ private fun ExpenseRowItem(
 
 // ── Dialogs ─────────────────────────────────────────────────────────────────
 
+/** "Debit Card" comes from debit-card SMS (`SmsParser.detectPaymentMethod`); a plain string, no schema change. */
+private val PAYMENT_METHODS = listOf("UPI", "Credit Card", "Debit Card", "Cash")
+
 private fun categoryDisplayText(category: Category?, allCategories: List<Category>, placeholder: String = "Select category"): String {
     if (category == null) return placeholder
     return if (category.parentId != null) {
@@ -992,8 +995,8 @@ private fun AddExpenseDialog(
                 // Income has no payment method or category
                 if (!isIncome) {
                     Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("UPI", "Credit Card", "Cash").forEach { method ->
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PAYMENT_METHODS.forEach { method ->
                             FilterChip(
                                 selected = selectedPaymentMethod == method,
                                 onClick = { selectedPaymentMethod = method },
@@ -1105,8 +1108,8 @@ private fun EditExpenseDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("UPI", "Credit Card", "Cash").forEach { method ->
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PAYMENT_METHODS.forEach { method ->
                         FilterChip(
                             selected = selectedPaymentMethod == method,
                             onClick = { selectedPaymentMethod = method },
