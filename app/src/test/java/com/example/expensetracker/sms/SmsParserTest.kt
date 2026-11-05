@@ -1,6 +1,7 @@
 package com.example.expensetracker.sms
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -144,10 +145,69 @@ class SmsParserTest {
         "Recharge with Rs.299 prepaid pack and get unlimited calls. Click here to avail the offer."
     )
 
+    // BUG-19: the dot after "Mr" ended the name, and "Mr" would have been learned as a payee.
+    @Test fun `title before the payee's name is skipped`() = assertDebit(
+        "VM-KOTAKB",
+        "Rs 640.00 sent to Mr. Rahul Sharma from A/c XX12 on 05-11-26. UPI Ref 530912345601",
+        640.0, "Rahul Sharma"
+    )
+
+    // BUG-20: the UPI ID pattern took the bank's support e-mail for the payee.
+    @Test fun `support e-mail in the footer is not the payee`() = assertDebit(
+        "VM-HDFCBK",
+        "Rs 750.00 debited from A/c XX12 on 05-11-26. Not you? Write to support@hdfcbank.net",
+        750.0, "HDFC Bank debit"
+    )
+
+    // ── Amounts ──────────────────────────────────────────────────
+
+    // BUG-03: the first amount (the balance) was taken.
+    @Test fun `balance before the debit amount is not the amount`() = assertDebit(
+        "VM-ICICIB",
+        "A/c XX12: Avl Bal Rs 25,000.00 after debit of Rs 350.00 at ZOMATO on 05-11-26. Ref 530912345602",
+        350.0, "ZOMATO"
+    )
+
+    @Test fun `available limit before or after the amount is not the amount`() {
+        assertDebit("AX-SBICRD", "Avl Lmt: Rs 80,000.00. Rs 1,250.00 spent on your SBI Credit Card ending 1234 at DMART on 05-11-26.", 1250.0, "DMART")
+        assertDebit("AX-AXISBK", "INR 2,00,000 available limit. INR 600.00 spent on Axis Bank Card XX12 at UBER on 05-11-26.", 600.0, "UBER")
+    }
+
+    // BUG-02: the INR available limit was saved as the amount of a USD charge.
+    @Test fun `foreign currency charge with no rupee amount is not saved`() {
+        assertIgnored("AX-HDFCBK", "USD 12.99 spent on HDFC Bank Card xx1234 at NETFLIX.COM on 2026-11-05:10:22:11. Avl Lmt: INR 1,23,456.00")
+        assertIgnored("AX-HDFCBK", "Txn of USD 12.99 on HDFC Bank Card xx1234 at NETFLIX.COM on 05-11-26. Avl Lmt: INR 1,23,456.00")
+    }
+
+    // ── Not payments ─────────────────────────────────────────────
+
+    // BUG-18: "debited" in the text overrode the credit.
+    @Test fun `refund credited to the account`() = assertIgnored(
+        "VM-HDFCBK",
+        "Refund of Rs 1,200 for txn debited on 02-Nov-26 has been credited to your A/c XX12"
+    )
+
+    // BUG-17: merchant senders skipped the promo filter, so an order confirmation was a second expense.
+    @Test fun `merchant order confirmation without an account reference`() {
+        assertIgnored("AX-AMAZON", "Payment of Rs 499 successful for your order #402-1234567. Track at amzn.in/xyz")
+        assertIgnored("VM-RZRPAY", "Payment of Rs 1,050 to ACME Store via Razorpay is successful. Payment ID pay_N4bXk2")
+        // A payment app's own account still counts
+        assertDebit("VM-PAYTMB", "Rs 120 debited from your Paytm Payments Bank a/c XX12 at CHAI POINT on 05-11-26", 120.0, "CHAI POINT")
+    }
+
     // ── Helpers ──────────────────────────────────────────────────
 
     @Test fun `credit card detection`() {
         assertTrue(SmsParser.isCreditCardSms("Rs.799.00 spent on your SBI Credit Card ending 1234"))
         assertEquals("UPI", SmsParser.detectPaymentMethod("Rs.50 debited from a/c **1234"))
+    }
+
+    // BUG-04: "card ending 1234" made a debit card a credit card.
+    @Test fun `debit card is not a credit card`() {
+        val sms = "Rs 500.00 spent on your SBI Debit Card ending 1234 at DMART on 05-11-26"
+        assertFalse(SmsParser.isCreditCardSms(sms))
+        assertEquals("Debit Card", SmsParser.detectPaymentMethod(sms))
+        assertEquals("Credit Card", SmsParser.detectPaymentMethod("Rs.799.00 spent on your SBI Credit Card ending 1234"))
+        assertEquals("Credit Card", SmsParser.detectPaymentMethod("Rs.799.00 spent on Card ending 1234 at DMART"))
     }
 }

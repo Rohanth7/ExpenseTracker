@@ -6,17 +6,25 @@ import com.example.expensetracker.data.db.dao.ExpenseDao
 object CaptureDuplicates {
     private val CAPTURE_SOURCES = setOf("SMS", "CC-SMS", "UPI")
 
-    suspend fun isDuplicate(dao: ExpenseDao, amount: Double, source: String, payee: String, content: String, now: Long): Boolean {
+    /**
+     * [at] is when the payment happened, as the capture is dated: an SMS's sent time (it can
+     * arrive late), a notification's post time. The windows reach both ways, since a late SMS is
+     * dated before a notification that was saved first.
+     */
+    suspend fun isDuplicate(dao: ExpenseDao, amount: Double, source: String, payee: String, content: String, at: Long): Boolean {
         // Cross-source, within 3 minutes. Another capture of the same amount is the same payment:
         // a UPI notification and the bank's SMS arrive within seconds and name the payee
         // differently. An expense added by hand (or an auto-logged bill) is only if it names the
         // same payee: a ₹149 YouTube added by hand used to swallow a ₹149 Crunchyroll SMS.
-        val others = dao.getRecentByAmountFromOtherSource(amount, source, now - 3 * 60 * 1000L)
+        val others = dao.getByAmountFromOtherSourceBetween(amount, source, at - CROSS_SOURCE_MS, at + CROSS_SOURCE_MS)
         if (others.any { it.source in CAPTURE_SOURCES || samePayee(it.description, payee) }) return true
         // Same-source: the message or notification fired twice (30-second window).
-        if (dao.getRecentByAmountAndContentFromSameSource(amount, source, content, now - 30 * 1000L) > 0) return true
+        if (dao.getByAmountAndContentFromSameSourceBetween(amount, source, content, at - SAME_SOURCE_MS, at + SAME_SOURCE_MS) > 0) return true
         return false
     }
+
+    private const val CROSS_SOURCE_MS = 3 * 60 * 1000L
+    private const val SAME_SOURCE_MS = 30 * 1000L
 
     /**
      * Whether two descriptions name the same payee: every word of the shorter is a word of the
