@@ -17,16 +17,7 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val json = BackupCodec.toJson(BackupManager(applicationContext).snapshot())
-            File(applicationContext.filesDir, "auto_backup.json").writeText(json)
-
-            val drive = DriveBackupClient(applicationContext)
-            try {
-                drive.token()?.let { drive.upload(it, json) }
-            } catch (_: UserRecoverableAuthException) {
-                // The user has to grant access again from the app; skip Drive this time.
-                Log.w(TAG, "Drive access needs to be granted again")
-            }
+            backUp(BackupManager(applicationContext), File(applicationContext.filesDir, FILE_NAME), DriveBackupClient(applicationContext))
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Backup failed", e)
@@ -34,5 +25,30 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
     }
 
-    private companion object { const val TAG = "AutoBackupWorker" }
+    companion object {
+        private const val TAG = "AutoBackupWorker"
+        private const val FILE_NAME = "auto_backup.json"
+
+        /**
+         * Writes [manager]'s snapshot to [file], then to Drive if [drive] has an account. A
+         * snapshot with no records (a phone that was reset) never replaces a backup that has some
+         * ([BackupCodec.mayReplace]); Drive's copy is only downloaded to check in that case.
+         */
+        suspend fun backUp(manager: BackupManager, file: File, drive: DriveBackupClient?) {
+            val snapshot = manager.snapshot()
+            val json = BackupCodec.toJson(snapshot)
+            if (BackupCodec.mayReplace(file.takeIf { it.exists() }?.readText(), snapshot)) file.writeText(json)
+            else Log.w(TAG, "Kept the local backup: this phone has no records")
+
+            try {
+                val token = drive?.token() ?: return
+                val remote = if (snapshot.hasRecords) null else drive.find(token)?.let { drive.download(token, it.id) }
+                if (BackupCodec.mayReplace(remote, snapshot)) drive.upload(token, json)
+                else Log.w(TAG, "Kept the Drive backup: this phone has no records")
+            } catch (_: UserRecoverableAuthException) {
+                // The user has to grant access again from the app; skip Drive this time.
+                Log.w(TAG, "Drive access needs to be granted again")
+            }
+        }
+    }
 }

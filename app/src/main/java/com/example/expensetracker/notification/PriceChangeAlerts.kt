@@ -136,6 +136,11 @@ object PriceChangeAlerts {
         if (claim(app, change)) post(app, change)
     }
 
+    /** Reset everything: the alerted changes go with the payments they were found in. */
+    fun forgetAlerts(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
     /**
      * Call after an expense is edited: [after] is checked if the edit could make it a new price
      * ([worthCheckingAfterEdit]). Never fails the save.

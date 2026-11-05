@@ -121,6 +121,16 @@ class BackupRestoreTest {
         assertEquals(listOf("Old bill"), target.billDao().getAll().first().map { it.name })
     }
 
+    /** BUG-15: Gson skips the entities' defaults, so a file with only the basic fields failed to restore. */
+    @Test fun minimalOlderBackupRestoresWithDefaults() = runBlocking {
+        val v1 = BackupCodec.parse("""{"version":1,"categories":[{"id":1,"name":"Food"}],
+            "expenses":[{"id":1,"amount":250.0,"description":"Swiggy","categoryId":1,"date":1790000000000}]}""") as ParseResult.Ok
+        manager(target, targetPrefs).restore(v1.data)
+        assertEquals(listOf(Category(id = 1, name = "Food")), target.categoryDao().getAllOnce())
+        assertEquals(listOf(Expense(id = 1, amount = 250.0, description = "Swiggy", categoryId = 1, date = 1790000000000)),
+            target.expenseDao().getAll().first())
+    }
+
     @Test fun backupWithoutPriceAlertsLeavesThePhonesSetting() = runBlocking {
         targetPrefs.priceAlertsEnabled = false
         val old = BackupCodec.parse("""{"version":3,"exportedAt":1,"categories":[],"expenses":[],"recurringTemplates":[],

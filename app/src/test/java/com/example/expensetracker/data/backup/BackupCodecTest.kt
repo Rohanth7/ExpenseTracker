@@ -10,6 +10,7 @@ import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -102,7 +103,7 @@ class BackupCodecTest {
         fun v3(section: String) = """{"version":3,"categories":[],"expenses":[],$section}"""
         assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":NaN,"description":"Salary","date":1,"source":"Manual","tags":""}]""")).contains("income 1"))
         assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":5.0,"date":1,"source":"Manual","tags":""}]""")).contains("income 1"))
-        assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":5.0,"description":"x","date":1}]""")).contains("income 1"))
+        assertTrue(invalid(v3(""""incomes":[{"id":1,"amount":5.0,"description":"x","source":"Manual","tags":""}]""")).contains("income 1 has no date"))
         assertTrue(invalid(v3(""""incomes":[null]""")).contains("income 1"))
         assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"amount":5.0,"dayOfMonth":1,"isEnabled":true}]""")).contains("recurring income 1"))
         assertTrue(invalid(v3(""""recurringIncomes":[{"id":1,"name":"Salary","amount":Infinity,"dayOfMonth":1,"isEnabled":true}]""")).contains("recurring income 1"))
@@ -132,5 +133,67 @@ class BackupCodecTest {
     @Test fun `a damaged message rule is caught before restoring`() {
         assertTrue(invalid("""{"version":2,"categories":[],"expenses":[],"parsingRules":[{"id":"x","kind":"PAYMENT","pattern":"(","label":"x"}]}""").contains("message rule 1"))
         assertTrue(invalid("""{"version":2,"categories":[],"expenses":[],"parsingRules":[{"id":"x","label":"x"}]}""").contains("message rule 1"))
+    }
+
+    /** Gson skips Kotlin defaults, so an older or hand-made file's missing fields were null and the restore failed. */
+    @Test fun `missing fields get the entity's defaults`() {
+        val data = ok("""{"version":1,"categories":[{"id":1,"name":"Food"}],
+            "expenses":[{"id":1,"amount":250.0,"description":"Swiggy","categoryId":1,"date":1790000000000,"tags":null}],
+            "bills":[{"id":1,"name":"Rent","amount":20000.0,"dueDayOfMonth":5}],
+            "loans":[{"id":1,"name":"Car","totalAmount":100000.0,"monthlyEmi":5000.0,"tenureMonths":24,"startDate":1}],
+            "savingsGoals":[{"id":1,"name":"Trip","targetAmount":5000.0}],
+            "incomes":[{"id":1,"amount":5.0,"description":"Gift","date":1}],
+            "recurringIncomes":[{"id":1,"name":"Salary","amount":50000.0,"dayOfMonth":1}]}""")
+        assertEquals(Expense(id = 1, amount = 250.0, description = "Swiggy", categoryId = 1, date = 1790000000000), data.expenses!!.single())
+        assertEquals(Category(id = 1, name = "Food"), data.categories!!.single())
+        assertEquals(Bill(id = 1, name = "Rent", amount = 20000.0, dueDayOfMonth = 5), data.bills!!.single())
+        assertEquals(Loan(id = 1, name = "Car", totalAmount = 100000.0, monthlyEmi = 5000.0, tenureMonths = 24, startDate = 1), data.loans!!.single())
+        assertEquals(SavingsGoal(id = 1, name = "Trip", targetAmount = 5000.0), data.savingsGoals!!.single())
+        assertEquals(Income(id = 1, amount = 5.0, description = "Gift", date = 1), data.incomes!!.single())
+        assertEquals(RecurringIncome(id = 1, name = "Salary", amount = 50000.0, dayOfMonth = 1), data.recurringIncomes!!.single())
+        // An expense without a category is pending, not in category 0
+        assertEquals(-1L, ok("""{"version":1,"categories":[],"expenses":[{"amount":5.0,"description":"Tea","date":1}]}""").expenses!!.single().categoryId)
+    }
+
+    @Test fun `an expense without a date is refused, not dated 1970`() {
+        assertTrue(invalid("""{"version":1,"categories":[],"expenses":[{"id":1,"amount":250.0,"description":"Swiggy"}]}""").contains("expense 1 has no date"))
+        assertTrue(invalid("""{"version":3,"categories":[],"expenses":[{"id":1,"amount":250.0,"description":"Swiggy","date":0}]}""").contains("expense 1 has no date"))
+    }
+
+    /** Values the app's screens can't make: the slider is 50–95%, a goal needs a target, a loan a tenure. */
+    @Test fun `values out of range are refused`() {
+        fun v3(section: String) = """{"version":3,"categories":[],"expenses":[],$section}"""
+        assertTrue(invalid(v3(""""settings":{"budgetAlertThreshold":500}""")).contains("threshold"))
+        assertTrue(invalid(v3(""""settings":{"budgetAlertThreshold":49}""")).contains("threshold"))
+        assertTrue(invalid(v3(""""settings":{"monthlyIncome":-85000.0}""")).contains("income"))
+        assertTrue(invalid("""{"version":3,"categories":[{"id":1,"name":"Food","monthlyLimit":-500.0}],"expenses":[]}""").contains("category 1"))
+        assertTrue(invalid("""{"version":3,"categories":[{"id":1,"name":"Food","colorHex":"not-a-colour"}],"expenses":[]}""").contains("category 1"))
+        assertTrue(invalid(v3(""""savingsGoals":[{"id":1,"name":"Trip","targetAmount":0.0}]""")).contains("savings goal 1"))
+        assertTrue(invalid(v3(""""savingsGoals":[{"id":1,"name":"Trip","targetAmount":10.0,"colorHex":"green-ish"}]""")).contains("savings goal 1"))
+        val loan = """"loans":[{"id":1,"name":"Car","totalAmount":100000.0,"monthlyEmi":5000.0,"startDate":1"""
+        assertTrue(invalid(v3("""$loan,"tenureMonths":0}]""")).contains("loan 1"))
+        assertTrue(invalid(v3("""$loan,"tenureMonths":12,"dueDayOfMonth":99}]""")).contains("loan 1"))
+        val bill = """"bills":[{"id":1,"name":"Rent","amount":20000.0"""
+        assertTrue(invalid(v3("""$bill,"dueDayOfMonth":0}]""")).contains("bill 1"))
+        assertTrue(invalid(v3("""$bill}]""")).contains("bill 1"))
+        assertTrue(invalid(v3("""$bill,"dueDayOfMonth":5,"reminderDays":-4}]""")).contains("bill 1"))
+        assertTrue(invalid(v3("""$bill,"dueDayOfMonth":5,"reminderDays":15}]""")).contains("bill 1"))
+        // The edges the app allows
+        ok(v3(""""settings":{"budgetAlertThreshold":50,"monthlyIncome":0.0},"savingsGoals":[{"id":1,"name":"Trip","targetAmount":0.01,"colorHex":"#FF7DC9A5"}],
+            $loan,"tenureMonths":1,"dueDayOfMonth":31}],$bill,"dueDayOfMonth":31,"reminderDays":14}]"""))
+    }
+
+    @Test fun `an automatic backup never replaces one with records by an empty phone's`() {
+        val withRecords = BackupCodec.toJson(BackupData(categories = emptyList(), expenses = listOf(Expense(amount = 1.0, description = "Tea", date = 1))))
+        val reset = BackupData(categories = listOf(Category(id = 1, name = "Food")), expenses = emptyList(), bills = emptyList())
+        assertFalse(reset.hasRecords)
+        assertFalse(BackupCodec.mayReplace(withRecords, reset))
+        // Nothing to lose: no backup yet, an empty one, or one that can't be read
+        assertTrue(BackupCodec.mayReplace(null, reset))
+        assertTrue(BackupCodec.mayReplace(BackupCodec.toJson(reset), reset))
+        assertTrue(BackupCodec.mayReplace("not a backup", reset))
+        // Once something is entered again, backups go on as before
+        val next = reset.copy(incomes = listOf(Income(amount = 5.0, description = "Gift", date = 1)))
+        assertTrue(BackupCodec.mayReplace(withRecords, next))
     }
 }
