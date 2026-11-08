@@ -11,11 +11,11 @@ import java.util.Calendar
  * days; only the window they're counted in follows the month start (see `BudgetPeriod`).
  */
 object CashFlow {
-    /** Midnight of each due date (day clamped to the month's length) between [from] and [to]. */
+    /** Midnight of each due date (day clamped to the month's length) between [from] and [to]; any span (a loan's, years). */
     fun dueDatesInRange(dueDayOfMonth: Int, from: Long, to: Long): List<Long> {
         val out = mutableListOf<Long>()
         val cal = Calendar.getInstance().apply { timeInMillis = from; set(Calendar.DAY_OF_MONTH, 1) }
-        repeat(3) {  // a cycle touches at most 2 calendar months; 3 is a safe bound
+        while (cal.timeInMillis <= to) {
             val due = (cal.clone() as Calendar).apply {
                 set(Calendar.DAY_OF_MONTH, dueDayOfMonth.coerceIn(1, getActualMaximum(Calendar.DAY_OF_MONTH)))
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -36,12 +36,13 @@ object CashFlow {
         }
     }
 
-    /** EMIs still to come this cycle; pass loans that still have EMIs left. Nothing is due before a loan starts. */
+    /** EMIs still to come this cycle. Nothing is due before a loan starts or after its last EMI ([LoanProgress.lastDueDate]). */
     fun emiStillDue(loans: List<Loan>, now: Long, cycle: DateRange): Double {
         val todayStart = BudgetPeriod.startOfDay(now)
         return loans.filter { it.isActive }.sumOf { loan ->
             val from = maxOf(todayStart, BudgetPeriod.startOfDay(loan.startDate))
-            if (from > cycle.endInclusive) 0.0 else dueDatesInRange(loan.dueDayOfMonth, from, cycle.endInclusive).size * loan.monthlyEmi
+            val to = minOf(cycle.endInclusive, LoanProgress.lastDueDate(loan))
+            if (from > to) 0.0 else dueDatesInRange(loan.dueDayOfMonth, from, to).size * loan.monthlyEmi
         }
     }
 }

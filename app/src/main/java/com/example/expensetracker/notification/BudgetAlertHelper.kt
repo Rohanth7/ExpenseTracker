@@ -7,6 +7,8 @@ import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import java.util.Calendar
@@ -31,6 +33,20 @@ object BudgetAlertHelper {
     /** Reset everything: which alerts were sent this month, so a new budget alerts again. */
     fun forgetAlerts(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+    }
+
+    /**
+     * After a payment is captured or categorized from its notification: the same check as an
+     * expense added by hand, if it has a category (a learned payee). Never fails the capture.
+     */
+    suspend fun checkAfterCapture(context: Context, db: AppDatabase, categoryId: Long) {
+        if (categoryId == -1L) return
+        val prefs = PreferencesManager(context)
+        if (!prefs.budgetAlertsEnabled) return
+        runCatching {
+            checkAndNotify(context, categoryId, CategoryRepository(db.categoryDao(), db.expenseDao()),
+                ExpenseRepository(db.expenseDao(), context.applicationContext), prefs.budgetAlertThreshold)
+        }
     }
 
     suspend fun checkAndNotify(

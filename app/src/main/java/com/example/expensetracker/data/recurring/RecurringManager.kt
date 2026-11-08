@@ -1,11 +1,13 @@
 package com.example.expensetracker.data.recurring
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
+import com.example.expensetracker.sms.CaptureDuplicates
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import java.util.Calendar
 
@@ -13,11 +15,21 @@ object RecurringManager {
     private const val PREFS = "expense_tracker_prefs"
 
     suspend fun applyIfNeeded(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val cal = Calendar.getInstance()
-        val currentMonth = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}"
-
         val db = AppDatabase.getInstance(context)
+        applyBills(db, context.getSharedPreferences(PREFS, Context.MODE_PRIVATE), cal)
+
+        // The widget's forecast counts logged income.
+        if (applyRecurringIncome(db, cal) > 0) WidgetUpdateHelper.update(context)
+    }
+
+    /**
+     * Logs each auto-log bill on its due day, dated that day, once per calendar month. A month
+     * that already has an expense for the same payee and amount (the bank's SMS for the same
+     * Netflix charge, or one added by hand) is paid: the bill isn't logged on top of it.
+     */
+    suspend fun applyBills(db: AppDatabase, prefs: SharedPreferences, cal: Calendar) {
+        val currentMonth = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}"
         val bills = db.billDao().getAutoLogEnabled()
         val (monthStart, monthEnd) = RecurringSchedule.monthBounds(cal)
 
@@ -29,7 +41,9 @@ object RecurringManager {
 
             // The pref flag and the insert aren't atomic, so a crash between them leaves the flag
             // unset. Check the DB too so the next launch doesn't log the bill a second time.
-            if (db.expenseDao().countRecurringInMonth(bill.name, bill.amount, monthStart, monthEnd) == 0) {
+            val paid = db.expenseDao().getByAmountFromOtherSourceBetween(bill.amount, "Recurring", monthStart, monthEnd)
+                .any { CaptureDuplicates.samePayee(it.description, bill.name) }
+            if (!paid && db.expenseDao().countRecurringInMonth(bill.name, bill.amount, monthStart, monthEnd) == 0) {
                 db.expenseDao().insert(
                     Expense(
                         amount = bill.amount,
@@ -42,9 +56,6 @@ object RecurringManager {
             }
             prefs.edit().putBoolean(key, true).apply()
         }
-
-        // The widget's forecast counts logged income.
-        if (applyRecurringIncome(db, cal) > 0) WidgetUpdateHelper.update(context)
     }
 
     /** After recurring income is added or changed in Settings: logs any that's due now, without waiting for the next launch. */

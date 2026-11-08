@@ -47,7 +47,8 @@ data class NotifItem(
     val isUrgent: Boolean = false
 )
 
-data class UpcomingBill(val bill: Bill, val daysUntilDue: Int)
+/** [dueDay] is the bill's day clamped to this month's length (31 → 30 in November). */
+data class UpcomingBill(val bill: Bill, val daysUntilDue: Int, val dueDay: Int = bill.dueDayOfMonth)
 
 data class LoanStatus(
     val loan: Loan,
@@ -145,18 +146,13 @@ class DashboardViewModel(
                 val effectiveDueDay = bill.dueDayOfMonth.coerceAtMost(daysInMonth)
                 val diff = effectiveDueDay - today
                 val daysLeft = if (diff < -3) diff + daysInMonth else diff
-                if (daysLeft in -1..6) UpcomingBill(bill, daysLeft) else null
+                if (daysLeft in -1..6) UpcomingBill(bill, daysLeft, effectiveDueDay) else null
             }.sortedBy { it.daysUntilDue }
         } else emptyList()
 
-        val now = Calendar.getInstance()
+        // A loan whose last EMI has come is finished: not listed, nothing still due.
         val activeLoans = loans.filter { it.isActive }.mapNotNull { loan ->
-            val startCal = Calendar.getInstance().apply { timeInMillis = loan.startDate }
-            var monthsElapsed = (now.get(Calendar.YEAR) - startCal.get(Calendar.YEAR)) * 12 +
-                (now.get(Calendar.MONTH) - startCal.get(Calendar.MONTH))
-            // Don't count current month if EMI due day hasn't passed yet
-            if (now.get(Calendar.DAY_OF_MONTH) < loan.dueDayOfMonth) monthsElapsed--
-            val paid = monthsElapsed.coerceIn(0, loan.tenureMonths)
+            val paid = LoanProgress.paid(loan, nowMs)
             val remaining = loan.tenureMonths - paid
             if (remaining <= 0) return@mapNotNull null
             LoanStatus(

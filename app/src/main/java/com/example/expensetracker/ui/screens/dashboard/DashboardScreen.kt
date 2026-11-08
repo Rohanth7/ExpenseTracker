@@ -1077,7 +1077,7 @@ private fun UpcomingBillRow(upcoming: UpcomingBill) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                "${upcoming.bill.dueDayOfMonth}",
+                "${upcoming.dueDay}",
                 fontFamily = FontFamily.Serif,
                 fontStyle = FontStyle.Italic,
                 fontSize = 16.sp,
