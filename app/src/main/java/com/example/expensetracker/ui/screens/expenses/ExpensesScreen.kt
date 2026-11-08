@@ -98,12 +98,13 @@ fun ExpensesScreen(
     var editingIncome by rememberSaveableItem(incomes) { it.id }
     var incomeToDelete by rememberSaveableItem(incomes) { it.id }
     var showBulkCategorize by rememberSaveable { mutableStateOf(false) }
+    var confirmBulkDelete by rememberSaveable { mutableStateOf(false) }
     var showAdvancedFilters by rememberSaveable { mutableStateOf(false) }
     // The widget's "+": a one-shot request, consumed here so it can't fire twice. It replaces any
     // dialog left open (Edit, Delete, filters) or selection, so two dialogs never stack.
     LaunchedEffect(openAdd) {
         if (openAdd) {
-            editingExpense = null; expenseToDelete = null; showBulkCategorize = false; showAdvancedFilters = false
+            editingExpense = null; expenseToDelete = null; showBulkCategorize = false; confirmBulkDelete = false; showAdvancedFilters = false
             editingIncome = null; incomeToDelete = null
             viewModel.clearSelection()
             addAsIncome = false
@@ -169,7 +170,7 @@ fun ExpensesScreen(
                 BulkActionsToolbar(
                     selectedCount = selectedIds.size,
                     onClear = { viewModel.clearSelection() },
-                    onDelete = { viewModel.bulkDelete() },
+                    onDelete = { confirmBulkDelete = true },
                     onCategorize = { showBulkCategorize = true }
                 )
             } else {
@@ -522,6 +523,28 @@ fun ExpensesScreen(
         )
     }
 
+    // Shown only while something is selected: a selection cleared elsewhere closes it.
+    if (confirmBulkDelete && selectedIds.isNotEmpty()) {
+        val count = selectedIds.size
+        AppAlertDialog(
+            onDismissRequest = { confirmBulkDelete = false },
+            containerColor = Paper,
+            titleContentColor = Ink,
+            textContentColor = Muted,
+            title = { Text(if (count == 1) "Delete 1 expense?" else "Delete $count expenses?") },
+            text = { Text(if (count == 1) "It will be permanently removed." else "They will be permanently removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.bulkDelete()
+                    confirmBulkDelete = false
+                }) { Text("Delete", color = Coral) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmBulkDelete = false }) { Text("Cancel", color = Muted) }
+            }
+        )
+    }
+
     if (showBulkCategorize) {
         BulkCategorizeDialog(
             categories = categories,
@@ -641,7 +664,7 @@ private fun BulkActionsToolbar(
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         IconButton(onClick = onClear) {
-            Icon(Icons.Default.Close, null, tint = Deep)
+            Icon(Icons.Default.Close, "Clear selection", tint = Deep)
         }
         Text(
             text = "$selectedCount selected",
@@ -650,10 +673,10 @@ private fun BulkActionsToolbar(
             modifier = Modifier.weight(1f)
         )
         IconButton(onClick = onCategorize) {
-            Icon(Icons.Default.Category, null, tint = Deep)
+            Icon(Icons.Default.Category, "Categorize selected", tint = Deep)
         }
         IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, null, tint = Deep)
+            Icon(Icons.Default.Delete, "Delete selected", tint = Deep)
         }
     }
 }
@@ -882,7 +905,7 @@ private fun ExpenseRowItem(
                         )
                     }
                 }
-                val parsedTags = ExpensesViewModel.parseTags(expense.tags)
+                val parsedTags = Tags.parse(expense.tags)
                 if (parsedTags.isNotEmpty()) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1335,7 +1358,7 @@ private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Un
                 Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
                 Text(income.source.uppercase(), fontFamily = FontFamily.Monospace, fontSize = 9.5.sp, color = Muted, letterSpacing = 0.6.sp)
             }
-            val parsedTags = ExpensesViewModel.parseTags(income.tags)
+            val parsedTags = Tags.parse(income.tags)
             if (parsedTags.isNotEmpty()) {
                 Text(parsedTags.take(3).joinToString(" ") { "#$it" }, fontSize = 9.5.sp, color = JadeInk, fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(top = 3.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)

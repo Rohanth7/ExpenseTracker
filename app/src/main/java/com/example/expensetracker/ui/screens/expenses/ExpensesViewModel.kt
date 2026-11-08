@@ -100,7 +100,7 @@ class ExpensesViewModel(
             val matchesRange = range == null || expense.date in range.first..range.second
             val matchesMin = minAmt == null || expense.amount >= minAmt
             val matchesMax = maxAmt == null || expense.amount <= maxAmt
-            val matchesTag = tag == null || parseTags(expense.tags).any { it.equals(tag, ignoreCase = true) }
+            val matchesTag = tag == null || Tags.parse(expense.tags).any { it.equals(tag, ignoreCase = true) }
             matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
@@ -118,19 +118,8 @@ class ExpensesViewModel(
         filterIncomes(all, query, range, min, max, byAmount)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    data class TagSummary(val name: String, val count: Int, val totalSpent: Double)
-
-    val allTagSummaries: StateFlow<List<TagSummary>> = _allExpenses.map { expenses ->
-        val map = mutableMapOf<String, Pair<Int, Double>>()
-        expenses.forEach { expense ->
-            parseTags(expense.tags).forEach { tag ->
-                val (c, t) = map.getOrDefault(tag, 0 to 0.0)
-                map[tag] = (c + 1) to (t + expense.amount)
-            }
-        }
-        map.entries.map { TagSummary(it.key, it.value.first, it.value.second) }
-            .sortedByDescending { it.totalSpent }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allTagSummaries: StateFlow<List<TagSummary>> = _allExpenses.map(Tags::summaries)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private data class Quint<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)
     private operator fun <A, B, C, D, E> Quint<A, B, C, D, E>.component1() = first
@@ -168,20 +157,13 @@ class ExpensesViewModel(
     }
 
     fun renameTag(oldName: String, newName: String) = viewModelScope.launch {
-        val trimNew = newName.trim().trimStart('#')
-        if (trimNew.isBlank() || trimNew == oldName.trimStart('#')) return@launch
-        _allExpenses.value.filter { parseTags(it.tags).any { t -> t.equals(oldName, ignoreCase = true) } }.forEach { expense ->
-            val updated = parseTags(expense.tags).map { if (it.equals(oldName, ignoreCase = true)) trimNew else it }
-            expenseRepo.update(expense.copy(tags = updated.joinToString(",")))
-        }
-        if (_tagFilter.value?.equals(oldName, ignoreCase = true) == true) _tagFilter.value = trimNew
+        val name = Tags.cleanName(newName) ?: return@launch
+        Tags.renameEverywhere(expenseRepo, incomeRepo, oldName, name)
+        if (_tagFilter.value?.equals(oldName, ignoreCase = true) == true) _tagFilter.value = name
     }
 
     fun deleteTag(name: String) = viewModelScope.launch {
-        _allExpenses.value.filter { parseTags(it.tags).any { t -> t.equals(name, ignoreCase = true) } }.forEach { expense ->
-            val updated = parseTags(expense.tags).filter { !it.equals(name, ignoreCase = true) }
-            expenseRepo.update(expense.copy(tags = updated.joinToString(",")))
-        }
+        Tags.removeEverywhere(expenseRepo, incomeRepo, name)
         if (_tagFilter.value?.equals(name, ignoreCase = true) == true) _tagFilter.value = null
     }
 
@@ -293,9 +275,6 @@ class ExpensesViewModel(
     fun deleteIncome(income: Income) = write { incomeRepo.delete(income) }
 
     companion object {
-        fun parseTags(raw: String): List<String> =
-            raw.split(",").map { it.trim().trimStart('#') }.filter { it.isNotBlank() }
-
         fun factory(expenseRepo: ExpenseRepository, categoryRepo: CategoryRepository, mappingRepo: MerchantMappingRepository, incomeRepo: IncomeRepository, appContext: Context, prefs: PreferencesManager) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

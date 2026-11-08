@@ -15,6 +15,7 @@ import com.example.expensetracker.data.repository.LoanRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
 import com.example.expensetracker.notification.BudgetAlertHelper
+import com.example.expensetracker.ui.screens.expenses.Tags
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -53,8 +54,14 @@ class CategorizeViewModel(
             onDone()
         }
 
-    fun linkToLoanEmi(expense: Expense, onDone: () -> Unit) = viewModelScope.launch {
-        expenseRepo.delete(expense)
+    /**
+     * An EMI payment stays in spending history, tagged "emi" and with the loan's name, and filed
+     * under a "Loans & EMIs" category (made the first time) so it's no longer pending.
+     */
+    fun linkToLoanEmi(expense: Expense, loan: Loan, onDone: () -> Unit) = viewModelScope.launch {
+        val categoryId = categoryRepo.getAll().firstOrNull { it.name.equals(EMI_CATEGORY.name, ignoreCase = true) }?.id
+            ?: categoryRepo.insert(EMI_CATEGORY)
+        expenseRepo.update(expense.copy(categoryId = categoryId, tags = Tags.add(expense.tags, "emi", loan.name)))
         onDone()
     }
 
@@ -73,6 +80,8 @@ class CategorizeViewModel(
     }
 
     companion object {
+        private val EMI_CATEGORY = Category(name = "Loans & EMIs", emoji = "🏦", colorHex = "#546E7A")
+
         fun factory(
             expenseRepo: ExpenseRepository,
             categoryRepo: CategoryRepository,

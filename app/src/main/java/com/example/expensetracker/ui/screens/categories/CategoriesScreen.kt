@@ -36,6 +36,7 @@ import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.screens.expenses.Tags
 
 private val PRESET_EMOJIS = listOf(
     "🍔", "🛒", "🚗", "🏠", "💊", "🎮", "📚", "✈️",
@@ -578,6 +579,8 @@ private fun RenameTagDialog(
     onConfirm: (String) -> Unit
 ) {
     var newName by rememberSaveable { mutableStateOf(currentName) }
+    val cleanName = Tags.cleanName(newName)
+    val hasComma = ',' in newName
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -591,6 +594,9 @@ private fun RenameTagDialog(
                 onValueChange = { newName = it },
                 label = { Text("New name") },
                 singleLine = true,
+                // A comma separates tags, so "goa,food" would become two
+                isError = hasComma,
+                supportingText = if (hasComma) ({ Text("A tag name can't have a comma") }) else null,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Jade,
@@ -604,10 +610,9 @@ private fun RenameTagDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = {
-                val trimmed = newName.trim().trimStart('#')
-                if (trimmed.isNotBlank()) onConfirm(trimmed)
-            }) { Text("Rename", color = Jade) }
+            TextButton(onClick = { cleanName?.let(onConfirm) }, enabled = cleanName != null) {
+                Text("Rename", color = if (cleanName != null) Jade else Muted)
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
