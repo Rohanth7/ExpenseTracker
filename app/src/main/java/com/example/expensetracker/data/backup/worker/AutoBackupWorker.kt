@@ -37,7 +37,8 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
         suspend fun backUp(manager: BackupManager, file: File, drive: DriveBackupClient?) {
             val snapshot = manager.snapshot()
             val json = BackupCodec.toJson(snapshot)
-            if (BackupCodec.mayReplace(file.takeIf { it.exists() }?.readText(), snapshot)) file.writeText(json)
+            // The existing file is only read when it matters, as Drive's is only downloaded then.
+            if (snapshot.hasRecords || BackupCodec.mayReplace(file.takeIf { it.exists() }?.readText(), snapshot)) file.writeText(json)
             else Log.w(TAG, "Kept the local backup: this phone has no records")
 
             try {
