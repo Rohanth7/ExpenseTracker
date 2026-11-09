@@ -15,6 +15,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
+import com.google.gson.JsonPrimitive
 import com.google.gson.TypeAdapter
 import com.google.gson.TypeAdapterFactory
 import com.google.gson.reflect.TypeToken
@@ -154,8 +155,9 @@ object BackupCodec {
             if (b.dueDayOfMonth !in 1..31 || b.reminderDays !in 0..14) return "bill ${i + 1} has an invalid due day or reminder"
         }
         d.loans?.forEachIndexed { i, l ->
-            if ((l as Any?) == null || (l.name as String?) == null || !(l.monthlyEmi as Double?).ok()) return "loan ${i + 1} is incomplete"
+            if ((l as Any?) == null || (l.name as String?) == null || !(l.monthlyEmi as Double?).ok() || !(l.totalAmount as Double?).ok()) return "loan ${i + 1} is incomplete"
             if (l.tenureMonths < 1 || l.dueDayOfMonth !in 1..31) return "loan ${i + 1} has an invalid tenure or due day"
+            if (l.startDate <= 0) return "loan ${i + 1} has no start date"
         }
         d.savingsGoals?.forEachIndexed { i, g ->
             if ((g as Any?) == null || (g.name as String?) == null || !(g.targetAmount as Double?).ok()) return "savings goal ${i + 1} is incomplete"
@@ -222,7 +224,12 @@ private object EntityDefaults : TypeAdapterFactory {
                 if (json.isJsonObject) {
                     val o = json.asJsonObject
                     filled.entrySet().forEach { (key, value) ->
-                        if (key !in d.required && o.get(key)?.isJsonNull != false) o.add(key, value)
+                        if (o.get(key)?.isJsonNull == false) return@forEach
+                        if (key !in d.required) o.add(key, value)
+                        // A missing amount would be read as 0.0 (a primitive can't be null), which
+                        // passes the checks; NaN doesn't. Missing whole numbers read as 0, which
+                        // the range checks refuse.
+                        else if ((value as? JsonPrimitive)?.takeIf { it.isNumber }?.asNumber is Double) o.add(key, JsonPrimitive(Double.NaN))
                     }
                 }
                 // Read leniently like the file itself, so a NaN amount reaches the checks.

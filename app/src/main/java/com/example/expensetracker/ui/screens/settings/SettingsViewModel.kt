@@ -437,6 +437,9 @@ class SettingsViewModel(
     }
 
     fun resetAll() = viewModelScope.launch {
+        // First: the next automatic backup would replace the user's backup with this empty phone,
+        // and one that ran between the deletes below would back up a half-deleted phone.
+        setAutoBackupEnabled(false)
         expenseRepo.deleteAll()
         categoryRepo.deleteAll()
         recurringRepo.deleteAll()
@@ -445,8 +448,6 @@ class SettingsViewModel(
         savingsGoalRepo.deleteAll()
         incomeRepo.deleteAll()
         prefs.monthlyIncome = 0.0
-        // The next automatic backup would replace the user's backup with this empty phone.
-        setAutoBackupEnabled(false)
         // Learned from the deleted data. App Lock, privacy mode and the Drive account are this
         // phone's settings and stay (the dialog says so).
         ruleStore.replaceAll(emptyList())
