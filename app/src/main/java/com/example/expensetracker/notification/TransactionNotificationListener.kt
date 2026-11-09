@@ -37,7 +37,7 @@ class TransactionNotificationListener : NotificationListenerService() {
         if (packageName == applicationContext.packageName) return
 
         val extras = sbn.notification?.extras ?: return
-        val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
+        val title = title(extras)
         val body = text(extras)
 
         if (title.isBlank() && body.isBlank()) return
@@ -50,6 +50,9 @@ class TransactionNotificationListener : NotificationListenerService() {
     }
 
     companion object {
+        /** Often styled (a SpannableString), which getString() would return as null. */
+        fun title(extras: Bundle): String = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+
         /**
          * The notification's text: the short text, the expanded text (BigTextStyle) and the
          * lines (InboxStyle). Some apps put the payment only in the expanded part ("Tap to view

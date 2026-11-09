@@ -160,6 +160,16 @@ class BackupCodecTest {
         assertTrue(invalid("""{"version":3,"categories":[],"expenses":[{"id":1,"amount":250.0,"description":"Swiggy","date":0}]}""").contains("expense 1 has no date"))
     }
 
+    /** An amount is a primitive, so a missing one used to be read as ₹0 and pass the checks. */
+    @Test fun `a record without an amount or start date is refused, not restored as 0`() {
+        assertTrue(invalid("""{"version":3,"categories":[],"expenses":[{"id":1,"description":"Swiggy","date":1}]}""").contains("expense 1 is incomplete"))
+        assertTrue(invalid("""{"version":3,"categories":[],"expenses":[],"incomes":[{"id":1,"description":"Gift","date":1}]}""").contains("income 1 is incomplete"))
+        val v3 = """{"version":3,"categories":[],"expenses":[],"loans":[{"id":1,"name":"Car","tenureMonths":12"""
+        assertTrue(invalid("""$v3,"totalAmount":100000.0,"startDate":1}]}""").contains("loan 1 is incomplete"))
+        assertTrue(invalid("""$v3,"monthlyEmi":5000.0,"startDate":1}]}""").contains("loan 1 is incomplete"))
+        assertTrue(invalid("""$v3,"totalAmount":100000.0,"monthlyEmi":5000.0}]}""").contains("loan 1 has no start date"))
+    }
+
     /** Values the app's screens can't make: the slider is 50–95%, a goal needs a target, a loan a tenure. */
     @Test fun `values out of range are refused`() {
         fun v3(section: String) = """{"version":3,"categories":[],"expenses":[],$section}"""
