@@ -3,6 +3,9 @@ package com.example.expensetracker.notification
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.style.StyleSpan
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -37,11 +40,11 @@ class NotificationCaptureTest {
         db.close()
     }
 
-    private fun post(pkg: String, title: String, text: String, style: Notification.Style? = null) = runBlocking {
+    private fun post(pkg: String, title: CharSequence, text: String, style: Notification.Style? = null) = runBlocking {
         val n = Notification.Builder(context, NotificationHelper.CHANNEL_ID).setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title).setContentText(text).apply { if (style != null) setStyle(style) }.build()
         val body = TransactionNotificationListener.text(n.extras)
-        val transaction = TransactionNotificationListener.transaction(rules, title, body, pkg) ?: return@runBlocking
+        val transaction = TransactionNotificationListener.transaction(rules, TransactionNotificationListener.title(n.extras), body, pkg) ?: return@runBlocking
         TransactionNotificationListener.save(context, db, transaction, body, System.currentTimeMillis())
     }
 
@@ -60,6 +63,13 @@ class NotificationCaptureTest {
         val e = saved().single()
         assertEquals(430.0, e.amount, 0.0)
         assertEquals("PhonePe → Dominos Pizza", e.description)
+    }
+
+    /** A styled title was read as null, so a payment only in the title was missed. */
+    @Test fun detailsOnlyInABoldTitleAreSaved() {
+        val title = SpannableString("Paid ₹430 to Dominos Pizza").apply { setSpan(StyleSpan(Typeface.BOLD), 0, 9, 0) }
+        post(phonepe, title, "Tap to view details")
+        assertEquals("PhonePe → Dominos Pizza" to 430.0, saved().single().let { it.description to it.amount })
     }
 
     @Test fun detailsInInboxLinesAreSaved() {
