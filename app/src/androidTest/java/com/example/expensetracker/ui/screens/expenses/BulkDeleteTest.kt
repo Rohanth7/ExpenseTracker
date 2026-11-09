@@ -37,11 +37,12 @@ class BulkDeleteTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var db: AppDatabase
     private lateinit var vm: ExpensesViewModel
+    private lateinit var ids: List<Long>
 
     @Before fun setUp() {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         context.deleteSharedPreferences("bulk_delete_test")
-        val ids = runBlocking {
+        ids = runBlocking {
             listOf("Dinner" to 900.0, "Cab" to 250.0, "Coffee" to 180.0, "Groceries" to 200.0)
                 .map { (description, amount) -> db.expenseDao().insert(Expense(amount = amount, description = description, source = "Manual")) }
         }
@@ -71,5 +72,17 @@ class BulkDeleteTest {
         compose.onNodeWithContentDescription("Delete selected").performClick()
         dialogButton("Delete").performClick()
         compose.waitUntil(5_000) { count() == 0 }
+    }
+
+    /** Switching to Income clears the selection behind the dialog; the next selection mustn't reopen it. */
+    @Test fun aSelectionClearedBehindTheDialogDoesNotReopenIt() {
+        compose.onNodeWithContentDescription("Delete selected").performClick()
+        compose.runOnUiThread { vm.setShowIncome(true) }
+        compose.onNodeWithText("Delete 4 expenses?").assertDoesNotExist()
+
+        compose.runOnUiThread { vm.setShowIncome(false); vm.toggleSelection(ids.first()) }
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithText("Delete 1 expense?").assertDoesNotExist()
+        assertEquals(4, count())
     }
 }

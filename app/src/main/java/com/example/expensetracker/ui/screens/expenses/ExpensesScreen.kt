@@ -523,7 +523,9 @@ fun ExpensesScreen(
         )
     }
 
-    // Shown only while something is selected: a selection cleared elsewhere closes it.
+    // Shown only while something is selected: a selection cleared elsewhere closes it for good,
+    // so the next selection doesn't reopen it unasked.
+    LaunchedEffect(selectedIds.isEmpty()) { if (selectedIds.isEmpty()) confirmBulkDelete = false }
     if (confirmBulkDelete && selectedIds.isNotEmpty()) {
         val count = selectedIds.size
         AppAlertDialog(
