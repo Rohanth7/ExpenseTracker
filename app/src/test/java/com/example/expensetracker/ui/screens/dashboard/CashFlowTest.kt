@@ -49,4 +49,17 @@ class CashFlowTest {
         assertEquals(5000.0, emi(listOf(loan(5000.0, 5)), at(2026, 10, 26), startDay = 25), 0.0)
     @Test fun `no EMI is counted before the loan starts`() =  // cycle 10 Oct – 9 Nov; 1 Nov is before the 3 Nov start
         assertEquals(0.0, emi(listOf(loan(5000.0, 1, startDate = at(2026, 11, 3))), at(2026, 10, 26), startDay = 10), 0.0)
+
+    private fun loan(firstEmi: Pair<Int, Int>, tenure: Int, dueDay: Int) =
+        Loan(name = "Loan", totalAmount = 0.0, monthlyEmi = 5000.0, tenureMonths = tenure, startDate = at(firstEmi.first, firstEmi.second, 1, 0), dueDayOfMonth = dueDay)
+
+    /** BUG-08: the 12th EMI was in October, but the forecast took a 13th off November. */
+    @Test fun `a finished loan has nothing still due`() =
+        assertEquals(0.0, emi(listOf(loan(2025 to 11, tenure = 12, dueDay = 20)), at(2026, 11, 5)), 0.0)
+
+    @Test fun `the last EMI still counts until it is due, and only once`() {
+        assertEquals(5000.0, emi(listOf(loan(2025 to 12, tenure = 12, dueDay = 20)), at(2026, 11, 5)), 0.0)
+        // A 25th-to-24th cycle holds two due dates (30 Oct, 20 Nov); only the last EMI is left
+        assertEquals(5000.0, emi(listOf(loan(2025 to 12, tenure = 11, dueDay = 30)), at(2026, 10, 26), startDay = 25), 0.0)
+    }
 }

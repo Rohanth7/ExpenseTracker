@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import android.app.Activity
 import android.view.WindowManager
@@ -1080,7 +1081,7 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
                 }
             }
             Text(
-                if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on 1st of month"
+                if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on $ordinal of month"
                 else "₹${fmtINR(bill.amount)} · due $ordinal · remind ${bill.reminderDays}d before",
                 fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
         }
@@ -1115,7 +1116,7 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text(if (autoLog) "Expense added on 1st of each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
+                        Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
                     }
                     Switch(checked = autoLog, onCheckedChange = { autoLog = it },
                         colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
@@ -1125,11 +1126,10 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = amountText.invalid, supportingText = amountText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    if (!autoLog) {
-                        OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
-                            label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    }
+                    // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
+                    OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
+                        label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
@@ -1156,9 +1156,9 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
             TextButton(onClick = {
                 val amt = amountText.value ?: return@TextButton
                 if (name.isBlank()) return@TextButton
-                if (autoLog) { onConfirm(name.trim(), amt, 1, 0, selectedCategoryId, true) }
+                val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
+                if (autoLog) { onConfirm(name.trim(), amt, day, 0, selectedCategoryId, true) }
                 else {
-                    val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
                     val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
                     onConfirm(name.trim(), amt, day, remind, selectedCategoryId, false)
                 }
@@ -1169,14 +1169,8 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
 
 @Composable
 private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
-    val paidMonths = run {
-        val now = java.util.Calendar.getInstance()
-        val startCal = java.util.Calendar.getInstance().apply { timeInMillis = loan.startDate }
-        var elapsed = (now.get(java.util.Calendar.YEAR) - startCal.get(java.util.Calendar.YEAR)) * 12 +
-            (now.get(java.util.Calendar.MONTH) - startCal.get(java.util.Calendar.MONTH))
-        if (now.get(java.util.Calendar.DAY_OF_MONTH) < loan.dueDayOfMonth) elapsed--
-        elapsed.coerceIn(0, loan.tenureMonths)
-    }
+    // The Overview counts the same way (LoanProgress)
+    val paidMonths = LoanProgress.paid(loan, System.currentTimeMillis())
     val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
     val remaining = loan.tenureMonths - paidMonths
 
@@ -1224,7 +1218,7 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text(if (autoLog) "Expense added on 1st of each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
+                        Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
                     }
                     Switch(checked = autoLog, onCheckedChange = { autoLog = it },
                         colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
@@ -1234,11 +1228,10 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = amountText.invalid, supportingText = amountText.supportingText,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    if (!autoLog) {
-                        OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
-                            label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    }
+                    // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
+                    OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
+                        label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
@@ -1265,10 +1258,10 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
             TextButton(onClick = {
                 val amt = amountText.value ?: return@TextButton
                 if (name.isBlank()) return@TextButton
+                val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
                 val updated = if (autoLog) {
-                    bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = 1, reminderDays = 0, categoryId = selectedCategoryId, autoLog = true)
+                    bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = 0, categoryId = selectedCategoryId, autoLog = true)
                 } else {
-                    val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
                     val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
                     bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = false)
                 }
@@ -1280,14 +1273,8 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
 
 @Composable
 private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) -> Unit) {
-    val paidMonths = run {
-        val now = java.util.Calendar.getInstance()
-        val startCal = java.util.Calendar.getInstance().apply { timeInMillis = loan.startDate }
-        var elapsed = (now.get(java.util.Calendar.YEAR) - startCal.get(java.util.Calendar.YEAR)) * 12 +
-            (now.get(java.util.Calendar.MONTH) - startCal.get(java.util.Calendar.MONTH))
-        if (now.get(java.util.Calendar.DAY_OF_MONTH) < loan.dueDayOfMonth) elapsed--
-        elapsed.coerceIn(0, loan.tenureMonths)
-    }
+    // The Overview counts the same way (LoanProgress)
+    val paidMonths = LoanProgress.paid(loan, System.currentTimeMillis())
     val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
 
     val initialMonthsAgo = run {
@@ -1341,7 +1328,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("Months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1404,7 +1391,7 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("Months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),

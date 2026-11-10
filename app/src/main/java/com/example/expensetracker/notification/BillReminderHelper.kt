@@ -8,9 +8,12 @@ import androidx.core.app.NotificationCompat
 import androidx.work.*
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Bill
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.screens.dashboard.CashFlow
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 object BillReminderHelper {
     const val CHANNEL_ID = "bill_reminders"
@@ -41,19 +44,36 @@ object BillReminderHelper {
         )
     }
 
+    /**
+     * The bills to remind about on [now]'s day, with the days until each is due. The due day is
+     * clamped to the month's length, like the Overview and auto-log bills: a bill due on the 31st
+     * is due on 30 Nov, and on 28 Feb.
+     */
+    fun dueReminders(bills: List<Bill>, now: Long): List<Pair<Bill, Int>> {
+        val todayStart = BudgetPeriod.startOfDay(now)
+        val within = Calendar.getInstance().apply { timeInMillis = todayStart; add(Calendar.DAY_OF_YEAR, 45) }.timeInMillis
+        return bills.filter { it.isEnabled && !it.autoLog }.mapNotNull { bill ->
+            val next = CashFlow.dueDatesInRange(bill.dueDayOfMonth, todayStart, within).first()
+            val daysUntilDue = ((next - todayStart) / TimeUnit.DAYS.toMillis(1).toDouble()).roundToInt()
+            if (daysUntilDue in 0..bill.reminderDays) bill to daysUntilDue else null
+        }
+    }
+
     fun notify(context: Context, bill: Bill, daysUntilDue: Int) {
         val dueText = when (daysUntilDue) {
             0 -> "due today"
             1 -> "due tomorrow"
             else -> "due in $daysUntilDue days"
         }
+        // The day it's actually due (31 → 30 in November)
+        val dueDay = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, daysUntilDue) }.get(Calendar.DAY_OF_MONTH)
         val fmt = java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag("en-IN"))
             .apply { maximumFractionDigits = 0 }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("${bill.name} is $dueText")
-            .setContentText("₹${fmt.format(bill.amount)} — day ${bill.dueDayOfMonth} of the month")
+            .setContentText("₹${fmt.format(bill.amount)} — day $dueDay of the month")
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -66,19 +86,9 @@ object BillReminderHelper {
 class BillReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         return try {
-            val db = AppDatabase.getInstance(applicationContext)
-            val bills = db.billDao().getAll().first()
-            val cal = Calendar.getInstance()
-            val today = cal.get(Calendar.DAY_OF_MONTH)
-            val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-            bills.filter { it.isEnabled && !it.autoLog }.forEach { bill ->
-                val diff = bill.dueDayOfMonth - today
-                // Wrap negative diffs: bill due early next month (e.g. due on 2nd, today is 28th)
-                val daysUntilDue = if (diff < 0) diff + daysInMonth else diff
-                if (daysUntilDue in 0..bill.reminderDays) {
-                    BillReminderHelper.notify(applicationContext, bill, daysUntilDue)
-                }
+            val bills = AppDatabase.getInstance(applicationContext).billDao().getAll().first()
+            BillReminderHelper.dueReminders(bills, System.currentTimeMillis()).forEach { (bill, daysUntilDue) ->
+                BillReminderHelper.notify(applicationContext, bill, daysUntilDue)
             }
             Result.success()
         } catch (e: Exception) {

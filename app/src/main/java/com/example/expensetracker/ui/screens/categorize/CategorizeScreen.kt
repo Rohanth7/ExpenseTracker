@@ -37,7 +37,7 @@ import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.ui.util.categoryIcon
 import com.example.expensetracker.ui.util.parseColor
-import java.util.Calendar
+import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 
 private enum class CategorizeMode { Category, LoanEmi, Savings }
 
@@ -434,13 +434,7 @@ private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> U
 
 @Composable
 private fun LoanTile(loan: Loan, selected: Boolean, onClick: () -> Unit) {
-    val remainingMonths = run {
-        val startCal = Calendar.getInstance().apply { timeInMillis = loan.startDate }
-        val nowCal = Calendar.getInstance()
-        val elapsed = (nowCal.get(Calendar.YEAR) - startCal.get(Calendar.YEAR)) * 12 +
-            (nowCal.get(Calendar.MONTH) - startCal.get(Calendar.MONTH))
-        (loan.tenureMonths - elapsed).coerceAtLeast(0)
-    }
+    val remainingMonths = LoanProgress.remaining(loan, System.currentTimeMillis())
     Card(
         modifier = Modifier.fillMaxWidth()
             .border(

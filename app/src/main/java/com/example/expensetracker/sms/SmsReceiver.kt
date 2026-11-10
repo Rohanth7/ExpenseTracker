@@ -8,6 +8,7 @@ import android.telephony.SmsMessage
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.dao.MappingHelper
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.notification.BudgetAlertHelper
 import com.example.expensetracker.notification.NotificationHelper
 import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.notification.QuickCategories
@@ -97,7 +98,8 @@ class SmsReceiver : BroadcastReceiver() {
                 saved += expense.copy(id = id)
             }
             WidgetUpdateHelper.update(context)
-            // After everything is saved and shown; a problem in price-change detection mustn't affect it.
+            // After everything is saved and shown; a problem in either check mustn't affect it.
+            saved.forEach { BudgetAlertHelper.checkAfterCapture(context, db, it.categoryId) }
             saved.forEach { runCatching { PriceChangeAlerts.checkAfterCapture(context, db, it) } }
         }
     }

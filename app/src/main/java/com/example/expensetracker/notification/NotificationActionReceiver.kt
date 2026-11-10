@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.example.expensetracker.data.db.AppDatabase
-import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,15 +41,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         )
                     }
                     
-                    val prefs = PreferencesManager(context)
-                    if (prefs.budgetAlertsEnabled) {
-                        BudgetAlertHelper.checkAndNotify(
-                            context, categoryId,
-                            com.example.expensetracker.data.repository.CategoryRepository(db.categoryDao(), db.expenseDao()),
-                            com.example.expensetracker.data.repository.ExpenseRepository(db.expenseDao(), context.applicationContext),
-                            prefs.budgetAlertThreshold
-                        )
-                    }
+                    BudgetAlertHelper.checkAfterCapture(context, db, categoryId)
                     WidgetUpdateHelper.update(context)
                 }
                 

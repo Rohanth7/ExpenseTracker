@@ -108,7 +108,8 @@ class TransactionNotificationListener : NotificationListenerService() {
                 QuickCategories.forNewExpense(db, mappedCategoryId)
             )
             WidgetUpdateHelper.update(context)
-            // The expense is saved; a problem in price-change detection mustn't affect it.
+            // The expense is saved; a problem in either check mustn't affect it.
+            BudgetAlertHelper.checkAfterCapture(context, db, finalCategoryId)
             runCatching { PriceChangeAlerts.checkAfterCapture(context, db, expense.copy(id = id)) }
         }
     }
