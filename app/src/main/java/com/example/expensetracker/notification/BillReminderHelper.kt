@@ -14,6 +14,8 @@ import java.util.concurrent.TimeUnit
 
 object BillReminderHelper {
     const val CHANNEL_ID = "bill_reminders"
+    /** Own tag, so a capture notification for an expense with the same id doesn't replace a reminder. */
+    const val TAG = "bill_reminder"
     private const val WORK_NAME = "bill_reminder_daily"
 
     fun createChannel(context: Context) {
@@ -57,7 +59,7 @@ object BillReminderHelper {
             .build()
 
         context.getSystemService(NotificationManager::class.java)
-            .notify(10000 + bill.id.toInt(), notification)
+            .notify(TAG, (bill.id and 0x7FFFFFFF).toInt(), notification)
     }
 }
 
