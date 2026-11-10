@@ -67,6 +67,8 @@ import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
+import com.example.expensetracker.ui.util.oneCharacter
+import com.example.expensetracker.ui.util.wholeNumberIn
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.LocalAppLocked
 
@@ -1093,7 +1095,7 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
+internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
     // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
@@ -1104,6 +1106,9 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
     var expanded by rememberSaveable { mutableStateOf(false) }
     var autoLog by rememberSaveable { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
+    val dayValue = wholeNumberIn(dueDay, 1..31)
+    val remindValue = wholeNumberIn(reminderDays, 0..14)
+    val canSave = name.isNotBlank() && amountText.value != null && dayValue != null && (autoLog || remindValue != null)
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Bill / Recurring") },
@@ -1129,11 +1134,15 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
                     // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
                     OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
                         label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
+                        isError = dueDay.isNotEmpty() && dayValue == null,
+                        supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
                         label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        isError = reminderDays.isNotEmpty() && remindValue == null,
+                        supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (categories.isNotEmpty()) {
@@ -1155,14 +1164,10 @@ private fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onC
         confirmButton = {
             TextButton(onClick = {
                 val amt = amountText.value ?: return@TextButton
-                if (name.isBlank()) return@TextButton
-                val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
-                if (autoLog) { onConfirm(name.trim(), amt, day, 0, selectedCategoryId, true) }
-                else {
-                    val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
-                    onConfirm(name.trim(), amt, day, remind, selectedCategoryId, false)
-                }
-            }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Jade else Muted) }
+                val day = dayValue ?: return@TextButton
+                val remind = if (autoLog) 0 else remindValue ?: return@TextButton
+                onConfirm(name.trim(), amt, day, remind, selectedCategoryId, autoLog)
+            }, enabled = canSave) { Text("Add", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1195,7 +1200,7 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
+internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
     var name by rememberSaveable { mutableStateOf(bill.name) }
     var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
     // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
@@ -1206,6 +1211,9 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
+    val dayValue = wholeNumberIn(dueDay, 1..31)
+    val remindValue = wholeNumberIn(reminderDays, 0..14)
+    val canSave = name.isNotBlank() && amountText.value != null && dayValue != null && (autoLog || remindValue != null)
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Bill") },
@@ -1231,11 +1239,15 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
                     // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
                     OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
                         label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
+                        isError = dueDay.isNotEmpty() && dayValue == null,
+                        supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
                         label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        isError = reminderDays.isNotEmpty() && remindValue == null,
+                        supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (categories.isNotEmpty()) {
@@ -1257,22 +1269,19 @@ private fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: ()
         confirmButton = {
             TextButton(onClick = {
                 val amt = amountText.value ?: return@TextButton
-                if (name.isBlank()) return@TextButton
-                val day = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: return@TextButton
-                val updated = if (autoLog) {
-                    bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = 0, categoryId = selectedCategoryId, autoLog = true)
-                } else {
-                    val remind = reminderDays.toIntOrNull()?.coerceIn(0, 14) ?: 3
-                    bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = false)
-                }
-                onConfirm(updated)
-            }, enabled = amountText.value != null) { Text("Save", color = if (amountText.value != null) Jade else Muted) }
+                val day = dayValue ?: return@TextButton
+                val remind = if (autoLog) 0 else remindValue ?: return@TextButton
+                onConfirm(bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = autoLog))
+            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
 
+/** 100 years: enough for any loan, and keeps the month arithmetic in range. */
+private const val MAX_TENURE_MONTHS = 1200
+
 @Composable
-private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) -> Unit) {
+internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) -> Unit) {
     // The Overview counts the same way (LoanProgress)
     val paidMonths = LoanProgress.paid(loan, System.currentTimeMillis())
     val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
@@ -1296,6 +1305,9 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
     var tenureMonths by rememberSaveable { mutableStateOf(loan.tenureMonths.toString()) }
     var monthsAgo by rememberSaveable { mutableStateOf(initialMonthsAgo.toString()) }
     var dueDay by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
+    val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
+    val dueValue = wholeNumberIn(dueDay, 1..31)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Loan") },
@@ -1312,7 +1324,7 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = emoji, onValueChange = { if (it.length <= 2) emoji = it }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
+                    OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
@@ -1327,11 +1339,15 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = tenureMonths.isNotEmpty() && tenureValue == null,
+                        supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    isError = dueDay.isNotEmpty() && dueValue == null,
+                    supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
             }
         },
@@ -1339,10 +1355,9 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
             TextButton(onClick = {
                 val total = totalText.value ?: return@TextButton
                 val emi = emiText.value ?: return@TextButton
-                val tenure = tenureMonths.toIntOrNull() ?: return@TextButton
+                val tenure = tenureValue ?: return@TextButton
+                val due = dueValue ?: return@TextButton
                 val ago = monthsAgo.toIntOrNull() ?: 0
-                val due = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: 5
-                if (name.isBlank() || tenure <= 0 || emi <= 0) return@TextButton
                 val newStartDate = java.util.Calendar.getInstance().apply {
                     add(java.util.Calendar.MONTH, -ago)
                     set(java.util.Calendar.DAY_OF_MONTH, 1)
@@ -1350,14 +1365,14 @@ private fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) 
                     set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
                 }.timeInMillis
                 onConfirm(loan.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, totalAmount = total, monthlyEmi = emi, tenureMonths = tenure, startDate = newStartDate, dueDayOfMonth = due))
-            }, enabled = amountsValid) { Text("Save", color = if (amountsValid) Jade else Muted) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, Double, Int, Long, Int) -> Unit) {
+internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, Double, Int, Long, Int) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var emoji by rememberSaveable { mutableStateOf("🏦") }
     var totalAmount by rememberSaveable { mutableStateOf("") }
@@ -1369,13 +1384,16 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
     var tenureMonths by rememberSaveable { mutableStateOf("") }
     var monthsAgo by rememberSaveable { mutableStateOf("0") }
     var dueDay by rememberSaveable { mutableStateOf("5") }
+    val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
+    val dueValue = wholeNumberIn(dueDay, 1..31)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Loan / EMI") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = emoji, onValueChange = { if (it.length <= 2) emoji = it }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
+                    OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
@@ -1390,11 +1408,15 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = tenureMonths.isNotEmpty() && tenureValue == null,
+                        supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    isError = dueDay.isNotEmpty() && dueValue == null,
+                    supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
             }
         },
@@ -1402,19 +1424,17 @@ private fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Dou
             TextButton(onClick = {
                 val total = totalText.value ?: return@TextButton
                 val emi = emiText.value ?: return@TextButton
-                val tenure = tenureMonths.toIntOrNull() ?: return@TextButton
+                val tenure = tenureValue ?: return@TextButton
+                val due = dueValue ?: return@TextButton
                 val ago = monthsAgo.toIntOrNull() ?: 0
-                val due = dueDay.toIntOrNull()?.coerceIn(1, 31) ?: 5
-                if (name.isNotBlank() && tenure > 0 && emi > 0) {
-                    val startDate = java.util.Calendar.getInstance().apply {
-                        add(java.util.Calendar.MONTH, -ago)
-                        set(java.util.Calendar.DAY_OF_MONTH, 1)
-                        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
-                        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-                    }.timeInMillis
-                    onConfirm(name.trim(), emoji.ifBlank { "🏦" }, total, emi, tenure, startDate, due)
-                }
-            }, enabled = amountsValid) { Text("Add", color = if (amountsValid) Jade else Muted) }
+                val startDate = java.util.Calendar.getInstance().apply {
+                    add(java.util.Calendar.MONTH, -ago)
+                    set(java.util.Calendar.DAY_OF_MONTH, 1)
+                    set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                onConfirm(name.trim(), emoji.ifBlank { "🏦" }, total, emi, tenure, startDate, due)
+            }, enabled = canSave) { Text("Add", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }

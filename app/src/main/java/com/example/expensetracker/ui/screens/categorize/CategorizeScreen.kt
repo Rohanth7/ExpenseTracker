@@ -183,9 +183,7 @@ fun CategorizeScreen(
                     onDismiss = { viewModel.dismissExpense(exp, onDone) },
                     onLater = { viewModel.categorizeLater(onDone) },
                     onSave = {
-                        if (selectedLoanId != -1L) {
-                            viewModel.linkToLoanEmi(exp, onDone)
-                        }
+                        loans.find { it.id == selectedLoanId }?.let { viewModel.linkToLoanEmi(exp, it, onDone) }
                     }
                 )
 

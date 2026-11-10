@@ -687,6 +687,10 @@ fun DashboardScreen(
     }
 }
 
+/** "45% achieved"; past the target it keeps counting ("110% achieved"), while the bar stays full. */
+internal fun goalAchieved(goal: SavingsGoal): String =
+    "${if (goal.targetAmount > 0) (goal.currentAmount / goal.targetAmount * 100).toInt() else 0}% achieved"
+
 @Composable
 private fun SavingsGoalCard(
     goal: SavingsGoal,
@@ -695,7 +699,7 @@ private fun SavingsGoalCard(
     modifier: Modifier = Modifier
 ) {
     val progress = (goal.currentAmount / goal.targetAmount).coerceIn(0.0, 1.0).toFloat()
-    
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -744,7 +748,7 @@ private fun SavingsGoalCard(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "${(progress * 100).toInt()}% achieved",
+            goalAchieved(goal),
             fontSize = 10.sp,
             color = JadeInk,
             fontFamily = FontFamily.Monospace
@@ -753,11 +757,12 @@ private fun SavingsGoalCard(
 }
 
 @Composable
-private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
+internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var target by rememberSaveable { mutableStateOf("") }
     val targetText = rememberAmountText(target) { AmountCalculator.evaluate(it) }
-    
+    val canCreate = name.isNotBlank() && targetText.value != null
+
     AppAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Paper,
@@ -786,12 +791,10 @@ private fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> 
             }
         },
         confirmButton = {
-            TextButton(onClick = { 
-                val amt = targetText.value
-                if (name.isNotBlank() && amt != null) {
-                    onConfirm(name.trim(), amt)
-                }
-            }, enabled = targetText.value != null) { Text("Create", color = if (targetText.value != null) Jade else Muted) }
+            TextButton(onClick = {
+                val amt = targetText.value ?: return@TextButton
+                onConfirm(name.trim(), amt)
+            }, enabled = canCreate) { Text("Create", color = if (canCreate) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

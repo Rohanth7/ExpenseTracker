@@ -224,7 +224,8 @@ class DashboardViewModel(
 
     fun addAmountToGoal(goal: SavingsGoal, amount: Double) = viewModelScope.launch {
         if (amount <= 0) return@launch
-        savingsRepo.update(goal.copy(currentAmount = (goal.currentAmount + amount).coerceAtMost(goal.targetAmount)))
+        // Not capped at the target, like a deposit from Categorize: saving past it shows e.g. "110% achieved".
+        savingsRepo.update(goal.copy(currentAmount = goal.currentAmount + amount))
     }
 
     private fun buildInsights(

@@ -222,7 +222,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
             }
             composable(Screen.Categories.pattern) {
                 val vm: CategoriesViewModel = viewModel(
-                    factory = CategoriesViewModel.factory(categoryRepo, expenseRepo)
+                    factory = CategoriesViewModel.factory(categoryRepo, expenseRepo, incomeRepo)
                 )
                 CategoriesScreen(viewModel = vm)
             }
