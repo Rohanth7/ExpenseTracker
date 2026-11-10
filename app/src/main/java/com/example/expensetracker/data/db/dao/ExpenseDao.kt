@@ -31,9 +31,9 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND date >= :since")
     suspend fun getRecentByAmount(amount: Double, since: Long): Int
 
-    /** For the capture dedupe (see CaptureDuplicates): same amount, another source, recent. */
-    @Query("SELECT * FROM expenses WHERE amount = :amount AND source != :source AND date >= :since")
-    suspend fun getRecentByAmountFromOtherSource(amount: Double, source: String, since: Long): List<Expense>
+    /** For the capture dedupe (see CaptureDuplicates): same amount, another source, dated in the window. */
+    @Query("SELECT * FROM expenses WHERE amount = :amount AND source != :source AND date BETWEEN :from AND :to")
+    suspend fun getByAmountFromOtherSourceBetween(amount: Double, source: String, from: Long, to: Long): List<Expense>
 
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND description = :description AND source != :source AND date >= :since")
     suspend fun getRecentByAmountAndDescriptionFromDifferentSource(amount: Double, description: String, source: String, since: Long): Int
@@ -41,8 +41,8 @@ interface ExpenseDao {
     @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND date >= :since")
     suspend fun getRecentByAmountFromSameSource(amount: Double, source: String, since: Long): Int
 
-    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND rawSms = :rawSms AND date >= :since")
-    suspend fun getRecentByAmountAndContentFromSameSource(amount: Double, source: String, rawSms: String, since: Long): Int
+    @Query("SELECT COUNT(*) FROM expenses WHERE amount = :amount AND source = :source AND rawSms = :rawSms AND date BETWEEN :from AND :to")
+    suspend fun getByAmountAndContentFromSameSourceBetween(amount: Double, source: String, rawSms: String, from: Long, to: Long): Int
 
     // Whole month, not one exact date: bills used to be dated the 1st and are now dated their due
     // day, so an exact-date check would log this month's bill a second time after upgrading.

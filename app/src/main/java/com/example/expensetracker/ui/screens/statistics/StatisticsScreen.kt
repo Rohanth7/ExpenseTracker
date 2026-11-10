@@ -705,11 +705,13 @@ private fun PaymentSplitCard(split: PaymentSplit) {
             val upiFrac = split.fraction(split.upiAmount)
             val ccFrac = split.fraction(split.creditCardAmount)
             val cashFrac = split.fraction(split.cashAmount)
+            val dcFrac = split.fraction(split.debitCardAmount)
             if (upiFrac > 0) Box(Modifier.fillMaxHeight().weight(upiFrac).background(Jade))
             if (ccFrac > 0) Box(Modifier.fillMaxHeight().weight(ccFrac).background(Amber))
+            if (dcFrac > 0) Box(Modifier.fillMaxHeight().weight(dcFrac).background(InkSoft))
             if (cashFrac > 0) Box(Modifier.fillMaxHeight().weight(cashFrac).background(Coral))
             // fill remainder if rounding leaves gap
-            val remainder = 1f - upiFrac - ccFrac - cashFrac
+            val remainder = 1f - upiFrac - ccFrac - dcFrac - cashFrac
             if (remainder > 0.001f) Box(Modifier.fillMaxHeight().weight(remainder).background(HairlineSoft))
         }
         Spacer(Modifier.height(16.dp))
@@ -729,6 +731,15 @@ private fun PaymentSplitCard(split: PaymentSplit) {
                     amount = split.creditCardAmount,
                     pct = (split.fraction(split.creditCardAmount) * 100).toInt(),
                     color = Amber,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (split.debitCardAmount > 0) {
+                PaymentSplitLegend(
+                    label = "Debit Card",
+                    amount = split.debitCardAmount,
+                    pct = (split.fraction(split.debitCardAmount) * 100).toInt(),
+                    color = InkSoft,
                     modifier = Modifier.weight(1f)
                 )
             }

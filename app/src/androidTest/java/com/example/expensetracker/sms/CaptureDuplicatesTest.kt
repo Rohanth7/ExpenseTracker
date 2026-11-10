@@ -75,6 +75,19 @@ class CaptureDuplicatesTest {
         assertFalse(duplicate("SMS"))
     }
 
+    /** BUG-16: captures are dated when the payment happened, so a late SMS is dated before the notification saved first. */
+    @Test fun aLateSmsDatedWhenItWasSentIsADuplicateOfTheUpiApp() {
+        saved("UPI", secondsAgo = 20)
+        assertTrue(runBlocking { CaptureDuplicates.isDuplicate(db.expenseDao(), 149.0, "SMS", "CRUNCHYROLL", sms, now - 25_000) })
+    }
+
+    @Test fun anOtherSourceCaptureDatedJustAfterIsADuplicate() {
+        saved("SMS", secondsAgo = -40)
+        assertTrue(duplicate("UPI", content = "Paid ₹149 to Crunchyroll"))
+        saved("SMS", secondsAgo = -181, amount = 150.0)
+        assertFalse(runBlocking { CaptureDuplicates.isDuplicate(db.expenseDao(), 150.0, "UPI", "CRUNCHYROLL", "Paid ₹150", now) })
+    }
+
     @Test fun aDifferentAmountIsNotADuplicate() {
         saved("UPI", secondsAgo = 20, amount = 150.0)
         assertFalse(duplicate("SMS"))

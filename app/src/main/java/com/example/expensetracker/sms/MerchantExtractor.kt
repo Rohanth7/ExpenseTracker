@@ -14,13 +14,20 @@ object MerchantExtractor {
     private const val STOP =
         """(?=\s+(?:on|ref|refno|ref\s*no|upi|via|using|avl|avbl|bal|balance|not|dated|date|txn|from|info|value)\b|\s*[.;,(\n\r]|\s*-\s|\s*$)"""
 
+    // "sent to Mr. Rahul Sharma": the dot after a title isn't the end of the name.
+    private const val TITLE = """(?:(?:Mr|Mrs|Ms|Miss|Dr|Shri|Sri|Smt|M/s)\.?\s+)?"""
+
+    // E-mail addresses (a bank's "Write to support@hdfcbank.net" footer) are never the payee,
+    // even though "support@hdfcbank" looks like a UPI ID.
+    private val EMAIL = Regex("""\b[a-z0-9][a-z0-9.\-_]*@[a-z0-9\-]+(?:\.[a-z]{2,})+\b""", IC)
+
     private val PATTERNS: List<Regex> = listOf(
         // Axis: "UPI/P2M/123456789012/SWIGGY"
         Regex("""\bUPI/P2[AM]/\d+/([^/\n\r]{2,40})""", IC),
         // ICICI UPI: "...debited for Rs 500.00 on 12-Oct-24; SWIGGY credited."
         Regex(""";\s*([^;\n\r]{2,40}?)\s+credited\b""", IC),
         // SBI UPI: "trf to SWIGGY Refno 123..."
-        Regex("""\btrf\s+to\s+(.{2,40}?)$STOP""", IC),
+        Regex("""\btrf\s+to\s+$TITLE(.{2,40}?)$STOP""", IC),
         // HDFC UPI multi-line: "To SWIGGY" on its own line
         Regex("""(?:^|[\n\r])\s*To\s*:?\s+([^\n\r]{2,40}?)\s*(?=[\n\r]|$)""", IC),
         // ICICI card: "spent using ICICI Bank Card XX1234 on 12-Oct-24 on AMAZON."
@@ -28,7 +35,7 @@ object MerchantExtractor {
         // UPI ID anywhere: "to VPA swiggy@icici"
         Regex("""\b([a-z0-9][a-z0-9.\-_]{1,48}@[a-z][a-z0-9]{1,20})\b""", IC),
         // Generic: "paid to X", "sent to X", "at X", "towards X"
-        Regex("""\b(?:paid\s+to|sent\s+to|transferred\s+to|to|at|towards|merchant\s*:?)\s+(?:VPA\s+)?(.{2,40}?)$STOP""", IC)
+        Regex("""\b(?:paid\s+to|sent\s+to|transferred\s+to|to|at|towards|merchant\s*:?)\s+(?:VPA\s+)?$TITLE(.{2,40}?)$STOP""", IC)
     )
 
     // Candidates that are clearly not a payee.
@@ -39,8 +46,9 @@ object MerchantExtractor {
     private val REJECT_PREFIX = Regex("""^(?:your|rs\.?|inr|₹|a/c|ac\b|acct|account|card|\d)""", IC)
 
     fun extract(text: String): String? {
+        val withoutEmails = EMAIL.replace(text, " ")
         for (pattern in PATTERNS) {
-            for (match in pattern.findAll(text)) {
+            for (match in pattern.findAll(withoutEmails)) {
                 val candidate = clean(match.groupValues[1]) ?: continue
                 return candidate
             }
