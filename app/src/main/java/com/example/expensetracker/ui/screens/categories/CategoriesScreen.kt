@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.categories
 
+import com.example.expensetracker.ui.util.MAX_CATEGORY_NAME_LENGTH
+import com.example.expensetracker.ui.util.categoryNameError
 import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -333,6 +335,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     if (showDialog && (!editingExisting || editTarget != null)) {
         CategoryDialog(
             initial = editTarget,
+            siblingNames = categories.filter { it.parentId == editTarget?.parentId && it.id != editTarget?.id }.map { it.name },
             onDismiss = { showDialog = false; editTarget = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 val existing = editTarget
@@ -351,6 +354,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
         CategoryDialog(
             initial = null,
             parentName = parent.name,
+            siblingNames = categories.filter { it.parentId == parent.id }.map { it.name },
             onDismiss = { addSubcategoryFor = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 viewModel.addCategory(name, emoji, colorHex, limit, parentId = parent.id)
@@ -615,9 +619,11 @@ private fun RenameTagDialog(
 }
 
 @Composable
-private fun CategoryDialog(
+internal fun CategoryDialog(
     initial: Category?,
     parentName: String? = null,
+    /** The other names under the same parent; a new or renamed category can't take one of them. */
+    siblingNames: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
@@ -629,6 +635,10 @@ private fun CategoryDialog(
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }
     val parsedLimit = limit.value
+    // Like the bill and loan dialogs: Save is enabled only when it will save, and a wrong value
+    // says why. A blank name isn't flagged before anything is typed.
+    val nameError = categoryNameError(name, siblingNames)
+    val canSave = nameError == null && parsedLimit != null
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -646,9 +656,11 @@ private fun CategoryDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH) name = it },
                     label = { Text("Name") },
                     singleLine = true,
+                    isError = name.isNotBlank() && nameError != null,
+                    supportingText = if (name.isNotBlank() && nameError != null) ({ Text(nameError) }) else null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -712,9 +724,9 @@ private fun CategoryDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isBlank() || parsedLimit == null) return@TextButton
+                if (!canSave || parsedLimit == null) return@TextButton
                 onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit)
-            }) { Text("Save", color = Jade) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

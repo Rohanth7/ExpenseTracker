@@ -23,3 +23,21 @@ fun oneCharacter(old: String, typed: String): String {
 
 /** A whole number typed in a field (a day of the month, a tenure), or null if it isn't one in [range]. */
 fun wholeNumberIn(text: String, range: IntRange): Int? = text.trim().toIntOrNull()?.takeIf { it in range }
+
+/** Long enough for any real name, short enough for a chip or a picker row. */
+const val MAX_CATEGORY_NAME_LENGTH = 40
+
+/**
+ * Why [name] can't be saved as a category name, or null if it can. [siblings] are the other names
+ * under the same parent (top-level categories, or one category's subcategories): two that differ
+ * only by case or outer spaces can't be told apart in a picker.
+ */
+fun categoryNameError(name: String, siblings: List<String>): String? {
+    val trimmed = name.trim()
+    return when {
+        trimmed.isEmpty() -> "Enter a name"
+        trimmed.length > MAX_CATEGORY_NAME_LENGTH -> "Use $MAX_CATEGORY_NAME_LENGTH characters or fewer"
+        siblings.any { it.trim().equals(trimmed, ignoreCase = true) } -> "There's already one with this name"
+        else -> null
+    }
+}
