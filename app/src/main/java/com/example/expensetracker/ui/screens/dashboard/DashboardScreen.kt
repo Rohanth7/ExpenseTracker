@@ -1020,23 +1020,30 @@ fun DsSectionLabel(title: String, modifier: Modifier = Modifier, action: String?
 
 @Composable
 fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = Modifier) {
+    val text = fmtINR(amount)
+    // One line, always: an amount with paise ("1,00,100.74") is longer than the card is wide at
+    // full size, so the text steps down until it fits.
+    var scale by remember(text, size) { mutableStateOf(1f) }
     Text(
         buildAnnotatedString {
             withStyle(SpanStyle(
-                fontSize = (size * 0.55).sp,
+                fontSize = (size * 0.55 * scale).sp,
                 fontStyle = FontStyle.Normal,
                 color = color.copy(alpha = 0.55f),
                 fontFamily = FontFamily.Serif
             )) { append("₹") }
             withStyle(SpanStyle(
-                fontSize = size.sp,
+                fontSize = (size * scale).sp,
                 fontFamily = FontFamily.Serif,
                 fontStyle = FontStyle.Italic,
                 fontWeight = FontWeight.Normal,
                 color = color,
                 letterSpacing = (-0.5).sp
-            )) { append(fmtINR(amount)) }
+            )) { append(text) }
         },
+        maxLines = 1,
+        softWrap = false,
+        onTextLayout = { if (it.didOverflowWidth && scale > 0.4f) scale *= 0.92f },
         modifier = modifier
     )
 }
