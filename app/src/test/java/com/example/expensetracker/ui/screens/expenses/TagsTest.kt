@@ -33,4 +33,36 @@ class TagsTest {
         ))
         assertEquals(listOf(TagSummary("food", 2, 500.0), TagSummary("goa", 1, 200.0)), summaries)
     }
+
+    /** B-12: tags were stored as typed, so "#gift" and "gift", or "Food, food", were kept apart or twice. */
+    @Test fun `tags are stored trimmed, without their hash, each once`() {
+        assertEquals("food,travel", Tags.normalize("food, travel"))
+        assertEquals("food", Tags.normalize("#food"))
+        assertEquals("food,travel", Tags.normalize(" food ,, travel "))
+        assertEquals("Food", Tags.normalize("Food, food"))
+        assertEquals("food", Tags.normalize("# food , ##food"))
+        assertEquals("🍕,goa trip", Tags.normalize("🍕, goa trip"))
+        assertEquals("", Tags.normalize(" , #, "))
+        val twenty = (1..20).joinToString(",") { "t$it" }
+        assertEquals(twenty, Tags.normalize(twenty))
+    }
+
+    @Test fun `tags stored before they were cleaned read the same`() {
+        assertEquals(Tags.parse("gift,Food"), Tags.parse(" #gift, Food ,food"))
+        assertEquals("gift", Tags.normalize(Tags.normalize("#gift")))
+    }
+
+    @Test fun `a search finds a tag with or without its hash, in any case`() {
+        assertEquals(true, Tags.matchesQuery("Food,travel", "#food"))
+        assertEquals(true, Tags.matchesQuery("#Food,travel", "foo"))
+        assertEquals(true, Tags.matchesQuery("Food,travel", "TRAV"))
+        assertEquals(false, Tags.matchesQuery("Food,travel", "gift"))
+        assertEquals(false, Tags.matchesQuery("Food,travel", "#"))
+    }
+
+    @Test fun `a filter and a chip are the same tag whatever their case`() {
+        assertEquals(true, Tags.same("Food", "food"))
+        assertEquals(false, Tags.same("Food", "foods"))
+        assertEquals(false, Tags.same(null, "food"))
+    }
 }

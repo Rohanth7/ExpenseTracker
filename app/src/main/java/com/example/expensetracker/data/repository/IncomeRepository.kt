@@ -1,5 +1,6 @@
 package com.example.expensetracker.data.repository
 
+import com.example.expensetracker.ui.screens.expenses.Tags
 import android.content.Context
 import com.example.expensetracker.data.db.dao.IncomeDao
 import com.example.expensetracker.data.db.dao.RecurringIncomeDao
@@ -15,8 +16,11 @@ class IncomeRepository(private val dao: IncomeDao, private val recurringDao: Rec
     val allRecurring: Flow<List<RecurringIncome>> = recurringDao.getAll()
     val allMonths: Flow<List<RecurringIncomeMonth>> = recurringDao.getMonths()
 
-    suspend fun insert(income: Income): Long = dao.insert(income).also { WidgetUpdateHelper.update(context) }
-    suspend fun update(income: Income) { dao.update(income); WidgetUpdateHelper.update(context) }
+    // Tags are saved clean, like expenses' (Tags.normalize).
+    private fun Income.clean() = copy(tags = Tags.normalize(tags))
+
+    suspend fun insert(income: Income): Long = dao.insert(income.clean()).also { WidgetUpdateHelper.update(context) }
+    suspend fun update(income: Income) { dao.update(income.clean()); WidgetUpdateHelper.update(context) }
     suspend fun delete(income: Income) { dao.delete(income); WidgetUpdateHelper.update(context) }
 
     suspend fun insertRecurring(r: RecurringIncome): Long = recurringDao.insert(r).also { WidgetUpdateHelper.update(context) }

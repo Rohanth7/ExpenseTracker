@@ -1,5 +1,6 @@
 package com.example.expensetracker.data.export
 
+import com.example.expensetracker.ui.screens.expenses.Tags
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Income
@@ -39,10 +40,10 @@ object CsvExporter {
             if (j >= incs.size || (i < exps.size && exps[i].date <= incs[j].date)) {
                 val e = exps[i++]
                 val (category, subcategory) = names(e.categoryId, byId)
-                row(e.date, "expense", e.amount, listOf(e.description, category, subcategory, e.paymentMethod, e.tags.trim(), e.source))
+                row(e.date, "expense", e.amount, listOf(e.description, category, subcategory, e.paymentMethod, Tags.normalize(e.tags), e.source))
             } else {
                 val n = incs[j++]
-                row(n.date, "income", n.amount, listOf(n.description, "", "", "", n.tags.trim(), n.source))
+                row(n.date, "income", n.amount, listOf(n.description, "", "", "", Tags.normalize(n.tags), n.source))
             }
         }
     }

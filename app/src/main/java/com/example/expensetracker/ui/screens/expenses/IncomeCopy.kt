@@ -21,7 +21,7 @@ fun Income.isEditedTo(amountText: String, description: String, tags: String, dat
  */
 fun filterIncomes(all: List<Income>, query: String, range: Pair<Long, Long>?, min: Double?, max: Double?, byAmount: Boolean): List<Income> {
     val filtered = all.filter { n ->
-        (query.isBlank() || n.description.contains(query, ignoreCase = true) || n.tags.contains(query, ignoreCase = true)) &&
+        (query.isBlank() || n.description.contains(query, ignoreCase = true) || Tags.matchesQuery(n.tags, query)) &&
             (range == null || n.date in range.first..range.second) &&
             (min == null || n.amount >= min) && (max == null || n.amount <= max)
     }

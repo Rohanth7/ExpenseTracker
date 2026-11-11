@@ -322,9 +322,10 @@ fun ExpensesScreen(
                             items(allTagSummaries) { tag ->
                                 TagChipPill(
                                     label = tag.name,
-                                    selected = tagFilter == tag.name,
+                                    // "Food" and "food" are one tag, so one chip, lit for either
+                                    selected = Tags.same(tagFilter, tag.name),
                                     onClick = {
-                                        if (tagFilter == tag.name) {
+                                        if (Tags.same(tagFilter, tag.name)) {
                                             viewModel.setTagFilter(null)
                                         } else {
                                             viewModel.setTagFilter(tag.name)

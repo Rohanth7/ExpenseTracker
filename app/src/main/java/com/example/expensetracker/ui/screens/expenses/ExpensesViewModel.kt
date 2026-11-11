@@ -60,6 +60,18 @@ class ExpensesViewModel(
     init {
         viewModelScope.launch { _selectedIds.collect { saved["selected_ids"] = it.toLongArray() } }
     }
+
+    /**
+     * A tag filter no expense has any more is dropped: the tag was renamed or deleted in the
+     * Categories tab, or its last expense went, and the filter would show an empty list with no
+     * chip to turn it off. Only once the expenses have loaded.
+     */
+    private fun dropStaleTagFilter() = viewModelScope.launch {
+        loadedExpenses.filterNotNull().collect { all ->
+            val tag = _tagFilter.value ?: return@collect
+            if (all.none { e -> Tags.parse(e.tags).any { Tags.same(it, tag) } }) _tagFilter.value = null
+        }
+    }
     val dateFilter: StateFlow<DateFilter?> = _dateFilter.asStateFlow()
     /** The dates [dateFilter] covers now. */
     val dateRange: StateFlow<Pair<Long, Long>?> = combine(_dateFilter, _now, MonthStartDay.flow(appContext)) { filter, now, startDay ->
@@ -80,6 +92,8 @@ class ExpensesViewModel(
     private val _allExpenses: StateFlow<List<Expense>> = loadedExpenses.map { it.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    init { dropStaleTagFilter() }
+
     val hasAnyExpenses: StateFlow<Boolean> = _allExpenses
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
@@ -98,14 +112,14 @@ class ExpensesViewModel(
         val filtered = all.filter { expense ->
             val matchesQuery = query.isBlank() ||
                 expense.description.contains(query, ignoreCase = true) ||
-                expense.tags.contains(query, ignoreCase = true)
+                Tags.matchesQuery(expense.tags, query)
             val matchesCat = catFilter == null || catFilter == -1L ||
                 expense.categoryId == catFilter ||
                 cats.find { it.id == expense.categoryId }?.parentId == catFilter
             val matchesRange = range == null || expense.date in range.first..range.second
             val matchesMin = minAmt == null || expense.amount >= minAmt
             val matchesMax = maxAmt == null || expense.amount <= maxAmt
-            val matchesTag = tag == null || Tags.parse(expense.tags).any { it.equals(tag, ignoreCase = true) }
+            val matchesTag = tag == null || Tags.parse(expense.tags).any { Tags.same(it, tag) }
             matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
