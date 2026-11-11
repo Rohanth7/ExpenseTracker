@@ -1,5 +1,9 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.R
+import androidx.compose.ui.res.stringResource
+import com.example.expensetracker.ui.util.appFooter
+import com.example.expensetracker.ui.util.appVersionName
 import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.util.rememberSaveableItem
@@ -433,7 +437,8 @@ private fun SettingsMainMenu(
             Spacer(Modifier.height(32.dp))
         }
         item {
-            Text("Expense Tracker · v2.1", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Whisper,
+            val context = LocalContext.current
+            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Whisper,
                 modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(40.dp))
         }
