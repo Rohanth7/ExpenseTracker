@@ -82,7 +82,11 @@ class ExpensesViewModel(
     val showIncome: StateFlow<Boolean> = _showIncome.asStateFlow()
     fun setShowIncome(show: Boolean) { _showIncome.value = show; if (show) _selectedIds.value = emptySet() }
 
-    val categories: StateFlow<List<Category>> = categoryRepo.allCategories
+    /** Null until loaded, like [loadedExpenses]: a category filter can't be applied before then. */
+    private val loadedCategories: StateFlow<List<Category>?> = categoryRepo.allCategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val categories: StateFlow<List<Category>> = loadedCategories.map { it.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Null until the database has answered, so "nothing loaded yet" isn't read as "nothing matches". */
@@ -102,12 +106,12 @@ class ExpensesViewModel(
     private val shownExpenses: StateFlow<List<Expense>?> = combine(
         loadedExpenses,
         _searchQuery,
-        combine(_categoryFilter, categories) { f, cats -> f to cats },
+        combine(_categoryFilter, loadedCategories) { f, cats -> f to cats },
         combine(_sortByAmount, dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
             Quint(b, r, min, max, tag)
         }
     ) { all, query, (catFilter, cats), extra ->
-        if (all == null) return@combine null
+        if (all == null || cats == null) return@combine null
         val (byAmount, range, minAmt, maxAmt, tag) = extra
         val filtered = all.filter { expense ->
             val matchesQuery = query.isBlank() ||
@@ -129,12 +133,22 @@ class ExpensesViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
-     * The selected rows that are on screen: a search or filter that hides a selected row takes it
-     * out of the count and out of bulk delete and move (it's selected again if the filter goes).
-     * While the list is loading, the saved selection as it was.
+     * The selected rows. A search or filter that hides a selected row deselects it, for good: it
+     * left the count and bulk delete and move either way, and kept selected out of sight it came
+     * back into the next bulk action once the filter was cleared, with no way to deselect it
+     * meanwhile. While the list is loading, the saved selection as it was.
      */
     val selectedIds: StateFlow<Set<Long>> = combine(_selectedIds, shownExpenses, ::selectionOnScreen)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), _selectedIds.value)
+
+    init {
+        viewModelScope.launch {
+            shownExpenses.filterNotNull().collect { shown ->
+                val onScreen = selectionOnScreen(_selectedIds.value, shown)
+                if (onScreen.size != _selectedIds.value.size) _selectedIds.value = onScreen
+            }
+        }
+    }
 
     private fun selectionOnScreen(selected: Set<Long>, shown: List<Expense>?): Set<Long> =
         if (shown == null) selected else shown.mapNotNullTo(mutableSetOf()) { it.id.takeIf(selected::contains) }

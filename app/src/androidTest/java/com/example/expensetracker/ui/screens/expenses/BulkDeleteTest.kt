@@ -111,4 +111,32 @@ class BulkDeleteTest {
         compose.waitForIdle()
         assertEquals(listOf("Dinner"), runBlocking { db.expenseDao().getAll().first().filter { it.categoryId == food }.map { it.description } })
     }
+
+    /** Review of B-11: a row a search hid stayed selected out of sight and came back into bulk delete when the search was cleared. */
+    @Test fun aRowHiddenByAFilterIsDeselectedForGood() {
+        compose.runOnUiThread { vm.setSearchQuery("Dinner") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cab")).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("1 selected").assertExists()
+
+        compose.runOnUiThread { vm.setSearchQuery("") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cab")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithContentDescription("Delete selected").performClick()
+        compose.onNodeWithText("Delete 1 expense?").assertExists()
+        dialogButton("Delete").performClick()
+        compose.waitUntil(5_000) { count() == 3 }
+        compose.waitForIdle()
+        assertEquals(3, count())
+    }
+
+    /** A search that hides every selected row ends the selection. */
+    @Test fun hidingEverySelectedRowEndsTheSelection() {
+        compose.runOnUiThread { vm.setSearchQuery("zzz") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Dinner")).fetchSemanticsNodes().isEmpty() }
+        compose.runOnUiThread { vm.setSearchQuery("") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Dinner")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("4 selected").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Delete selected").assertDoesNotExist()
+        assertEquals(4, count())
+    }
 }
