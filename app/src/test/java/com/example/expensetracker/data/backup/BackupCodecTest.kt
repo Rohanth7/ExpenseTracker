@@ -224,4 +224,20 @@ class BackupCodecTest {
         assertTrue(invalid(file("-1")).contains("bill 1"))
         assertEquals(0.0, ok(file("0")).bills!!.single().amount, 0.0)
     }
+
+    /** B-16: "Back up now" uploaded an empty phone over a Drive backup that had records, without asking. */
+    @Test fun `a manual backup asks before replacing records with an empty snapshot`() {
+        val withRecords = BackupCodec.toJson(BackupData(categories = emptyList(), expenses = listOf(Expense(amount = 1.0, description = "Tea", date = 1))))
+        val empty = BackupData(categories = listOf(Category(id = 1, name = "Food")), expenses = emptyList())
+        assertTrue(BackupCodec.needsConfirmation(empty) { withRecords })
+        // Nothing to lose: no backup in Drive, an empty one, or one that can't be read
+        assertFalse(BackupCodec.needsConfirmation(empty) { null })
+        assertFalse(BackupCodec.needsConfirmation(empty) { BackupCodec.toJson(empty) })
+        assertFalse(BackupCodec.needsConfirmation(empty) { "not a backup" })
+    }
+
+    @Test fun `a manual backup with records never downloads the old one to check`() {
+        val next = BackupData(categories = emptyList(), expenses = listOf(Expense(amount = 5.0, description = "Coffee", date = 1)))
+        assertFalse(BackupCodec.needsConfirmation(next) { throw AssertionError("downloaded the Drive backup") })
+    }
 }

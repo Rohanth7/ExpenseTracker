@@ -141,12 +141,15 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     }
     val driveSignInClient = remember { GoogleSignIn.getClient(context, driveSignInOptions) }
     val driveSignInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            try {
-                val account = GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java)
-                account?.email?.let { viewModel.setDriveAccount(it) }
-            } catch (_: ApiException) {}
+        // A cancelled or failed sign-in comes back as RESULT_CANCELED, with the reason in the data.
+        val email = try {
+            if (result.data == null) null
+            else GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java)?.email
+        } catch (e: ApiException) {
+            viewModel.showMessage(driveSignInFailure(e.statusCode))
+            return@rememberLauncherForActivityResult
         }
+        if (email != null) viewModel.setDriveAccount(email) else viewModel.showMessage(driveSignInFailure(null))
     }
 
     val driveAuthLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -247,6 +250,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onReset = { viewModel.resetAll() }
             )
         }
+    }
+
+    if (viewModel.confirmEmptyBackup) {
+        AppAlertDialog(onDismissRequest = { viewModel.cancelEmptyBackup() }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Replace your Drive backup?") },
+            text = { Text("This phone has nothing to back up, and the backup in your Google Drive has records. Backing up now replaces it with an empty one. To get those records onto this phone, use Restore from Drive instead.") },
+            confirmButton = { TextButton(onClick = { viewModel.backUpToDriveNow(replaceRecords = true) }) { Text("Replace backup", color = Coral) } },
+            dismissButton = { TextButton(onClick = { viewModel.cancelEmptyBackup() }) { Text("Cancel", color = Muted) } })
     }
 
     if (pendingRestore != null) {

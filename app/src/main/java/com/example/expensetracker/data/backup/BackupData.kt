@@ -105,6 +105,14 @@ object BackupCodec {
         return !old.data.hasRecords
     }
 
+    /**
+     * Whether a manual "Back up now" has to ask before uploading [next]: only when it has no
+     * records and the backup it would replace has some. [existing] (the backup's text, null if
+     * there is none) is fetched only for a snapshot without records.
+     */
+    inline fun needsConfirmation(next: BackupData, existing: () -> String?): Boolean =
+        !next.hasRecords && !mayReplace(existing(), next)
+
     /** Captured SMS/notification text never goes into a backup; parsed amount and payee do. */
     fun toJson(data: BackupData): String =
         gson.toJson(data.copy(expenses = data.expenses?.map { it.copy(rawSms = null) }))

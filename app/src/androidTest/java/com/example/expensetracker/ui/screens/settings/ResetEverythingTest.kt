@@ -93,14 +93,30 @@ class ResetEverythingTest {
         }
     }
 
-    private suspend fun reset() {
-        val vm = SettingsViewModel(
+    private fun viewModel() = SettingsViewModel(
             context, CategoryRepository(db.categoryDao(), db.expenseDao()), ExpenseRepository(db.expenseDao(), context),
             RecurringTemplateRepository(db.recurringTemplateDao()), BillRepository(db.billDao()), LoanRepository(db.loanDao()),
             SavingsGoalRepository(db.savingsGoalDao()), IncomeRepository(db.incomeDao(), db.recurringIncomeDao(), context),
             manager, prefs, rules
         )
+
+    private suspend fun reset() {
+        val vm = withContext(Dispatchers.Main) { viewModel() }
         withContext(Dispatchers.Main) { vm.resetAll() }.join()
+    }
+
+    /** B-16: the toggle is hidden once Drive is disconnected, and the daily job kept running. */
+    @Test fun disconnectingDriveTurnsAutoBackupOff() = runBlocking {
+        prefs.driveConnected = true
+        prefs.autoBackupEnabled = true
+        manager.scheduleAutoBackup()
+        val vm = withContext(Dispatchers.Main) { viewModel() }
+        withContext(Dispatchers.Main) { vm.disconnectDrive() }
+        assertFalse(prefs.driveConnected)
+        assertFalse(prefs.autoBackupEnabled)
+        assertFalse(vm.autoBackupEnabled.value)
+        val work = WorkManager.getInstance(context).getWorkInfosForUniqueWork("daily_backup").get()
+        assertTrue("daily_backup still scheduled: ${work.map { it.state }}", work.all { it.state.isFinished })
     }
 
     private fun backedUpExpenses() = (BackupCodec.parse(file.readText()) as ParseResult.Ok).data.expenses!!.size

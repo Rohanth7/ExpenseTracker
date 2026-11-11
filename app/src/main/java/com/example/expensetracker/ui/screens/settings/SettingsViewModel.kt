@@ -183,11 +183,15 @@ class SettingsViewModel(
     }
 
     fun disconnectDrive() {
+        // Its toggle is only shown while Drive is connected; left on, the daily job kept running
+        // with no way to see or stop it.
+        val wasBackingUp = prefs.autoBackupEnabled
+        setAutoBackupEnabled(false)
         prefs.driveConnected = false
         prefs.driveAccountEmail = ""
         _driveConnected.value = false
         _driveAccountEmail.value = ""
-        snackbarMessage = "Google Drive disconnected"
+        snackbarMessage = if (wasBackingUp) "Google Drive disconnected. Automatic backup is off." else "Google Drive disconnected"
     }
 
     // Live, so a change made on the Overview, by a restore or by a reset shows here too.
@@ -279,9 +283,28 @@ class SettingsViewModel(
             .onFailure { snackbarMessage = "Restore failed. Your data hasn't been changed." }
     }
 
-    fun backUpToDriveNow() = withDrive(::backUpToDriveNow) { drive, token ->
-        drive.upload(token, BackupCodec.toJson(backupManager.snapshot()))
-        snackbarMessage = "Backed up to Google Drive"
+    /**
+     * Set when "Back up now" would replace a Drive backup that has records with this phone's
+     * empty one (a new or reset phone); the screen asks before [backUpToDriveNow] replaces it.
+     */
+    var confirmEmptyBackup by mutableStateOf(false)
+        private set
+
+    fun cancelEmptyBackup() { confirmEmptyBackup = false }
+
+    /** [replaceRecords]: the user confirmed replacing a backup that has records with an empty one. */
+    fun backUpToDriveNow(replaceRecords: Boolean = false) {
+        confirmEmptyBackup = false
+        withDrive({ backUpToDriveNow(replaceRecords) }) { drive, token ->
+            val snapshot = backupManager.snapshot()
+            // The same guard as the automatic backup (BackupCodec.mayReplace), but asking instead of skipping.
+            if (!replaceRecords && BackupCodec.needsConfirmation(snapshot) { drive.find(token)?.let { drive.download(token, it.id) } }) {
+                confirmEmptyBackup = true
+                return@withDrive
+            }
+            drive.upload(token, BackupCodec.toJson(snapshot))
+            snackbarMessage = "Backed up to Google Drive"
+        }
     }
 
     fun restoreFromDrive() = withDrive(::restoreFromDrive) { drive, token ->
@@ -502,4 +525,14 @@ class SettingsViewModel(
                 SettingsViewModel(context.applicationContext, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, SavingsGoalRepository(db.savingsGoalDao()), incomeRepo, backupManager, prefs) as T
         }
     }
+}
+
+/**
+ * What to say when Google sign-in didn't connect an account. [statusCode] is the ApiException's
+ * (12501 = the user closed the chooser, 7 = no network); null when Google gave no reason.
+ */
+internal fun driveSignInFailure(statusCode: Int?): String = when (statusCode) {
+    null, 12501 -> "Google sign-in was cancelled"
+    7 -> "Couldn't sign in to Google. Check your connection and try again."
+    else -> "Couldn't sign in to Google (error $statusCode)"
 }
