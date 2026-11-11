@@ -43,6 +43,7 @@ import com.example.expensetracker.data.repository.MerchantMappingRepository
 import com.example.expensetracker.data.repository.RecurringTemplateRepository
 import com.example.expensetracker.data.repository.SavingsGoalRepository
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.notification.BillReminderHelper
 import com.example.expensetracker.notification.BudgetAlertHelper
 import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.sms.ParsingRuleStore
@@ -477,6 +478,7 @@ class SettingsViewModel(
         DismissedSubscriptions.clear(appContext)
         PriceChangeAlerts.forgetAlerts(appContext)
         BudgetAlertHelper.forgetAlerts(appContext)
+        BillReminderHelper.forgetReminders(appContext)
         prefs.lastManualCategoryId = -1L
         com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
         setMonthStartDay(1)

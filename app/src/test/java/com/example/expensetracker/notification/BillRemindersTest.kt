@@ -27,4 +27,39 @@ class BillRemindersTest {
 
     @Test fun `auto-logged and switched-off bills get no reminder`() =
         assertEquals(emptyList<Pair<Bill, Int>>(), BillReminderHelper.dueReminders(listOf(bill(30, autoLog = true), bill(30, enabled = false)), at(2026, 11, 30)))
+
+    /** Runs the daily check on each of [days], remembering what was sent like the worker does; returns "day: days until due". */
+    private fun run(b: Bill, vararg days: Long): List<String> {
+        var sent = BillReminderHelper.Sent()
+        return days.flatMap { now ->
+            BillReminderHelper.remindersToSend(listOf(b), now) { sent }.map { r ->
+                sent = r.sent
+                "${Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.DAY_OF_MONTH)}: ${r.daysUntilDue}"
+            }
+        }
+    }
+
+    /** B-20: a bill was reminded about every day of its window (4 notifications for "3 days before"). */
+    @Test fun `a bill is reminded about on the first day of its window and on its due day`() {
+        val rent = bill(15, remind = 3)
+        assertEquals(listOf("12: 3", "15: 0"), run(rent, at(2026, 11, 11), at(2026, 11, 12), at(2026, 11, 13), at(2026, 11, 14), at(2026, 11, 15), at(2026, 11, 16)))
+    }
+
+    @Test fun `a check that runs twice in a day reminds once`() {
+        val rent = bill(15, remind = 3)
+        assertEquals(listOf("12: 3", "15: 0"), run(rent, at(2026, 11, 12, 9), at(2026, 11, 12, 21), at(2026, 11, 15, 9), at(2026, 11, 15, 21)))
+    }
+
+    @Test fun `if the first day was missed, the first check inside the window reminds`() {
+        val rent = bill(15, remind = 3)
+        assertEquals(listOf("14: 1", "15: 0"), run(rent, at(2026, 11, 14), at(2026, 11, 15)))
+        // Only the due day was caught: one reminder, not two
+        assertEquals(listOf("15: 0"), run(rent, at(2026, 11, 15)))
+    }
+
+    @Test fun `remind 0 days before is the due day alone, and next month reminds again`() {
+        assertEquals(listOf("15: 0"), run(bill(15, remind = 0), at(2026, 11, 14), at(2026, 11, 15)))
+        assertEquals(listOf("12: 3", "15: 0", "12: 3", "15: 0"),
+            run(bill(15, remind = 3), at(2026, 11, 12), at(2026, 11, 13), at(2026, 11, 15), at(2026, 12, 12), at(2026, 12, 14), at(2026, 12, 15)))
+    }
 }

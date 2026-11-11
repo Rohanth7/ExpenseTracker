@@ -14,6 +14,7 @@ import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.notification.BillReminderHelper
 import com.example.expensetracker.notification.BudgetAlertHelper
 import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.sms.ParsingRuleStore
@@ -139,6 +140,7 @@ class BackupManager(
         PriceChangeAlerts.forgetAlerts(context)
         BudgetAlertHelper.forgetAlerts(context)
         DismissedSubscriptions.clear(context)
+        if (data.bills != null) BillReminderHelper.forgetReminders(context)
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L

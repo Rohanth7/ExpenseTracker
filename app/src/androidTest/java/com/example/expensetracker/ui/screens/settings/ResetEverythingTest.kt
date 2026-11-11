@@ -51,7 +51,7 @@ class ResetEverythingTest {
     private lateinit var rules: ParsingRuleStore
     private lateinit var manager: BackupManager
     private lateinit var file: File
-    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs")
+    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs", "bill_reminder_prefs")
     private lateinit var savedFiles: Map<String, Map<String, *>>
     private lateinit var savedDismissed: Set<String>
     private var savedMonthStart = 1

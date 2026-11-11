@@ -65,7 +65,7 @@ class BackupRestoreTest {
         savedDismissed.forEach { DismissedSubscriptions.dismiss(context, it) }
     }
 
-    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs")
+    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs", "bill_reminder_prefs")
     private lateinit var savedFiles: Map<String, Map<String, *>>
     private lateinit var savedDismissed: Set<String>
 
@@ -319,7 +319,7 @@ class BackupRestoreTest {
     @Test fun restoreForgetsAlertHistoryAndDismissedSubscriptions() = runBlocking {
         appFiles.forEach { context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().putBoolean("restore_test", true).commit() }
         DismissedSubscriptions.dismiss(context, "restore test payee")
-        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList()))
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = emptyList()))
         appFiles.forEach { assertTrue("$it not cleared", context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()) }
         assertEquals(emptySet<String>(), DismissedSubscriptions.flow(context).value)
     }
