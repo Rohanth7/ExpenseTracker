@@ -210,4 +210,26 @@ class SmsParserTest {
         assertEquals("Credit Card", SmsParser.detectPaymentMethod("Rs.799.00 spent on your SBI Credit Card ending 1234"))
         assertEquals("Credit Card", SmsParser.detectPaymentMethod("Rs.799.00 spent on Card ending 1234 at DMART"))
     }
+
+    // B-23: a friend's "I paid Rs 500 to the shop" was saved as the user's expense: from an
+    // unknown sender, an amount and a debit word were enough.
+    @Test fun `a personal SMS from a phone number is not the user's payment`() {
+        listOf("+919876543210", "9876543210", "+91 98765 43210", "919876543210").forEach { sender ->
+            assertIgnored(sender, "I paid Rs 500 to the shop for you")
+            assertIgnored(sender, "Sent Rs. 2,000 to mom yesterday, will send the rest on Monday")
+            assertIgnored(sender, "Bro I spent INR 1500 on the tickets, pay me back")
+        }
+    }
+
+    @Test fun `a bank SMS that names the account still counts from a phone number`() {
+        // Some banks and forwarding services send from an ordinary number
+        assertDebit("+919876543210", "Rs 349.00 debited from A/c XX1234 on 16-Oct-26 to BIGBASKET. UPI Ref 412345678901", 349.0, "BIGBASKET")
+        assertNotNull(parse("9876543210", "INR 1,250.00 spent on Card ending 4321 at AMAZON on 12-Nov"))
+    }
+
+    @Test fun `short codes and sender names are not phone numbers`() {
+        // An amount and a debit word, no account reference: kept as before for these senders
+        assertNotNull(parse("567676", "Rs 120 paid to METRO RAIL via UPI Ref 998877"))
+        assertNotNull(parse("VM-NOBANK", "Rs 120 paid to METRO RAIL via UPI Ref 998877"))
+    }
 }
