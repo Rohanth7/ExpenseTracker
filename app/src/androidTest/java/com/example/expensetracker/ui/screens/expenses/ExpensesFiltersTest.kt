@@ -1,7 +1,9 @@
 package com.example.expensetracker.ui.screens.expenses
 
 import android.content.Context
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -23,6 +25,7 @@ import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -102,5 +105,26 @@ class ExpensesFiltersTest {
         compose.waitUntil(5_000) { shows("Cab") }
         assertEquals("goa", vm.tagFilter.value)
         assertTrue(!shows("Coffee"))
+    }
+
+    /** B-13: Edit had no way to move a filed expense back to pending. */
+    @Test fun editCanMoveAnExpenseBackToPending() {
+        compose.onNodeWithText("Dinner").performClick()
+        compose.onNode(hasText("Food", substring = true) and hasAnyAncestor(isDialog()) and hasText("Category")).performClick()
+        compose.onNodeWithText("Uncategorized (pending)").performClick()
+        compose.onNode(hasText("Save") and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(5_000) { runBlocking { db.expenseDao().getPending().first().any { it.description == "Dinner" } } }
+        // Pending rows say so
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Tap to categorize", substring = true)).fetchSemanticsNodes().size == 2 }
+    }
+
+    /** B-13: an expense whose category no longer exists showed "?" and wasn't pending. */
+    @Test fun anExpenseWhoseCategoryIsGoneBecomesPending() {
+        runBlocking {
+            db.expenseDao().insert(Expense(amount = 60.0, description = "Orphan", source = "Manual", categoryId = 999))
+            db.expenseDao().moveOrphansToPending()
+            assertEquals(listOf("Cab", "Orphan"), db.expenseDao().getPending().first().map { it.description }.sorted())
+            assertEquals(2, db.expenseDao().getAll().first().count { it.categoryId == food })
+        }
     }
 }

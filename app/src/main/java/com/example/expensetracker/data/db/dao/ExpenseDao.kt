@@ -73,6 +73,13 @@ interface ExpenseDao {
     @Query("UPDATE expenses SET categoryId = -1 WHERE categoryId = :categoryId")
     suspend fun resetCategoryForExpenses(categoryId: Long)
 
+    /**
+     * An expense pointing at a category that doesn't exist (a restored file that named one it
+     * didn't contain) becomes pending, so it's listed for categorizing instead of showing "?".
+     */
+    @Query("UPDATE expenses SET categoryId = -1 WHERE categoryId != -1 AND categoryId NOT IN (SELECT id FROM categories)")
+    suspend fun moveOrphansToPending()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(expense: Expense): Long
 

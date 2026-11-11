@@ -1147,7 +1147,7 @@ private fun EditExpenseDialog(
                 val editChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value = categoryDisplayText(selectedCategory, categories, "Uncategorized"),
+                        value = categoryDisplayText(selectedCategory, categories, UNCATEGORIZED),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Category") },
@@ -1155,6 +1155,11 @@ private fun EditExpenseDialog(
                         modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        // Back to pending, like the add dialog's "Choose later".
+                        DropdownMenuItem(
+                            text = { Text(UNCATEGORIZED, color = Muted) },
+                            onClick = { selectedCategoryId = -1L; expanded = false }
+                        )
                         editParents.forEach { parent ->
                             DropdownMenuItem(
                                 text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
@@ -1387,6 +1392,7 @@ private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Un
 }
 
 private const val CHOOSE_LATER = "Choose later (pending)"
+private const val UNCATEGORIZED = "Uncategorized (pending)"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
