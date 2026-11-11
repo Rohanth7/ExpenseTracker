@@ -129,14 +129,12 @@ fun ExpensesScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val weekTotal = remember(expenses, weekStartsOnMonday) {
-        expenses.filter { it.date >= weekStart(weekStartsOnMonday) }.sumOf { it.amount }
-    }
+    val weekTotal by viewModel.weekTotal.collectAsState()
     val grouped = remember(expenses, sortByAmount) { groupByDay(expenses, sortByAmount, { it.date }, { it.amount }) }
     val showIncome by viewModel.showIncome.collectAsState()
     val hasAnyIncome by viewModel.hasAnyIncome.collectAsState()
     val incomeGroups = remember(incomes, sortByAmount) { groupByDay(incomes, sortByAmount, { it.date }, { it.amount }) }
-    val weekIncome = remember(incomes, weekStartsOnMonday) { incomes.filter { it.date >= weekStart(weekStartsOnMonday) }.sumOf { it.amount } }
+    val weekIncome by viewModel.weekIncome.collectAsState()
 
 
     Scaffold(
@@ -1467,14 +1465,5 @@ private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T)
             val dateLabel = SimpleDateFormat("d MMM", Locale.getDefault()).format(c.time)
             DayGroup(key = "${key.first}_${key.second}_${key.third}", dayLabel = dayLabel, dateLabel = dateLabel, items = items.sortedByDescending(dateOf), total = items.sumOf(amountOf))
         }
-}
-
-private fun weekStart(startsOnMonday: Boolean = true): Long {
-    val cal = Calendar.getInstance()
-    val target = if (startsOnMonday) Calendar.MONDAY else Calendar.SUNDAY
-    val diff = (cal.get(Calendar.DAY_OF_WEEK) - target + 7) % 7
-    cal.add(Calendar.DAY_OF_YEAR, -diff)
-    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-    return cal.timeInMillis
 }
 

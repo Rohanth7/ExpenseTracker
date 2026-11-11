@@ -150,6 +150,20 @@ class ExpensesViewModel(
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
 
+    /**
+     * "THIS WEEK" in the header: everything spent (or earned) since the week began, whatever the
+     * search and filters show. It was summed from the filtered list.
+     */
+    val weekTotal: StateFlow<Double> = combine(_allExpenses, _weekStartsOnMonday, _now) { all, monday, now ->
+        val start = weekStart(now, monday)
+        all.filter { it.date >= start }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val weekIncome: StateFlow<Double> = combine(_allIncomes, _weekStartsOnMonday, _now) { all, monday, now ->
+        val start = weekStart(now, monday)
+        all.filter { it.date >= start }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
     /** Settings that can change while this screen is away (Settings, a backup restore). */
     fun syncPrefs() {
         _weekStartsOnMonday.value = prefs.weekStartsOnMonday
@@ -301,4 +315,14 @@ class ExpensesViewModel(
                     ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, incomeRepo, appContext, prefs, extras.createSavedStateHandle()) as T
             }
     }
+}
+
+/** Midnight at the start of the week [now] is in. */
+internal fun weekStart(now: Long, startsOnMonday: Boolean): Long {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+    val target = if (startsOnMonday) java.util.Calendar.MONDAY else java.util.Calendar.SUNDAY
+    val diff = (cal.get(java.util.Calendar.DAY_OF_WEEK) - target + 7) % 7
+    cal.add(java.util.Calendar.DAY_OF_YEAR, -diff)
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0); cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
 }
