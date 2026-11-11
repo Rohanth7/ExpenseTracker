@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.RecurringManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -22,11 +23,11 @@ import java.util.Calendar
 class RecurringBillTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var db: AppDatabase
-    private val prefs by lazy { context.getSharedPreferences("recurring_bill_test", Context.MODE_PRIVATE) }
+    private val prefs by lazy { PreferencesManager(context, "recurring_bill_test") }
 
     @Before fun setUp() {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
-        prefs.edit().clear().commit()
+        context.deleteSharedPreferences("recurring_bill_test")
     }
     @After fun tearDown() { db.close() }
 

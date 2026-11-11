@@ -1,23 +1,21 @@
 package com.example.expensetracker.data.recurring
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.room.withTransaction
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Income
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
+import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.sms.CaptureDuplicates
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import java.util.Calendar
 
 object RecurringManager {
-    private const val PREFS = "expense_tracker_prefs"
-
     suspend fun applyIfNeeded(context: Context) {
         val cal = Calendar.getInstance()
         val db = AppDatabase.getInstance(context)
-        applyBills(db, context.getSharedPreferences(PREFS, Context.MODE_PRIVATE), cal)
+        applyBills(db, PreferencesManager(context), cal)
 
         // The widget's forecast counts logged income.
         if (applyRecurringIncome(db, cal) > 0) WidgetUpdateHelper.update(context)
@@ -28,14 +26,13 @@ object RecurringManager {
      * that already has an expense for the same payee and amount (the bank's SMS for the same
      * Netflix charge, or one added by hand) is paid: the bill isn't logged on top of it.
      */
-    suspend fun applyBills(db: AppDatabase, prefs: SharedPreferences, cal: Calendar) {
-        val currentMonth = "${cal.get(Calendar.YEAR)}_${cal.get(Calendar.MONTH)}"
+    suspend fun applyBills(db: AppDatabase, prefs: PreferencesManager, cal: Calendar) {
         val bills = db.billDao().getAutoLogEnabled()
         val (monthStart, monthEnd) = RecurringSchedule.monthBounds(cal)
 
         bills.forEach { bill ->
-            val key = "bill_applied_${currentMonth}_${bill.id}"
-            if (prefs.getBoolean(key, false)) return@forEach
+            val month = BillMonth(bill.id, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+            if (prefs.isBillMonthDone(month)) return@forEach
             // Logged on its due day, dated that day (it used to be logged on the 1st).
             val dueDate = RecurringSchedule.dueDateIfReached(bill.dueDayOfMonth, cal) ?: return@forEach
 
@@ -54,7 +51,7 @@ object RecurringManager {
                     )
                 )
             }
-            prefs.edit().putBoolean(key, true).apply()
+            prefs.markBillMonthDone(month)
         }
     }
 

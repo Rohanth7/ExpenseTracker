@@ -15,6 +15,8 @@ import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.BillMonth
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRule
 import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.first
@@ -206,5 +208,45 @@ class BackupRestoreTest {
         targetPrefs.lastManualCategoryId = 10
         manager(target, targetPrefs).restore(manager(source, sourcePrefs).snapshot())
         assertEquals(-1L, targetPrefs.lastManualCategoryId)
+    }
+
+    private fun recurringExpenses() = runBlocking { target.expenseDao().getAll().first().filter { it.source == "Recurring" }.map { it.description } }
+    private fun thisMonth(billId: Long) = Calendar.getInstance().let { BillMonth(billId, it.get(Calendar.YEAR), it.get(Calendar.MONTH) + 1) }
+    private val rentDueOnThe1st = Bill(id = 5, name = "Rent", amount = 22000.0, dueDayOfMonth = 1, autoLog = true)
+
+    /** B-01: the phone logged the bill, then a backup from before its due day came back without that expense. */
+    @Test fun aBillThePhoneHadLoggedIsLoggedAgainAfterRestoringAnEarlierBackup() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(5))
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf("Rent"), recurringExpenses())
+        // Once: the next launch finds the month handled
+        RecurringManager.applyBills(target, targetPrefs, Calendar.getInstance())
+        assertEquals(listOf("Rent"), recurringExpenses())
+    }
+
+    /** The auto-logged expense was deleted on purpose before the backup: its month comes back handled. */
+    @Test fun aBillExpenseDeletedBeforeTheBackupStaysDeleted() = runBlocking {
+        source.billDao().insert(rentDueOnThe1st)
+        RecurringManager.applyBills(source, sourcePrefs, Calendar.getInstance())
+        source.expenseDao().getAll().first().forEach { source.expenseDao().delete(it) }
+        val json = BackupCodec.toJson(manager(source, sourcePrefs).snapshot())
+        manager(target, targetPrefs).restore((BackupCodec.parse(json) as ParseResult.Ok).data)
+        assertEquals(emptyList<String>(), recurringExpenses())
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(5)))
+    }
+
+    /** A file from before bill months were backed up: logged unless the month already has the expense. */
+    @Test fun anOlderBackupLogsADueBillOnlyIfItsExpenseIsMissing() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(5))
+        val logged = Expense(id = 1, amount = 22000.0, description = "Rent", source = "Recurring", date = System.currentTimeMillis())
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = listOf(logged), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf("Rent"), recurringExpenses())
+    }
+
+    /** A v1 file has no bills: the phone's bills and their handled months stay. */
+    @Test fun aBackupWithoutBillsKeepsThePhonesBillMonths() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(1))
+        manager(target, targetPrefs).restore(BackupData(version = 1, categories = emptyList(), expenses = emptyList()))
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(1)))
     }
 }

@@ -9,6 +9,7 @@ import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.data.recurring.BillMonth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -205,5 +206,15 @@ class BackupCodecTest {
         // Once something is entered again, backups go on as before
         val next = reset.copy(incomes = listOf(Income(amount = 5.0, description = "Gift", date = 1)))
         assertTrue(BackupCodec.mayReplace(withRecords, next))
+    }
+
+    /** B-01: the months auto-log bills were handled in travel with the bills. */
+    @Test fun `bill months round-trip and a file without them still reads`() {
+        val months = listOf(BillMonth(billId = 3, year = 2026, month = 11))
+        val data = BackupData(categories = emptyList(), expenses = emptyList(),
+            bills = listOf(Bill(id = 3, name = "Rent", amount = 22000.0, dueDayOfMonth = 5, autoLog = true)), billMonths = months)
+        assertEquals(months, ok(BackupCodec.toJson(data)).billMonths)
+        assertEquals(null, ok("""{"version":3,"categories":[],"expenses":[],"bills":[]}""").billMonths)
+        assertTrue(invalid("""{"version":3,"categories":[],"expenses":[],"billMonths":[{"billId":3,"year":2026,"month":13}]}""").contains("bill month 1"))
     }
 }

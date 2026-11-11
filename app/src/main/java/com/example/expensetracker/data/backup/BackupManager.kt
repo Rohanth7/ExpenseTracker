@@ -75,6 +75,7 @@ class BackupManager(
                 incomes = db.incomeDao().getAllOnce(),
                 recurringIncomes = db.recurringIncomeDao().getAllOnce(),
                 recurringIncomeMonths = db.recurringIncomeDao().getMonthsOnce(),
+                billMonths = p.billMonths,
                 settings = BackupSettings(
                     monthlyIncome = p.monthlyIncome,
                     budgetAlertsEnabled = p.budgetAlertsEnabled,
@@ -112,6 +113,9 @@ class BackupManager(
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L
+        // Which months the bills were logged in describes the restored bills and expenses, never
+        // the phone's: its own record would skip a bill the backup has no expense for.
+        if (data.bills != null) prefs.billMonths = data.billMonths.orEmpty()
         data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs
@@ -122,14 +126,14 @@ class BackupManager(
             s.monthStartDay?.let { p.monthStartDay = it }
             s.priceAlertsEnabled?.let { p.priceAlertsEnabled = it }
         }
-        // Log recurring income that's due (a backup from before payday). The restore is complete
-        // either way, and the next launch tries again, so a failure here mustn't fail it.
-        if (data.recurringIncomes != null) {
-            try {
-                RecurringManager.applyRecurringIncome(db, Calendar.getInstance())
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-            }
+        // Log bills and recurring income that are due (a backup from before the due day). The
+        // restore is complete either way, and the next launch tries again, so a failure here
+        // mustn't fail it.
+        try {
+            if (data.bills != null) RecurringManager.applyBills(db, prefs, Calendar.getInstance())
+            if (data.recurringIncomes != null) RecurringManager.applyRecurringIncome(db, Calendar.getInstance())
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
         }
         // Screens follow the month start live; tests use their own prefs and leave the app's alone.
         if (preferences == null) MonthStartDay.reload(context)
