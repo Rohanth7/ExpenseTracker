@@ -74,14 +74,28 @@ class RequiredFieldsTest {
         assertEquals(0.5, added!!, 0.0)
     }
 
-    /** A bill saved with ₹0 before B-02 opens with the amount flagged and can't be saved until it has one. */
-    @Test fun aBillSavedWithZeroNeedsAnAmountToBeSavedAgain() {
+    /** Review of B-02: a reminder-only bill saved with ₹0 before the rule couldn't be edited at all. */
+    @Test fun aReminderBillSavedWithZeroCanStillBeEdited() {
         var saved: Bill? = null
         compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 0.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
+        retype("Due day", "7")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(0.0 to 7, saved!!.amount to saved!!.dueDayOfMonth)
+        // Auto-log adds the amount as an expense every month: now it needs one
+        compose.onNodeWithText("Auto-log expense monthly").performClick()
         compose.onNodeWithText("Save").assertIsNotEnabled()
         retype("Amount (₹)", "15000")
         compose.onNodeWithText("Save").assertIsEnabled().performClick()
         assertEquals(15000.0, saved!!.amount, 0.0)
+    }
+
+    /** A bill that has an amount can't be edited down to ₹0. */
+    @Test fun aBillWithAnAmountCantBeSetToZero() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 15000.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
+        retype("Amount (₹)", "0")
+        compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        assertNull(saved)
     }
 
     /** B-19: the category is optional, but the first one was pre-selected and couldn't be unpicked. */

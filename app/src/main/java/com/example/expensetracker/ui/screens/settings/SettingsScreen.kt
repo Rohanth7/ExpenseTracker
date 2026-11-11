@@ -1220,13 +1220,16 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
     var name by rememberSaveable { mutableStateOf(bill.name) }
     var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
-    // Above 0: an auto-log bill adds its amount as an expense every month.
-    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
+    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
+    // Above 0: an auto-log bill adds its amount as an expense every month. A reminder-only bill
+    // saved with ₹0 before that rule may keep its 0, so its name, due day and reminder can still
+    // be changed; turning auto-log on asks for an amount.
+    val amountText = if (bill.amount == 0.0 && !autoLog) rememberAmountText(amount) { parseAmountOrZero(it) }
+        else rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf(bill.dueDayOfMonth.toString()) }
     var reminderDays by rememberSaveable { mutableStateOf(bill.reminderDays.toString()) }
     var selectedCategoryId by rememberSaveable { mutableStateOf(bill.categoryId) }
     var expanded by rememberSaveable { mutableStateOf(false) }
-    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
     val dayValue = wholeNumberIn(dueDay, 1..31)
     val remindValue = wholeNumberIn(reminderDays, 0..14)
