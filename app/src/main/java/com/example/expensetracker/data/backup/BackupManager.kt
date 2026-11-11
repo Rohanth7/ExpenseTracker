@@ -22,6 +22,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
@@ -175,10 +177,36 @@ class BackupManager(
         }.isSuccess
     }
 
+    /**
+     * Reads and checks a file the user picked. The picker offers any file, so one too large to be
+     * a backup (a video) is refused by its size, before it is read into memory.
+     */
     suspend fun readFromUri(uri: Uri): ParseResult = withContext(Dispatchers.IO) {
+        val tooLarge = ParseResult.Invalid("This file is too large to be a MyMoney backup (over ${MAX_BACKUP_BYTES / (1024 * 1024)} MB).")
+        val size = runCatching { context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } }.getOrNull()
+        if (size != null && size > MAX_BACKUP_BYTES) return@withContext tooLarge
+        // Counted while reading too: not every file provider says how large a file is.
         val text = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            context.contentResolver.openInputStream(uri)?.use { readCapped(it, MAX_BACKUP_BYTES) ?: return@withContext tooLarge }
         }.getOrNull() ?: return@withContext ParseResult.Invalid("Couldn't read the file.")
         BackupCodec.parse(text)
+    }
+
+    companion object {
+        /** Far above any real backup: 100,000 expenses come to about 25 MB. */
+        const val MAX_BACKUP_BYTES = 50 * 1024 * 1024
+
+        /** [input] as text, or null once it turns out longer than [maxBytes]. */
+        internal fun readCapped(input: InputStream, maxBytes: Int): String? {
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (out.size() + read > maxBytes) return null
+                out.write(buffer, 0, read)
+            }
+            return out.toString(Charsets.UTF_8.name())
+        }
     }
 }

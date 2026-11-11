@@ -2,6 +2,7 @@ package com.example.expensetracker.data.backup
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -29,6 +30,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.RandomAccessFile
 import java.util.Calendar
 
 /** Runs on a device against throwaway in-memory databases; the app's real data isn't touched. */
@@ -319,5 +322,20 @@ class BackupRestoreTest {
         manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList()))
         appFiles.forEach { assertTrue("$it not cleared", context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()) }
         assertEquals(emptySet<String>(), DismissedSubscriptions.flow(context).value)
+    }
+
+    /** B-24: any file can be picked as a backup; one too large to be one is refused before it's read. */
+    @Test fun aFileTooLargeToBeABackupIsRefusedAndOtherFilesSayWhatTheyAre() = runBlocking {
+        val large = File(context.cacheDir, "restore_test_large.bin")
+        val binary = File(context.cacheDir, "restore_test_binary.bin")
+        try {
+            RandomAccessFile(large, "rw").use { it.setLength(BackupManager.MAX_BACKUP_BYTES + 1L) }
+            binary.writeBytes(ByteArray(4096) { (it * 31).toByte() })
+            val manager = manager(target, targetPrefs)
+            assertEquals(ParseResult.Invalid("This file is too large to be a MyMoney backup (over 50 MB)."), manager.readFromUri(Uri.fromFile(large)))
+            assertEquals(ParseResult.Invalid("This file isn't a MyMoney backup."), manager.readFromUri(Uri.fromFile(binary)))
+        } finally {
+            large.delete(); binary.delete()
+        }
     }
 }
