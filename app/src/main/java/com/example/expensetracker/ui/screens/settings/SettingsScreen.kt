@@ -1110,7 +1110,8 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
     val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf("") }
     var reminderDays by rememberSaveable { mutableStateOf("3") }
-    var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    // Optional: none unless the user picks one.
+    var selectedCategoryId by rememberSaveable { mutableStateOf(-1L) }
     var expanded by rememberSaveable { mutableStateOf(false) }
     var autoLog by rememberSaveable { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
@@ -1155,12 +1156,13 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Category (optional)",
-                            onValueChange = {}, readOnly = true, label = { Text("Category") },
+                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
+                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
+                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
                                 DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
                             }
@@ -1260,12 +1262,13 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Category (optional)",
-                            onValueChange = {}, readOnly = true, label = { Text("Category") },
+                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
+                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
+                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
                                 DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
                             }
@@ -1284,6 +1287,9 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
+
+/** A bill's category picker when it has none: an auto-logged expense is then pending. */
+private const val NO_CATEGORY = "None"
 
 /** 100 years: enough for any loan, and keeps the month arithmetic in range. */
 private const val MAX_TENURE_MONTHS = 1200

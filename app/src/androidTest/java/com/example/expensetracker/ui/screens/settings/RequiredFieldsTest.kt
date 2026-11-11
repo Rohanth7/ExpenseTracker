@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.entity.Bill
+import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.screens.dashboard.AddGoalDialog
 import org.junit.Assert.assertEquals
@@ -81,6 +82,35 @@ class RequiredFieldsTest {
         retype("Amount (₹)", "15000")
         compose.onNodeWithText("Save").assertIsEnabled().performClick()
         assertEquals(15000.0, saved!!.amount, 0.0)
+    }
+
+    /** B-19: the category is optional, but the first one was pre-selected and couldn't be unpicked. */
+    @Test fun aBillHasNoCategoryUnlessOneIsPicked() {
+        val categories = listOf(Category(id = 7, name = "Food"), Category(id = 8, name = "Rent"))
+        var category: Long? = null
+        compose.setContent { AddBillDialog(categories, onDismiss = {}, onConfirm = { _, _, _, _, c, _ -> category = c }) }
+        type("Name (e.g. Rent, Netflix)", "Gym"); type("Amount (₹)", "900"); type("Due day", "5")
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(-1L, category)
+
+        // Picked, then unpicked again
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("📦 Rent").performClick()
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(8L, category)
+        compose.onNodeWithText("📦 Rent").performClick()
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(-1L, category)
+    }
+
+    @Test fun editingABillCanRemoveItsCategory() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Gym", amount = 900.0, dueDayOfMonth = 5, categoryId = 7), listOf(Category(id = 7, name = "Food")), onDismiss = {}, onConfirm = { saved = it }) }
+        compose.onNode(hasText("Food", substring = true) and hasText("Category (optional)")).performClick()
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("Save").performClick()
+        assertEquals(-1L, saved!!.categoryId)
     }
 
     @Test fun editingABillCantBlankItsName() {
