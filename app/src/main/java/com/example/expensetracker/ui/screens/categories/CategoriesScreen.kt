@@ -637,7 +637,7 @@ internal fun CategoryDialog(
     val parsedLimit = limit.value
     // Like the bill and loan dialogs: Save is enabled only when it will save, and a wrong value
     // says why. A blank name isn't flagged before anything is typed.
-    val nameError = categoryNameError(name, siblingNames)
+    val nameError = categoryNameError(name, siblingNames, current = initial?.name)
     val canSave = nameError == null && parsedLimit != null
 
     AppAlertDialog(
@@ -656,7 +656,8 @@ internal fun CategoryDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH) name = it },
+                    // A name already longer than the limit can be shortened, not lengthened.
+                    onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH || it.length < name.length) name = it },
                     label = { Text("Name") },
                     singleLine = true,
                     isError = name.isNotBlank() && nameError != null,

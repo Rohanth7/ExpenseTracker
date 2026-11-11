@@ -30,12 +30,15 @@ const val MAX_CATEGORY_NAME_LENGTH = 40
 /**
  * Why [name] can't be saved as a category name, or null if it can. [siblings] are the other names
  * under the same parent (top-level categories, or one category's subcategories): two that differ
- * only by case or outer spaces can't be told apart in a picker.
+ * only by case or outer spaces can't be told apart in a picker. [current] is the name the category
+ * being edited already has: keeping it is always allowed, so a category from before these rules
+ * (a long name, a twin that differs by case) can still have its limit, icon and colour changed.
  */
-fun categoryNameError(name: String, siblings: List<String>): String? {
+fun categoryNameError(name: String, siblings: List<String>, current: String? = null): String? {
     val trimmed = name.trim()
     return when {
         trimmed.isEmpty() -> "Enter a name"
+        current != null && trimmed == current.trim() -> null
         trimmed.length > MAX_CATEGORY_NAME_LENGTH -> "Use $MAX_CATEGORY_NAME_LENGTH characters or fewer"
         siblings.any { it.trim().equals(trimmed, ignoreCase = true) } -> "There's already one with this name"
         else -> null

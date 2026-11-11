@@ -69,4 +69,14 @@ class CategoryDialogTest {
         save.performClick()
         assertEquals("a".repeat(40), saved?.first)
     }
+
+    /** Review of B-05: a category from before the rules (a twin by case, a long name) couldn't have its limit changed. */
+    @Test fun aCategoryWithANameTheRulesWouldRefuseCanStillBeEdited() {
+        val long = "Household and everything else we buy for the flat"
+        show(initial = Category(id = 2, name = long), siblings = listOf("Food", "household and everything else we buy for the flat"))
+        save.assertIsEnabled()
+        retype("Monthly limit ₹ (optional)", "900")
+        save.assertIsEnabled().performClick()
+        assertEquals(long to 900.0, saved)
+    }
 }

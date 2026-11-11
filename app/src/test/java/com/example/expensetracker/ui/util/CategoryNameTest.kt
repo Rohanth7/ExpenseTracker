@@ -34,4 +34,20 @@ class CategoryNameTest {
         assertNull(categoryNameError("a".repeat(MAX_CATEGORY_NAME_LENGTH), siblings))
         assertEquals("Use 40 characters or fewer", categoryNameError("a".repeat(MAX_CATEGORY_NAME_LENGTH + 1), siblings))
     }
+
+    /** Review of B-05: the new rules also judged the name a category already had, so it couldn't be saved at all. */
+    @Test fun `a category keeps the name it already has, whatever the rules say about it`() {
+        val long = "a".repeat(MAX_CATEGORY_NAME_LENGTH + 20)
+        assertNull(categoryNameError(long, siblings, current = long))
+        // "food" beside an older "Food": its limit can still be edited
+        assertNull(categoryNameError("food", siblings, current = "food"))
+        assertNull(categoryNameError(" food ", siblings, current = "food"))
+    }
+
+    @Test fun `changing the name is judged like a new one`() {
+        assertEquals("There's already one with this name", categoryNameError("Rent", siblings, current = "food"))
+        assertEquals("Use 40 characters or fewer", categoryNameError("b".repeat(41), siblings, current = "a".repeat(60)))
+        assertEquals("Enter a name", categoryNameError(" ", siblings, current = "food"))
+        assertNull(categoryNameError("Travel", siblings, current = "food"))
+    }
 }
