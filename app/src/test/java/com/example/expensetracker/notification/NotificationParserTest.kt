@@ -75,6 +75,34 @@ class NotificationParserTest {
         assertNull(NotificationParser.parse("You could win ₹500", "Pay ₹50 to a friend and win a scratch card", gpay))
     }
 
+    // B-22: "pending", "failed", "processing" in the payee's name dropped a completed payment,
+    // because those words were looked for before "paid ₹X to".
+    @Test fun `a completed payment is kept whatever the payee is called`() {
+        val tx = NotificationParser.parse("Payment successful", "You paid ₹200 to Pending Dues Store", gpay)
+        assertEquals(200.0, tx!!.amount, 0.001)
+        assertEquals("GPay → Pending Dues Store", tx.description)
+        listOf(
+            "Paid ₹150 to Failed Startups Cafe" to "",
+            "₹99 paid to Processing Hub" to "Tap to view details",
+            "Sent ₹500 to Scheduled Castes Welfare Trust" to "",
+            "Payment successful" to "Paid ₹75 to Declined Records.\nYou won a scratch card!",
+        ).forEach { (title, body) -> assertNotNull("$title / $body", NotificationParser.parse(title, body, phonepe)) }
+    }
+
+    @Test fun `a payment that failed or hasn't gone through is still ignored, payee or not`() {
+        listOf(
+            "Paid ₹300 to Zomato" to "Payment pending at your bank",
+            "Paid ₹300 to Zomato. Payment pending at your bank" to "",
+            "Payment failed" to "You paid ₹200 to Swiggy",
+            "Payment processing" to "₹500 paid to Ramesh",
+            "Paid ₹200 to Ravi is pending" to "",
+            "Sent ₹500 to Ravi - failed" to "",
+            "Payment of ₹300 to Zomato failed" to "",
+            "₹450 will be debited" to "Paid ₹450 to Netflix every month",
+            "Paid ₹200 to Pending Dues Store" to "Your payment is processing",
+        ).forEach { (title, body) -> assertNull("$title / $body", NotificationParser.parse(title, body, gpay)) }
+    }
+
     // BUG-09: message rules were only applied to SMS.
     @Test fun `a message rule applies to payment-app notifications`() {
         val text = "Paid ₹99 to Google Play"

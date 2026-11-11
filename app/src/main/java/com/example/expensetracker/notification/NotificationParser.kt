@@ -51,11 +51,32 @@ object NotificationParser {
     )
     private val COMPLETED_KEYWORDS = listOf("payment successful", "payment done", "payment complete", "successfully paid", "paid successfully")
 
-    // Never a completed payment, whatever else the notification says.
+    // Never a completed payment, whatever else the notification says (the payee's own name aside).
     private val NOT_COMPLETED = listOf(
         "will be debited", "will be deducted", "scheduled", "failed", "declined", "unsuccessful",
         "pending", "processing"
     )
+
+    // Where a payee's name after "paid ₹X to" ends: its sentence, a dash, or a word no name has.
+    private val PAYEE_END = Regex(
+        """[.!?,;:\n]|\s[-–—|]\s|\s(?:is|was|has|have|will|via|using|from|on|at|for|but|and)\s""", RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * [part] (the title, or one line of the text) without the names it says were paid: "Paid ₹200
+     * to Pending Dues Store" is a completed payment to a shop called that, not a pending one.
+     */
+    private fun withoutPayees(part: String): String {
+        val kept = StringBuilder()
+        var from = 0
+        PAID_TO.findAll(part).forEach { paidTo ->
+            val nameStart = paidTo.range.last + 1
+            if (nameStart < from) return@forEach
+            kept.append(part, from, nameStart)
+            from = PAYEE_END.find(part, nameStart)?.range?.first ?: part.length
+        }
+        return kept.append(part, from, part.length).toString()
+    }
 
     // Reminders, offers and requests; ignored only when the notification isn't a completed payment.
     private val EXCLUDE_KEYWORDS = listOf(
@@ -74,7 +95,8 @@ object NotificationParser {
 
     fun parse(title: String, body: String, packageName: String): ParsedTransaction? {
         val fullText = "$title $body"
-        if (TextRules.containsAnyWord(fullText, NOT_COMPLETED)) return null
+        // Title and lines apart, so a name ends where its line does.
+        if ((body.lines() + title).any { TextRules.containsAnyWord(withoutPayees(it), NOT_COMPLETED) }) return null
 
         val paidTo = PAID_TO.containsMatchIn(fullText)
         val completed = paidTo || TextRules.containsAnyWord(fullText, COMPLETED_KEYWORDS)
