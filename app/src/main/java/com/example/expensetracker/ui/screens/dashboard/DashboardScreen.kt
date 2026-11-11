@@ -65,6 +65,7 @@ fun DashboardScreen(
     var showAddGoalDialog by rememberSaveable { mutableStateOf(false) }
     var showNotifCenter by rememberSaveable { mutableStateOf(false) }
     var goalToUpdate by rememberSaveableItem(state.savingsGoals) { it.id }
+    var goalToDelete by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
 
@@ -526,7 +527,7 @@ fun DashboardScreen(
                 SavingsGoalCard(
                     goal = goal,
                     onAdd = { goalToUpdate = goal },
-                    onDelete = { viewModel.deleteSavingsGoal(goal) },
+                    onDelete = { goalToDelete = goal },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
             }
@@ -674,6 +675,17 @@ fun DashboardScreen(
         )
     }
 
+    goalToDelete?.let { goal ->
+        AppAlertDialog(onDismissRequest = { goalToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Delete goal?") },
+            text = {
+                Text(if (goal.currentAmount > 0) "\"${goal.name}\" and the ₹${fmtINR(goal.currentAmount)} saved in it will be removed."
+                     else "\"${goal.name}\" will be removed.")
+            },
+            confirmButton = { TextButton(onClick = { viewModel.deleteSavingsGoal(goal); goalToDelete = null }) { Text("Delete", color = Coral) } },
+            dismissButton = { TextButton(onClick = { goalToDelete = null }) { Text("Cancel", color = Muted) } })
+    }
+
     goalToUpdate?.let { goal ->
         DepositDialog(
             goalName = goal.name,
@@ -726,7 +738,7 @@ private fun SavingsGoalCard(
                     Icon(Icons.Default.Add, null, tint = Jade, modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Delete, "Delete goal ${goal.name}", tint = Muted, modifier = Modifier.size(16.dp))
                 }
             }
         }
