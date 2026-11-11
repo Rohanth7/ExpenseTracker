@@ -68,6 +68,16 @@ fun DashboardScreen(
     var goalToDelete by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
+    // "As of now" figures move on when the screen comes back (past midnight, a new budget month,
+    // a changed alert threshold).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val spentFraction = if (state.monthlyIncome > 0)
         (state.totalSpent / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat() else 0f

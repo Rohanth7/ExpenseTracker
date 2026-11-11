@@ -98,22 +98,30 @@ class DashboardViewModel(
     private val billRepo: BillRepository,
     private val loanRepo: LoanRepository,
     private val incomeRepo: IncomeRepository,
-    private val prefs: PreferencesManager
+    private val prefs: PreferencesManager,
+    /** The time the Overview is computed for; a test can move it past midnight. */
+    private val clock: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
 
     private val _monthOffset = MutableStateFlow(0)
 
+    // The Overview is "as of now": today's safe-to-spend, days left, the month itself. It was only
+    // recomputed when data changed, so left open past midnight or a month's end it stayed on
+    // yesterday. The screen calls refresh() each time it comes back.
+    private val _now = MutableStateFlow(clock())
+    fun refresh() { _now.value = clock() }
+
     val uiState: StateFlow<DashboardUiState> = combine(
-        combine(categoryRepo.allCategories, expenseRepo.allExpenses, prefs.monthlyIncomeFlow(), _monthOffset) { cats, exps, inc, off ->
-            Quad(cats, exps, inc, off)
+        combine(categoryRepo.allCategories, expenseRepo.allExpenses, prefs.monthlyIncomeFlow(), _monthOffset, _now) { cats, exps, inc, off, now ->
+            Quad(cats, exps, inc, off to now)
         },
         combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
         DismissedSubscriptions.flow(context),
         MonthStartDay.flow(context),
         combine(incomeRepo.allIncomes, incomeRepo.allRecurring, incomeRepo.allMonths, ::Triple)
     ) { quad, (goals, bills, loans), dismissedSubscriptions, startDay, (incomes, recurringIncomes, recurringMonths) ->
-        val (categories, expenses, expectedIncome, offset) = quad
-        val nowMs = System.currentTimeMillis()
+        val (categories, expenses, expectedIncome, offsetAndNow) = quad
+        val (offset, nowMs) = offsetAndNow
         // A budget month runs from the user's start day (1 = calendar month); see BudgetPeriod.
         val cycle = BudgetPeriod.forOffset(nowMs, startDay, offset)
         val cycleIncome = IncomeForecast.cycleIncome(incomes, recurringIncomes, expectedIncome, nowMs, cycle, recurringMonths)
@@ -142,8 +150,8 @@ class DashboardViewModel(
         val daysLeft = if (offset != 0) 0 else BudgetPeriod.daysLeft(nowMs, startDay).coerceAtLeast(1)
         val safeToSpendToday = if (offset == 0 && surplus > 0) surplus / daysLeft else 0.0
 
-        val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        val daysInMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
+        val today = Calendar.getInstance().apply { timeInMillis = nowMs }.get(Calendar.DAY_OF_MONTH)
+        val daysInMonth = Calendar.getInstance().apply { timeInMillis = nowMs }.getActualMaximum(Calendar.DAY_OF_MONTH)
         val upcomingBills = if (offset == 0) {
             bills.filter { it.isEnabled && !it.autoLog }.mapNotNull { bill ->
                 val effectiveDueDay = bill.dueDayOfMonth.coerceAtMost(daysInMonth)
@@ -205,7 +213,7 @@ class DashboardViewModel(
             smartInsight = smartInsight,
             notifItems = notifItems,
             subscriptions = if (offset == 0)
-                SubscriptionDetector.detect(expenses, System.currentTimeMillis(), dismissedSubscriptions, bills.map { it.name })
+                SubscriptionDetector.detect(expenses, nowMs, dismissedSubscriptions, bills.map { it.name })
             else emptyList()
         )
     // Off the main thread: subscription detection goes through the whole history.
