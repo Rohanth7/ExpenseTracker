@@ -3,7 +3,9 @@ package com.example.expensetracker.ui.screens.expenses
 import android.content.Context
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
@@ -12,6 +14,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.export.DateFilter
+import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
@@ -21,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -65,5 +70,37 @@ class ExpensesFiltersTest {
         compose.runOnUiThread { vm.setSearchQuery(""); vm.setCategoryFilter(food) }
         compose.waitUntil(5_000) { !shows("Cab") && shows("Coffee") }
         compose.onNodeWithText("₹1,330").assertExists()
+    }
+
+    /** B-10: the ✕ took the sort toggle's place while a search, amount or date filter was on. */
+    @Test fun sortStaysReachableWhileSearchingOrFiltering() {
+        compose.runOnUiThread { vm.setSearchQuery("C"); vm.setMinAmount(100.0); vm.setDateFilter(DateFilter(ExportPreset.THIS_MONTH)) }
+        compose.onNodeWithContentDescription("Sort by amount").performClick()
+        compose.waitUntil(5_000) { vm.sortByAmount.value }
+        compose.onNodeWithContentDescription("Sort by date").assertExists()
+        compose.onNodeWithContentDescription("Filters").assertExists()
+    }
+
+    /** B-10: the ✕ in the search bar also reset the category and tag chips, dates and amount limits. */
+    @Test fun clearingTheSearchKeepsTheOtherFilters() {
+        compose.runOnUiThread { vm.setCategoryFilter(food); vm.setMinAmount(100.0); vm.setSearchQuery("Din") }
+        compose.waitUntil(5_000) { !shows("Coffee") }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.waitUntil(5_000) { shows("Coffee") }
+        assertEquals("", vm.searchQuery.value)
+        assertEquals(food, vm.categoryFilter.value)
+        assertEquals(100.0, vm.minAmount.value!!, 0.0)
+        // Nothing to clear: no ✕
+        compose.onNodeWithContentDescription("Clear search").assertDoesNotExist()
+        assertTrue(!shows("Cab"))
+    }
+
+    @Test fun clearingTheSearchKeepsTheTagChip() {
+        compose.runOnUiThread { vm.setTagFilter("goa"); vm.setSearchQuery("Din") }
+        compose.waitUntil(5_000) { !shows("Cab") }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.waitUntil(5_000) { shows("Cab") }
+        assertEquals("goa", vm.tagFilter.value)
+        assertTrue(!shows("Coffee"))
     }
 }

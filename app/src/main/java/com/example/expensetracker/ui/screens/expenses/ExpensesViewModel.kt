@@ -180,15 +180,6 @@ class ExpensesViewModel(
     fun clearDateRange() { _dateFilter.value = null }
     fun setMinAmount(amt: Double?) { _minAmount.value = amt }
     fun setMaxAmount(amt: Double?) { _maxAmount.value = amt }
-    fun clearAllFilters() {
-        _searchQuery.value = ""
-        _categoryFilter.value = -1L
-        _tagFilter.value = null
-        _dateFilter.value = null
-        _minAmount.value = null
-        _maxAmount.value = null
-    }
-
     fun renameTag(oldName: String, newName: String) = viewModelScope.launch {
         val name = Tags.cleanName(newName) ?: return@launch
         Tags.renameEverywhere(expenseRepo, incomeRepo, oldName, name)

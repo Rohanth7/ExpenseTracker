@@ -244,23 +244,25 @@ fun ExpensesScreen(
                         onValueChange = { viewModel.setSearchQuery(it) },
                         modifier = Modifier.weight(1f)
                     )
-                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null || dateRange != null) {
-                        Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.clearAllFilters() })
-                    } else {
-                        Icon(
-                            Icons.Default.FilterList,
-                            null,
-                            tint = if (sortByAmount) Jade else Muted,
-                            modifier = Modifier.size(16.dp).clickable { 
-                                viewModel.toggleSortOrder()
-                                val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                    // The ✕ belongs to the search text and clears only that. Dates have their own
+                    // chip below, amount limits the filters dialog's Clear, and the category and
+                    // tag chips are untouched. Sort stays reachable while anything is filtered.
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(Icons.Default.Close, "Clear search", tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.setSearchQuery("") })
                     }
                     Icon(
+                        Icons.Default.FilterList,
+                        if (sortByAmount) "Sort by date" else "Sort by amount",
+                        tint = if (sortByAmount) Jade else Muted,
+                        modifier = Modifier.size(16.dp).clickable {
+                            viewModel.toggleSortOrder()
+                            val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Icon(
                         Icons.Default.Tune,
-                        null,
+                        "Filters",
                         tint = if (minAmount != null || maxAmount != null || dateRange != null) Jade else Muted,
                         modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
                     )
