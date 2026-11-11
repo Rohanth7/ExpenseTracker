@@ -74,6 +74,11 @@ object NotificationParser {
             if (nameStart < from) return@forEach
             kept.append(part, from, nameStart)
             from = PAYEE_END.find(part, nameStart)?.range?.first ?: part.length
+            // A status word that ends the name isn't part of it: "Paid ₹500 to Ramesh Kumar
+            // failed" failed. Inside a name ("Pending Dues Store") it has more of the name after it.
+            val name = part.substring(nameStart, from).trimEnd()
+            val lastWord = name.substringAfterLast(' ')
+            if (TextRules.containsAnyWord(lastWord, NOT_COMPLETED)) from = nameStart + name.length - lastWord.length
         }
         return kept.append(part, from, part.length).toString()
     }

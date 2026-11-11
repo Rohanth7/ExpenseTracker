@@ -103,6 +103,22 @@ class NotificationParserTest {
         ).forEach { (title, body) -> assertNull("$title / $body", NotificationParser.parse(title, body, gpay)) }
     }
 
+    // Review of B-22: a status word on the payee's line was taken as part of the name, so a
+    // failed payment was saved. A status word that ends the name is the payment's status.
+    @Test fun `a status word after the payee's name is the payment's status`() {
+        listOf(
+            "Paid ₹500 to Ramesh Kumar failed" to "",
+            "Payment update" to "Sent ₹1,200 to Anita Desai pending",
+            "₹250 paid to Swiggy declined" to "",
+            "Paid ₹99 to Spotify unsuccessful" to "Try again",
+            "Paid ₹300 to Zomato Processing" to "",
+            "Paid ₹200 to Pending" to "",
+        ).forEach { (title, body) -> assertNull("$title / $body", NotificationParser.parse(title, body, gpay)) }
+        // A status word inside the name, with more of the name after it, is still the name
+        assertNotNull(NotificationParser.parse("Paid ₹200 to Pending Dues Store", "", gpay))
+        assertNotNull(NotificationParser.parse("Paid ₹150 to Failed Startups Cafe", "", gpay))
+    }
+
     // BUG-09: message rules were only applied to SMS.
     @Test fun `a message rule applies to payment-app notifications`() {
         val text = "Paid ₹99 to Google Play"
