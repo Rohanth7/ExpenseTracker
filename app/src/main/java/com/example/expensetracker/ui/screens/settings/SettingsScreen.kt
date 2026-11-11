@@ -392,7 +392,7 @@ private fun SettingsMainMenu(
                     subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
                     onClick = { onNavigate(SettingsPage.Loans) })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                val budgetedCount = categories.count { it.monthlyLimit > 0 && it.parentId == null }
+                val budgetedCount = categories.count { it.monthlyLimit > 0 }
                 MenuRow(
                     icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
                     title = "Category Budgets",
@@ -451,13 +451,15 @@ private fun CategoryBudgetsSubPage(
 ) {
     var categoryToEdit by rememberSaveableItem(categories) { it.id }
     val parentCategories = categories.filter { it.parentId == null }
+    // Each category, then its subcategories: a subcategory can have a limit of its own.
+    val rows = parentCategories.flatMap { parent -> listOf(parent) + categories.filter { it.parentId == parent.id } }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Category Budgets", onBack); Spacer(Modifier.height(8.dp)) }
         item {
             SectionLabel("MONTHLY LIMITS")
             Text(
-                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit.",
+                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit. A subcategory's spending counts toward its own limit and its category's.",
                 fontSize = 11.5.sp, color = Muted, lineHeight = 16.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -482,7 +484,7 @@ private fun CategoryBudgetsSubPage(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper)
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    parentCategories.forEachIndexed { i, cat ->
+                    rows.forEachIndexed { i, cat ->
                         if (i > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                         CategoryLimitRow(category = cat, onClick = { categoryToEdit = cat })
                     }

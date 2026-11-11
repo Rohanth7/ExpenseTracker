@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.data.budget.Budget
+import com.example.expensetracker.data.budget.Budgets
 import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.subscriptions.Subscription
@@ -66,6 +68,8 @@ data class DashboardUiState(
     val incomeFromRecords: Boolean = false,
     val overBudget: Boolean = false,
     val categorySummaries: List<CategorySummary> = emptyList(),
+    /** Monthly limits with something spent against them: top-level categories, then their subcategories' own. */
+    val budgets: List<Budget> = emptyList(),
     val pendingCount: Int = 0,
     val monthLabel: String = "",
     val canGoForward: Boolean = false,
@@ -173,7 +177,9 @@ class DashboardViewModel(
         val smartInsight = if (insightPool.isEmpty()) null else insightPool[dayOfCycle % insightPool.size]
 
         // Notification centre items — always from full expense list; budget alerts only for current month
-        val notifItems = buildNotifItems(expenses, if (offset == 0) summaries else emptyList(), categories, upcomingBills)
+        // Limits with this month's spending against them, a subcategory's own included.
+        val budgets = Budgets.of(categories, categorizedExpenses).filter { it.spent > 0.0 }
+        val notifItems = buildNotifItems(expenses, if (offset == 0) budgets else emptyList(), categories, upcomingBills)
 
         DashboardUiState(
             totalSpent = total,
@@ -182,6 +188,7 @@ class DashboardViewModel(
             incomeFromRecords = cycleIncome.fromRecords,
             overBudget = income > 0 && total > income,
             categorySummaries = summaries,
+            budgets = budgets,
             pendingCount = allMonthExpenses.count { it.categoryId == -1L },
             monthLabel = BudgetPeriod.label(cycle, startDay),
             canGoForward = offset < 0,
@@ -311,7 +318,7 @@ class DashboardViewModel(
 
     private fun buildNotifItems(
         expenses: List<Expense>,
-        summaries: List<CategorySummary>,
+        budgets: List<Budget>,
         categories: List<Category>,
         upcomingBills: List<UpcomingBill>
     ): List<NotifItem> = buildList {
@@ -335,15 +342,15 @@ class DashboardViewModel(
 
         // Budget alerts (categories at or above the alert threshold)
         val threshold = prefs.budgetAlertThreshold
-        summaries.filter { it.category.monthlyLimit > 0 }.forEach { s ->
-            val pct = (s.spent / s.category.monthlyLimit * 100).roundToInt()
+        budgets.forEach { s ->
+            val pct = (s.spent / s.limit * 100).roundToInt()
             if (pct >= threshold) {
                 val isOver = pct >= 100
                 add(NotifItem(
                     type = NotifType.BUDGET,
                     emoji = s.category.emoji,
-                    title = "${s.category.name} ${if (isOver) "over budget" else "near limit"}",
-                    subtitle = "${pct}% of ₹${fmtINR(s.category.monthlyLimit)} limit used this month",
+                    title = "${s.name} ${if (isOver) "over budget" else "near limit"}",
+                    subtitle = "${pct}% of ₹${fmtINR(s.limit)} limit used this month",
                     isUrgent = isOver
                 ))
             }

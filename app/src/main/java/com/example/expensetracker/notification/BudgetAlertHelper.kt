@@ -1,5 +1,7 @@
 package com.example.expensetracker.notification
 
+import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.budget.Budgets
 import com.example.expensetracker.ui.util.fmtINR
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -57,27 +59,28 @@ object BudgetAlertHelper {
         expenseRepo: ExpenseRepository,
         alertThreshold: Int = 80
     ) {
-        val category = categoryRepo.getById(categoryId) ?: return
+        // A subcategory's spending counts against its own limit and against its parent's.
+        val categories = categoryRepo.getAll()
+        Budgets.limitsFor(categoryId, categories).forEach { budgetCategory ->
+            checkLimit(context, budgetCategory, categories, expenseRepo, alertThreshold)
+        }
+    }
 
-        // If this is a subcategory, check the parent's budget instead
-        val budgetCategory = if (category.parentId != null) {
-            categoryRepo.getById(category.parentId) ?: category
-        } else category
-
-        if (budgetCategory.monthlyLimit <= 0) return
-
+    private suspend fun checkLimit(
+        context: Context,
+        budgetCategory: Category,
+        categories: List<Category>,
+        expenseRepo: ExpenseRepository,
+        alertThreshold: Int
+    ) {
         // The budget month follows the user's start day (see BudgetPeriod).
         val startDay = MonthStartDay.get(context)
         val cycle = BudgetPeriod.current(System.currentTimeMillis(), startDay)
         val start = cycle.start
         val end = cycle.endInclusive
 
-        // Sum spend across parent + all its subcategories
-        val allCategories = categoryRepo.getAll()
-        val relatedIds = allCategories
-            .filter { it.id == budgetCategory.id || it.parentId == budgetCategory.id }
-            .map { it.id }
-        val spent = expenseRepo.getSpentForCategories(relatedIds, start, end)
+        val spent = expenseRepo.getSpentForCategories(Budgets.countedIds(budgetCategory, categories), start, end)
+        val name = Budgets.name(budgetCategory, categories.find { it.id == budgetCategory.parentId })
 
         val pct = spent / budgetCategory.monthlyLimit
         // One alert per budget month. The limit is part of the key so editing it re-arms the alerts.
@@ -98,7 +101,7 @@ object BudgetAlertHelper {
                 sendNotification(
                     context,
                     id = 100_000 + budgetCategory.id.toInt(),
-                    title = "${budgetCategory.emoji} ${budgetCategory.name} limit exceeded!",
+                    title = "${budgetCategory.emoji} $name limit exceeded!",
                     text = "Spent ₹${fmtINR(spent)} of ₹${fmtINR(budgetCategory.monthlyLimit)} monthly limit"
                 )
             }
@@ -107,7 +110,7 @@ object BudgetAlertHelper {
                 sendNotification(
                     context,
                     id = 200_000 + budgetCategory.id.toInt(),
-                    title = "${budgetCategory.emoji} ${budgetCategory.name} at ${"%.0f".format(pct * 100)}%",
+                    title = "${budgetCategory.emoji} $name at ${"%.0f".format(pct * 100)}%",
                     text = "Spent ₹${fmtINR(spent)} of ₹${fmtINR(budgetCategory.monthlyLimit)} monthly limit"
                 )
             }

@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -405,7 +406,7 @@ fun DashboardScreen(
         }
 
         // ── Against budgets ─────────────────────────────────────
-        val budgeted = state.categorySummaries.filter { it.category.monthlyLimit > 0 }
+        val budgeted = state.budgets
         if (budgeted.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
@@ -425,8 +426,8 @@ fun DashboardScreen(
                 ) {
                     budgeted.forEachIndexed { i, summary ->
                         if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        val pct = (summary.spent / summary.category.monthlyLimit).coerceIn(0.0, 1.0).toFloat()
-                        val over = summary.spent > summary.category.monthlyLimit
+                        val pct = (summary.spent / summary.limit).coerceIn(0.0, 1.0).toFloat()
+                        val over = summary.spent > summary.limit
                         val catColor = parseColor(summary.category.colorHex)
                         Column(
                             modifier = Modifier
@@ -445,12 +446,13 @@ fun DashboardScreen(
                                         .clip(CircleShape)
                                         .background(catColor)
                                 )
-                                Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f))
+                                // "Food › Coffee" for a subcategory's own limit
+                                Text(summary.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text(
                                     buildAnnotatedString {
                                         append("₹${fmtINR(summary.spent)} ")
                                         withStyle(SpanStyle(color = Muted.copy(alpha = 0.5f))) {
-                                            append("/ ₹${fmtINR(summary.category.monthlyLimit)}")
+                                            append("/ ₹${fmtINR(summary.limit)}")
                                         }
                                     },
                                     fontFamily = FontFamily.Monospace,
