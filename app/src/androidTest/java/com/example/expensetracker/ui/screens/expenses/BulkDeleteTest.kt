@@ -14,6 +14,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -22,6 +23,7 @@ import com.example.expensetracker.data.repository.IncomeRepository
 import com.example.expensetracker.data.repository.MerchantMappingRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -84,5 +86,29 @@ class BulkDeleteTest {
         compose.onNodeWithText("1 selected").assertExists()
         compose.onNodeWithText("Delete 1 expense?").assertDoesNotExist()
         assertEquals(4, count())
+    }
+
+    /** B-11: a search that hid 3 of the 4 selected rows still deleted all 4. */
+    @Test fun aFilterLeavesOnlyTheRowsOnScreenSelected() {
+        compose.runOnUiThread { vm.setSearchQuery("Dinner") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cab")).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("1 selected").assertExists()
+
+        compose.onNodeWithContentDescription("Delete selected").performClick()
+        compose.onNodeWithText("Delete 1 expense?").assertExists()
+        dialogButton("Delete").performClick()
+        compose.waitUntil(5_000) { count() == 3 }
+        assertEquals(listOf("Cab", "Coffee", "Groceries"), runBlocking { db.expenseDao().getAll().first().map { it.description }.sorted() })
+    }
+
+    /** Bulk move, the same way: only the selected rows the filter still shows. */
+    @Test fun bulkCategorizeMovesOnlyTheRowsOnScreen() {
+        val food = runBlocking { db.categoryDao().insert(Category(name = "Food")) }
+        compose.runOnUiThread { vm.setSearchQuery("Dinner") }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cab")).fetchSemanticsNodes().isEmpty() }
+        compose.runOnUiThread { vm.bulkCategorize(food) }
+        compose.waitUntil(5_000) { runBlocking { db.expenseDao().getAll().first().any { it.categoryId == food } } }
+        compose.waitForIdle()
+        assertEquals(listOf("Dinner"), runBlocking { db.expenseDao().getAll().first().filter { it.categoryId == food }.map { it.description } })
     }
 }

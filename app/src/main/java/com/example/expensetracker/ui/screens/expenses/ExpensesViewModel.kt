@@ -56,7 +56,6 @@ class ExpensesViewModel(
     val categoryFilter: StateFlow<Long?> = _categoryFilter.asStateFlow()
     val tagFilter: StateFlow<String?> = _tagFilter.asStateFlow()
     val sortByAmount: StateFlow<Boolean> = _sortByAmount.asStateFlow()
-    val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
 
     init {
         viewModelScope.launch { _selectedIds.collect { saved["selected_ids"] = it.toLongArray() } }
@@ -74,21 +73,27 @@ class ExpensesViewModel(
     val categories: StateFlow<List<Category>> = categoryRepo.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _allExpenses: StateFlow<List<Expense>> = expenseRepo.allExpenses
+    /** Null until the database has answered, so "nothing loaded yet" isn't read as "nothing matches". */
+    private val loadedExpenses: StateFlow<List<Expense>?> = expenseRepo.allExpenses
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _allExpenses: StateFlow<List<Expense>> = loadedExpenses.map { it.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val hasAnyExpenses: StateFlow<Boolean> = _allExpenses
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val expenses: StateFlow<List<Expense>> = combine(
-        _allExpenses,
+    /** The list on screen, or null while it's loading. */
+    private val shownExpenses: StateFlow<List<Expense>?> = combine(
+        loadedExpenses,
         _searchQuery,
         combine(_categoryFilter, categories) { f, cats -> f to cats },
         combine(_sortByAmount, dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
             Quint(b, r, min, max, tag)
         }
     ) { all, query, (catFilter, cats), extra ->
+        if (all == null) return@combine null
         val (byAmount, range, minAmt, maxAmt, tag) = extra
         val filtered = all.filter { expense ->
             val matchesQuery = query.isBlank() ||
@@ -104,7 +109,21 @@ class ExpensesViewModel(
             matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val expenses: StateFlow<List<Expense>> = shownExpenses.map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * The selected rows that are on screen: a search or filter that hides a selected row takes it
+     * out of the count and out of bulk delete and move (it's selected again if the filter goes).
+     * While the list is loading, the saved selection as it was.
+     */
+    val selectedIds: StateFlow<Set<Long>> = combine(_selectedIds, shownExpenses, ::selectionOnScreen)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), _selectedIds.value)
+
+    private fun selectionOnScreen(selected: Set<Long>, shown: List<Expense>?): Set<Long> =
+        if (shown == null) selected else shown.mapNotNullTo(mutableSetOf()) { it.id.takeIf(selected::contains) }
 
     private val _allIncomes: StateFlow<List<Income>> = incomeRepo.allIncomes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -175,18 +194,18 @@ class ExpensesViewModel(
     fun clearSelection() { _selectedIds.value = emptySet() }
 
     fun bulkDelete() = viewModelScope.launch {
-        val ids = _selectedIds.value
+        val ids = selectionOnScreen(_selectedIds.value, shownExpenses.value)
         if (ids.isEmpty()) return@launch
-        
+
         val toDelete = _allExpenses.value.filter { it.id in ids }
         toDelete.forEach { expenseRepo.delete(it) }
         _selectedIds.value = emptySet()
     }
 
     fun bulkCategorize(categoryId: Long) = viewModelScope.launch {
-        val ids = _selectedIds.value
+        val ids = selectionOnScreen(_selectedIds.value, shownExpenses.value)
         if (ids.isEmpty() || categoryId == -1L) return@launch
-        
+
         val toUpdate = _allExpenses.value.filter { it.id in ids }
         toUpdate.forEach { 
             expenseRepo.update(it.copy(categoryId = categoryId))
