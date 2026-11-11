@@ -32,14 +32,55 @@ data class CategoryYearlyStat(val category: Category, val total: Double, val sub
 data class CategoryTrend(val label: String, val amount: Double)
 data class SubcategoryBreakdown(val category: Category, val amount: Double, val fraction: Float)
 
+/**
+ * "How you pay": spending by payment method. [otherAmount] is everything that isn't one of the
+ * four methods the dialogs offer (an auto-logged bill, a method from an older version or a
+ * restored file), so the parts always add up to the period's spending.
+ */
 data class PaymentSplit(
     val upiAmount: Double = 0.0,
     val creditCardAmount: Double = 0.0,
     val cashAmount: Double = 0.0,
-    val debitCardAmount: Double = 0.0
+    val debitCardAmount: Double = 0.0,
+    val otherAmount: Double = 0.0
 ) {
-    val total get() = upiAmount + creditCardAmount + cashAmount + debitCardAmount
+    /** One method's part of the split. The [percent]s of [shares] add up to exactly 100. */
+    data class Share(val label: String, val amount: Double, val percent: Int)
+
+    val total get() = upiAmount + creditCardAmount + cashAmount + debitCardAmount + otherAmount
     fun fraction(amount: Double) = if (total > 0) (amount / total).toFloat().coerceIn(0f, 1f) else 0f
+
+    /** The methods with spending, in display order, with whole percentages that total 100 (largest remainders rounded up). */
+    val shares: List<Share>
+        get() {
+            val parts = listOf(UPI to upiAmount, CREDIT_CARD to creditCardAmount, DEBIT_CARD to debitCardAmount, CASH to cashAmount, OTHER to otherAmount)
+                .filter { it.second > 0 }
+            if (parts.isEmpty()) return emptyList()
+            val exact = parts.map { it.second / total * 100 }
+            val percents = exact.map { it.toInt() }.toMutableList()
+            exact.indices.sortedByDescending { exact[it] - percents[it] }.take(100 - percents.sum()).forEach { percents[it]++ }
+            return parts.mapIndexed { i, (label, amount) -> Share(label, amount, percents[i]) }
+        }
+
+    companion object {
+        const val UPI = "UPI"
+        const val CREDIT_CARD = "Credit Card"
+        const val DEBIT_CARD = "Debit Card"
+        const val CASH = "Cash"
+        const val OTHER = "Other"
+
+        fun of(expenses: List<Expense>): PaymentSplit {
+            val by = expenses.groupBy { it.paymentMethod }.mapValues { (_, list) -> list.sumOf { it.amount } }
+            val known = setOf(UPI, CREDIT_CARD, DEBIT_CARD, CASH)
+            return PaymentSplit(
+                upiAmount = by[UPI] ?: 0.0,
+                creditCardAmount = by[CREDIT_CARD] ?: 0.0,
+                cashAmount = by[CASH] ?: 0.0,
+                debitCardAmount = by[DEBIT_CARD] ?: 0.0,
+                otherAmount = by.filterKeys { it !in known }.values.sum()
+            )
+        }
+    }
 }
 
 data class MonthlyInsight(val emoji: String, val label: String, val detail: String)
@@ -336,12 +377,7 @@ class StatisticsViewModel(
         }.filter { it.total > 0 }.sortedByDescending { it.total }
         return Breakdown(
             categories = cats,
-            payment = PaymentSplit(
-                upiAmount = exps.filter { it.paymentMethod == "UPI" }.sumOf { it.amount },
-                creditCardAmount = exps.filter { it.paymentMethod == "Credit Card" }.sumOf { it.amount },
-                cashAmount = exps.filter { it.paymentMethod == "Cash" }.sumOf { it.amount },
-                debitCardAmount = exps.filter { it.paymentMethod == "Debit Card" }.sumOf { it.amount }
-            ),
+            payment = PaymentSplit.of(exps),
             detection = DetectionSplit(
                 autoAmount = exps.filter { isAutoSource(it.source) }.sumOf { it.amount },
                 autoCount = exps.count { isAutoSource(it.source) },

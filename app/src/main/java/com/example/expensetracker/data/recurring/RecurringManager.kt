@@ -49,6 +49,8 @@ object RecurringManager {
                         description = bill.name,
                         categoryId = bill.categoryId,
                         source = "Recurring",
+                        // A bill doesn't say how it's paid; "UPI" (the default) skewed "How you pay".
+                        paymentMethod = "Other",
                         date = dueDate
                     )
                 )

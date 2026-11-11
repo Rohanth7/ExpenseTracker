@@ -698,58 +698,32 @@ private fun PaymentSplitCard(split: PaymentSplit) {
                 .height(10.dp)
                 .clip(RoundedCornerShape(100.dp))
         ) {
-            val upiFrac = split.fraction(split.upiAmount)
-            val ccFrac = split.fraction(split.creditCardAmount)
-            val cashFrac = split.fraction(split.cashAmount)
-            val dcFrac = split.fraction(split.debitCardAmount)
-            if (upiFrac > 0) Box(Modifier.fillMaxHeight().weight(upiFrac).background(Jade))
-            if (ccFrac > 0) Box(Modifier.fillMaxHeight().weight(ccFrac).background(Amber))
-            if (dcFrac > 0) Box(Modifier.fillMaxHeight().weight(dcFrac).background(InkSoft))
-            if (cashFrac > 0) Box(Modifier.fillMaxHeight().weight(cashFrac).background(Coral))
-            // fill remainder if rounding leaves gap
-            val remainder = 1f - upiFrac - ccFrac - dcFrac - cashFrac
-            if (remainder > 0.001f) Box(Modifier.fillMaxHeight().weight(remainder).background(HairlineSoft))
+            split.shares.forEach { share ->
+                Box(Modifier.fillMaxHeight().weight(split.fraction(share.amount).coerceAtLeast(0.001f)).background(paymentColor(share.label)))
+            }
+            if (split.total <= 0) Box(Modifier.fillMaxHeight().weight(1f).background(HairlineSoft))
         }
         Spacer(Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (split.upiAmount > 0) {
-                PaymentSplitLegend(
-                    label = "UPI",
-                    amount = split.upiAmount,
-                    pct = (split.fraction(split.upiAmount) * 100).toInt(),
-                    color = Jade,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (split.creditCardAmount > 0) {
-                PaymentSplitLegend(
-                    label = "Credit Card",
-                    amount = split.creditCardAmount,
-                    pct = (split.fraction(split.creditCardAmount) * 100).toInt(),
-                    color = Amber,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (split.debitCardAmount > 0) {
-                PaymentSplitLegend(
-                    label = "Debit Card",
-                    amount = split.debitCardAmount,
-                    pct = (split.fraction(split.debitCardAmount) * 100).toInt(),
-                    color = InkSoft,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (split.cashAmount > 0) {
-                PaymentSplitLegend(
-                    label = "Cash",
-                    amount = split.cashAmount,
-                    pct = (split.fraction(split.cashAmount) * 100).toInt(),
-                    color = Coral,
-                    modifier = Modifier.weight(1f)
-                )
+        // Three to a row: five methods side by side don't fit a phone once amounts have paise.
+        split.shares.chunked(3).forEachIndexed { row, shares ->
+            if (row > 0) Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                shares.forEach { share ->
+                    PaymentSplitLegend(label = share.label, amount = share.amount, pct = share.percent, color = paymentColor(share.label), modifier = Modifier.weight(1f))
+                }
+                // Keeps a short last row's columns the same width as the row above
+                repeat(3 - shares.size) { if (split.shares.size > 3) Spacer(Modifier.weight(1f)) }
             }
         }
     }
+}
+
+private fun paymentColor(label: String): Color = when (label) {
+    PaymentSplit.UPI -> Jade
+    PaymentSplit.CREDIT_CARD -> Amber
+    PaymentSplit.DEBIT_CARD -> InkSoft
+    PaymentSplit.CASH -> Coral
+    else -> Muted
 }
 
 @Composable
