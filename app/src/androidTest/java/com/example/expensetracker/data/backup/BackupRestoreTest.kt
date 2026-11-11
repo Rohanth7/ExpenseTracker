@@ -15,6 +15,7 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
+import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.BillMonth
@@ -243,12 +244,14 @@ class BackupRestoreTest {
 
     private fun recurringExpenses() = runBlocking { target.expenseDao().getAll().first().filter { it.source == "Recurring" }.map { it.description } }
     private fun thisMonth(billId: Long) = Calendar.getInstance().let { BillMonth(billId, it.get(Calendar.YEAR), it.get(Calendar.MONTH) + 1) }
+    /** When a backup was made, for one from before this month's bills were due. */
+    private val beforeThisMonth get() = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); add(Calendar.DAY_OF_YEAR, -1) }.timeInMillis
     private val rentDueOnThe1st = Bill(id = 5, name = "Rent", amount = 22000.0, dueDayOfMonth = 1, autoLog = true)
 
     /** B-01: the phone logged the bill, then a backup from before its due day came back without that expense. */
     @Test fun aBillThePhoneHadLoggedIsLoggedAgainAfterRestoringAnEarlierBackup() = runBlocking {
         targetPrefs.markBillMonthDone(thisMonth(5))
-        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
+        manager(target, targetPrefs).restore(BackupData(exportedAt = beforeThisMonth, categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
         assertEquals(listOf("Rent"), recurringExpenses())
         // Once: the next launch finds the month handled
         RecurringManager.applyBills(target, targetPrefs, Calendar.getInstance())
@@ -270,8 +273,29 @@ class BackupRestoreTest {
     @Test fun anOlderBackupLogsADueBillOnlyIfItsExpenseIsMissing() = runBlocking {
         targetPrefs.markBillMonthDone(thisMonth(5))
         val logged = Expense(id = 1, amount = 22000.0, description = "Rent", source = "Recurring", date = System.currentTimeMillis())
-        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = listOf(logged), bills = listOf(rentDueOnThe1st)))
+        manager(target, targetPrefs).restore(BackupData(exportedAt = beforeThisMonth, categories = emptyList(), expenses = listOf(logged), bills = listOf(rentDueOnThe1st)))
         assertEquals(listOf("Rent"), recurringExpenses())
+    }
+
+    /**
+     * Review of B-01: a file from before bill months were saved, made this month after the bill
+     * was logged. The user had corrected the amount (or deleted the expense): it isn't logged again.
+     */
+    @Test fun anOlderBackupMadeAfterTheDueDayDoesNotLogTheBillAgain() = runBlocking {
+        val corrected = Expense(id = 1, amount = 21500.0, description = "Rent", source = "Recurring", date = System.currentTimeMillis())
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = listOf(corrected), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf(21500.0), target.expenseDao().getAll().first().map { it.amount })
+
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
+        assertEquals(emptyList<String>(), recurringExpenses())
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(5)))
+    }
+
+    /** Review of B-15: recurring templates were left out of the sweep for categories the file didn't bring. */
+    @Test fun aRestoredTemplateDoesNotPointAtAMissingCategory() = runBlocking {
+        manager(target, targetPrefs).restore(BackupData(categories = listOf(Category(id = 1, name = "Food")), expenses = emptyList(),
+            recurringTemplates = listOf(RecurringTemplate(id = 1, name = "Milk", amount = 60.0, categoryId = 1), RecurringTemplate(id = 2, name = "Ghost", amount = 5.0, categoryId = 77))))
+        assertEquals(mapOf("Milk" to 1L, "Ghost" to -1L), target.recurringTemplateDao().getAll().first().associate { it.name to it.categoryId })
     }
 
     /** A v1 file has no bills: the phone's bills and their handled months stay. */

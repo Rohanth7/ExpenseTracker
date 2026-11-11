@@ -51,4 +51,7 @@ interface CategoryDao {
 
     @Query("DELETE FROM merchant_mappings WHERE categoryId NOT IN (SELECT id FROM categories)")
     suspend fun deleteMerchantMappingsForMissingCategories()
+
+    @Query("UPDATE recurring_templates SET categoryId = -1 WHERE categoryId != -1 AND categoryId NOT IN (SELECT id FROM categories)")
+    suspend fun clearMissingTemplateCategories()
 }

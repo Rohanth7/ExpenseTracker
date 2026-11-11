@@ -12,6 +12,7 @@ import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.BillMonth
 import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.notification.BillReminderHelper
@@ -134,6 +135,7 @@ class BackupManager(
             db.expenseDao().moveOrphansToPending()
             db.categoryDao().clearMissingBillCategories()
             db.categoryDao().deleteMerchantMappingsForMissingCategories()
+            db.categoryDao().clearMissingTemplateCategories()
         }
         // What the phone remembered about the data it had, as "Reset everything" forgets it:
         // alerts already sent this month, price changes already alerted, subscriptions dismissed.
@@ -145,8 +147,9 @@ class BackupManager(
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L
         // Which months the bills were logged in describes the restored bills and expenses, never
-        // the phone's: its own record would skip a bill the backup has no expense for.
-        if (data.bills != null) prefs.billMonths = data.billMonths.orEmpty()
+        // the phone's: its own record would skip a bill the backup has no expense for. A file from
+        // before they were saved says when it was made, which tells which bills were handled by then.
+        data.bills?.let { bills -> prefs.billMonths = data.billMonths ?: BillMonth.inferred(bills, data.exportedAt) }
         data.parsingRules?.let { rules.replaceAll(it) }
         data.settings?.let { s ->
             val p = prefs
@@ -159,13 +162,12 @@ class BackupManager(
         }
         // Log bills and recurring income that are due (a backup from before the due day). The
         // restore is complete either way, and the next launch tries again, so a failure here
-        // mustn't fail it.
-        try {
-            if (data.bills != null) RecurringManager.applyBills(db, prefs, Calendar.getInstance())
-            if (data.recurringIncomes != null) RecurringManager.applyRecurringIncome(db, Calendar.getInstance())
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
+        // mustn't fail it. Each on its own: bills failing mustn't skip the income.
+        suspend fun bestEffort(log: suspend () -> Unit) {
+            try { log() } catch (e: Exception) { if (e is CancellationException) throw e }
         }
+        if (data.bills != null) bestEffort { RecurringManager.applyBills(db, prefs, Calendar.getInstance()) }
+        if (data.recurringIncomes != null) bestEffort { RecurringManager.applyRecurringIncome(db, Calendar.getInstance()) }
         // Screens follow the month start live; tests use their own prefs and leave the app's alone.
         if (preferences == null) MonthStartDay.reload(context)
         // Best effort: the data is already restored, so a widget that can't refresh mustn't fail it.
