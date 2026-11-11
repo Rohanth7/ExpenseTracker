@@ -1,5 +1,8 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.data.budget.Budget
+import com.example.expensetracker.data.budget.Budgets
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.subscriptions.Subscription
 import com.example.expensetracker.data.subscriptions.SubscriptionDetector
@@ -14,8 +17,6 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.SavingsGoal
-import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.roundToInt
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.BillRepository
@@ -67,6 +68,8 @@ data class DashboardUiState(
     val incomeFromRecords: Boolean = false,
     val overBudget: Boolean = false,
     val categorySummaries: List<CategorySummary> = emptyList(),
+    /** Monthly limits with something spent against them: top-level categories, then their subcategories' own. */
+    val budgets: List<Budget> = emptyList(),
     val pendingCount: Int = 0,
     val monthLabel: String = "",
     val canGoForward: Boolean = false,
@@ -95,22 +98,30 @@ class DashboardViewModel(
     private val billRepo: BillRepository,
     private val loanRepo: LoanRepository,
     private val incomeRepo: IncomeRepository,
-    private val prefs: PreferencesManager
+    private val prefs: PreferencesManager,
+    /** The time the Overview is computed for; a test can move it past midnight. */
+    private val clock: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
 
     private val _monthOffset = MutableStateFlow(0)
 
+    // The Overview is "as of now": today's safe-to-spend, days left, the month itself. It was only
+    // recomputed when data changed, so left open past midnight or a month's end it stayed on
+    // yesterday. The screen calls refresh() each time it comes back.
+    private val _now = MutableStateFlow(clock())
+    fun refresh() { _now.value = clock() }
+
     val uiState: StateFlow<DashboardUiState> = combine(
-        combine(categoryRepo.allCategories, expenseRepo.allExpenses, prefs.monthlyIncomeFlow(), _monthOffset) { cats, exps, inc, off ->
-            Quad(cats, exps, inc, off)
+        combine(categoryRepo.allCategories, expenseRepo.allExpenses, prefs.monthlyIncomeFlow(), _monthOffset, _now) { cats, exps, inc, off, now ->
+            Quad(cats, exps, inc, off to now)
         },
         combine(savingsRepo.allGoals, billRepo.allBills, loanRepo.allLoans) { goals, bills, loans -> Triple(goals, bills, loans) },
         DismissedSubscriptions.flow(context),
         MonthStartDay.flow(context),
         combine(incomeRepo.allIncomes, incomeRepo.allRecurring, incomeRepo.allMonths, ::Triple)
     ) { quad, (goals, bills, loans), dismissedSubscriptions, startDay, (incomes, recurringIncomes, recurringMonths) ->
-        val (categories, expenses, expectedIncome, offset) = quad
-        val nowMs = System.currentTimeMillis()
+        val (categories, expenses, expectedIncome, offsetAndNow) = quad
+        val (offset, nowMs) = offsetAndNow
         // A budget month runs from the user's start day (1 = calendar month); see BudgetPeriod.
         val cycle = BudgetPeriod.forOffset(nowMs, startDay, offset)
         val cycleIncome = IncomeForecast.cycleIncome(incomes, recurringIncomes, expectedIncome, nowMs, cycle, recurringMonths)
@@ -139,8 +150,8 @@ class DashboardViewModel(
         val daysLeft = if (offset != 0) 0 else BudgetPeriod.daysLeft(nowMs, startDay).coerceAtLeast(1)
         val safeToSpendToday = if (offset == 0 && surplus > 0) surplus / daysLeft else 0.0
 
-        val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        val daysInMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
+        val today = Calendar.getInstance().apply { timeInMillis = nowMs }.get(Calendar.DAY_OF_MONTH)
+        val daysInMonth = Calendar.getInstance().apply { timeInMillis = nowMs }.getActualMaximum(Calendar.DAY_OF_MONTH)
         val upcomingBills = if (offset == 0) {
             bills.filter { it.isEnabled && !it.autoLog }.mapNotNull { bill ->
                 val effectiveDueDay = bill.dueDayOfMonth.coerceAtMost(daysInMonth)
@@ -174,7 +185,9 @@ class DashboardViewModel(
         val smartInsight = if (insightPool.isEmpty()) null else insightPool[dayOfCycle % insightPool.size]
 
         // Notification centre items — always from full expense list; budget alerts only for current month
-        val notifItems = buildNotifItems(expenses, if (offset == 0) summaries else emptyList(), categories, upcomingBills)
+        // Limits with this month's spending against them, a subcategory's own included.
+        val budgets = Budgets.of(categories, categorizedExpenses).filter { it.spent > 0.0 }
+        val notifItems = buildNotifItems(expenses, if (offset == 0) budgets else emptyList(), categories, upcomingBills)
 
         DashboardUiState(
             totalSpent = total,
@@ -183,6 +196,7 @@ class DashboardViewModel(
             incomeFromRecords = cycleIncome.fromRecords,
             overBudget = income > 0 && total > income,
             categorySummaries = summaries,
+            budgets = budgets,
             pendingCount = allMonthExpenses.count { it.categoryId == -1L },
             monthLabel = BudgetPeriod.label(cycle, startDay),
             canGoForward = offset < 0,
@@ -199,7 +213,7 @@ class DashboardViewModel(
             smartInsight = smartInsight,
             notifItems = notifItems,
             subscriptions = if (offset == 0)
-                SubscriptionDetector.detect(expenses, System.currentTimeMillis(), dismissedSubscriptions, bills.map { it.name })
+                SubscriptionDetector.detect(expenses, nowMs, dismissedSubscriptions, bills.map { it.name })
             else emptyList()
         )
     // Off the main thread: subscription detection goes through the whole history.
@@ -247,9 +261,9 @@ class DashboardViewModel(
             val pct = ((total - prevPaced) / prevPaced * 100).roundToInt()
             when {
                 pct > 20 -> result.add(SmartInsight("📈", "${pct}% up on last month",
-                    "₹${fmtVM(total - prevPaced)} more than at this point last month"))
+                    "₹${fmtINR(total - prevPaced)} more than at this point last month"))
                 pct < -15 -> result.add(SmartInsight("📉", "${-pct}% under last month's pace",
-                    "₹${fmtVM(prevPaced - total)} less than at this point last month — great job!"))
+                    "₹${fmtINR(prevPaced - total)} less than at this point last month — great job!"))
             }
         }
 
@@ -262,7 +276,7 @@ class DashboardViewModel(
             val displayName = allMonthExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
             val merchantTotal = topMerchant.value.sumOf { it.amount }
             result.add(SmartInsight("🛒", "$displayName · ${topMerchant.value.size}×",
-                "₹${fmtVM(merchantTotal)} across ${topMerchant.value.size} transactions this month"))
+                "₹${fmtINR(merchantTotal)} across ${topMerchant.value.size} transactions this month"))
         }
 
         // No-spend days (days with zero transactions)
@@ -290,21 +304,21 @@ class DashboardViewModel(
         if (wkdayPerDay > 100 && wkendPerDay > 0 && wkendPerDay / wkdayPerDay >= 1.6) {
             val ratio = "%.1f".format(wkendPerDay / wkdayPerDay)
             result.add(SmartInsight("🎉", "${ratio}× more on weekends",
-                "₹${fmtVM(wkendPerDay)}/day on weekends vs ₹${fmtVM(wkdayPerDay)}/day on weekdays"))
+                "₹${fmtINR(wkendPerDay)}/day on weekends vs ₹${fmtINR(wkdayPerDay)}/day on weekdays"))
         }
 
         // Top category dominance (> 38% of total)
         val top = summaries.firstOrNull()
         if (top != null && top.percentage > 38f) {
             result.add(SmartInsight(top.category.emoji, "${top.category.name} takes the most",
-                "${top.percentage.roundToInt()}% of this month's spending — ₹${fmtVM(top.spent)}"))
+                "${top.percentage.roundToInt()}% of this month's spending — ₹${fmtINR(top.spent)}"))
         }
 
         // Biggest single expense (always present as fallback)
         val biggest = allMonthExpenses.maxByOrNull { it.amount }
         if (biggest != null) {
             result.add(SmartInsight("💸", "Biggest expense this month",
-                "${biggest.description} · ₹${fmtVM(biggest.amount)}"))
+                "${biggest.description} · ₹${fmtINR(biggest.amount)}"))
         }
 
         return result
@@ -312,7 +326,7 @@ class DashboardViewModel(
 
     private fun buildNotifItems(
         expenses: List<Expense>,
-        summaries: List<CategorySummary>,
+        budgets: List<Budget>,
         categories: List<Category>,
         upcomingBills: List<UpcomingBill>
     ): List<NotifItem> = buildList {
@@ -328,7 +342,7 @@ class DashboardViewModel(
                     type = NotifType.CAPTURE,
                     emoji = if (isPending) "🔔" else (cat?.emoji ?: "📱"),
                     title = exp.description,
-                    subtitle = "₹${fmtVM(exp.amount)} · ${relativeTime(exp.date)}" +
+                    subtitle = "₹${fmtINR(exp.amount)} · ${relativeTime(exp.date)}" +
                         if (isPending) " · needs category" else "",
                     isUrgent = isPending
                 ))
@@ -336,15 +350,15 @@ class DashboardViewModel(
 
         // Budget alerts (categories at or above the alert threshold)
         val threshold = prefs.budgetAlertThreshold
-        summaries.filter { it.category.monthlyLimit > 0 }.forEach { s ->
-            val pct = (s.spent / s.category.monthlyLimit * 100).roundToInt()
+        budgets.forEach { s ->
+            val pct = (s.spent / s.limit * 100).roundToInt()
             if (pct >= threshold) {
                 val isOver = pct >= 100
                 add(NotifItem(
                     type = NotifType.BUDGET,
                     emoji = s.category.emoji,
-                    title = "${s.category.name} ${if (isOver) "over budget" else "near limit"}",
-                    subtitle = "${pct}% of ₹${fmtVM(s.category.monthlyLimit)} limit used this month",
+                    title = "${s.name} ${if (isOver) "over budget" else "near limit"}",
+                    subtitle = "${pct}% of ₹${fmtINR(s.limit)} limit used this month",
                     isUrgent = isOver
                 ))
             }
@@ -362,7 +376,7 @@ class DashboardViewModel(
                 type = NotifType.BILL,
                 emoji = "📋",
                 title = upcoming.bill.name,
-                subtitle = "$dueText · ₹${fmtVM(upcoming.bill.amount)}",
+                subtitle = "$dueText · ₹${fmtINR(upcoming.bill.amount)}",
                 isUrgent = upcoming.daysUntilDue <= 0
             ))
         }
@@ -381,11 +395,6 @@ class DashboardViewModel(
             else        -> "${days}d ago"
         }
     }
-
-    private fun fmtVM(n: Double): String =
-        NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN"))
-            .apply { maximumFractionDigits = 0; minimumFractionDigits = 0 }
-            .format(n.toLong())
 
     private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component1() = first

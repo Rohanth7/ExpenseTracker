@@ -15,6 +15,8 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.repository.ExpenseRepository
+import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.sms.ParsedTransaction
 import com.example.expensetracker.sms.SmsReceiver
 import kotlinx.coroutines.runBlocking
@@ -62,12 +64,16 @@ class BudgetAlertCaptureTest {
 
     private fun forgetAlerts() {
         val alerts = context.getSharedPreferences("budget_alert_prefs", Context.MODE_PRIVATE)
-        alerts.edit().apply { alerts.all.keys.filter { "_${categoryId}_" in it }.forEach { remove(it) } }.commit()
+        alerts.edit().apply { alerts.all.keys.filter { key -> listOf(categoryId, drinksId, coffeeId, snacksId).any { "_${it}_" in key } }.forEach { remove(it) } }.commit()
     }
 
-    private fun alertTitles(): List<String> {
+    private val drinksId = 987_660L
+    private val coffeeId = 987_661L
+    private val snacksId = 987_662L
+
+    private fun alertTitles(category: Long = categoryId): List<String> {
         val until = SystemClock.uptimeMillis() + 5_000
-        fun ours() = notifications.activeNotifications.filter { it.tag == BudgetAlertHelper.TAG && it.id == 100_000 + categoryId.toInt() }
+        fun ours() = notifications.activeNotifications.filter { it.tag == BudgetAlertHelper.TAG && it.id == 100_000 + category.toInt() }
         while (ours().isEmpty() && SystemClock.uptimeMillis() < until) Thread.sleep(50)
         return ours().map { it.notification.extras.getString(Notification.EXTRA_TITLE).orEmpty() }
     }
@@ -83,5 +89,31 @@ class BudgetAlertCaptureTest {
         db.merchantMappingDao().insert(MerchantMapping("GPay → SWIGGY", categoryId))
         TransactionNotificationListener.save(context, db, ParsedTransaction(200.0, "GPay → SWIGGY"), "Paid ₹200 to SWIGGY", System.currentTimeMillis())
         assertEquals(listOf("🍔 Food & Dining limit exceeded!"), alertTitles())
+    }
+
+    private suspend fun check(category: Long) = BudgetAlertHelper.checkAndNotify(context, category,
+        CategoryRepository(db.categoryDao(), db.expenseDao()), ExpenseRepository(db.expenseDao(), context))
+
+    /** B-06: a subcategory's own limit was offered in the dialog and then ignored: only its parent's was checked. */
+    @Test fun aSubcategoryOverItsOwnLimitAlerts() = runBlocking {
+        db.categoryDao().insert(Category(id = drinksId, name = "Drinks", emoji = "🥤"))
+        db.categoryDao().insert(Category(id = coffeeId, name = "Coffee", emoji = "☕", monthlyLimit = 500.0, parentId = drinksId))
+        db.expenseDao().insert(Expense(amount = 600.0, description = "Blue Tokai", categoryId = coffeeId))
+        check(coffeeId)
+        assertEquals(listOf("☕ Drinks › Coffee limit exceeded!"), alertTitles(coffeeId))
+    }
+
+    /** A subcategory's spending counts against its own limit and its parent's; a sibling's doesn't count against it. */
+    @Test fun aSubcategoryAndItsParentEachAlertOnTheirOwnLimit() = runBlocking {
+        db.categoryDao().insert(Category(id = drinksId, name = "Drinks", emoji = "🥤", monthlyLimit = 1000.0))
+        db.categoryDao().insert(Category(id = coffeeId, name = "Coffee", emoji = "☕", monthlyLimit = 500.0, parentId = drinksId))
+        db.categoryDao().insert(Category(id = snacksId, name = "Snacks", emoji = "🍪", parentId = drinksId))
+        db.expenseDao().insert(Expense(amount = 700.0, description = "Chips", categoryId = snacksId))
+        db.expenseDao().insert(Expense(amount = 400.0, description = "Blue Tokai", categoryId = coffeeId))
+        check(coffeeId)
+        // Drinks is at 1,100 of 1,000; Coffee at 400 of 500 is only at its warning level
+        assertEquals(listOf("🥤 Drinks limit exceeded!"), alertTitles(drinksId))
+        assertEquals(emptyList<String>(), notifications.activeNotifications.filter { it.id == 100_000 + coffeeId.toInt() }.map { it.tag })
+        assertEquals(1, notifications.activeNotifications.count { it.tag == BudgetAlertHelper.TAG && it.id == 200_000 + coffeeId.toInt() })
     }
 }

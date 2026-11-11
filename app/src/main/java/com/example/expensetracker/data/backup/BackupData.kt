@@ -10,6 +10,7 @@ import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.data.recurring.BillMonth
 import com.example.expensetracker.sms.ParsingRule
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -58,7 +59,12 @@ data class BackupData(
     val incomes: List<Income>? = null,
     val recurringIncomes: List<RecurringIncome>? = null,
     /** Months RecurringManager has handled, so a salary deleted on purpose stays deleted (restored with [recurringIncomes]). */
-    val recurringIncomeMonths: List<RecurringIncomeMonth>? = null
+    val recurringIncomeMonths: List<RecurringIncomeMonth>? = null,
+    /**
+     * Months auto-log bills were handled in, so a bill's expense deleted on purpose stays deleted
+     * (restored with [bills]). Optional: a file without it restores as "no month handled".
+     */
+    val billMonths: List<BillMonth>? = null
 ) {
     /** Sections of the phone's data that restoring this backup will NOT touch. */
     val missingSections: List<String>
@@ -98,6 +104,14 @@ object BackupCodec {
         val old = parse(existing) as? ParseResult.Ok ?: return true
         return !old.data.hasRecords
     }
+
+    /**
+     * Whether a manual "Back up now" has to ask before uploading [next]: only when it has no
+     * records and the backup it would replace has some. [existing] (the backup's text, null if
+     * there is none) is fetched only for a snapshot without records.
+     */
+    inline fun needsConfirmation(next: BackupData, existing: () -> String?): Boolean =
+        !next.hasRecords && !mayReplace(existing(), next)
 
     /** Captured SMS/notification text never goes into a backup; parsed amount and payee do. */
     fun toJson(data: BackupData): String =
@@ -151,7 +165,8 @@ object BackupCodec {
             if ((t as Any?) == null || (t.name as String?) == null || !(t.amount as Double?).ok()) return "recurring item ${i + 1} is incomplete"
         }
         d.bills?.forEachIndexed { i, b ->
-            if ((b as Any?) == null || (b.name as String?) == null || !(b.amount as Double?).ok()) return "bill ${i + 1} is incomplete"
+            // 0 passes: bills could be saved with it before, and those files must still restore.
+            if ((b as Any?) == null || (b.name as String?) == null || !(b.amount as Double?).atLeastZero()) return "bill ${i + 1} is incomplete"
             if (b.dueDayOfMonth !in 1..31 || b.reminderDays !in 0..14) return "bill ${i + 1} has an invalid due day or reminder"
         }
         d.loans?.forEachIndexed { i, l ->
@@ -178,6 +193,9 @@ object BackupCodec {
         }
         d.recurringIncomeMonths?.forEachIndexed { i, m ->
             if ((m as Any?) == null || m.month !in 1..12) return "recurring income month ${i + 1} is incomplete"
+        }
+        d.billMonths?.forEachIndexed { i, m ->
+            if ((m as Any?) == null || m.month !in 1..12) return "bill month ${i + 1} is incomplete"
         }
         d.merchantMappings?.forEachIndexed { i, m ->
             if ((m as Any?) == null || (m.merchantName as String?) == null) return "learned category ${i + 1} is incomplete"

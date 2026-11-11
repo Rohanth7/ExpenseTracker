@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.expenses
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
@@ -51,7 +52,6 @@ import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 import com.example.expensetracker.ui.util.formatLimitInput
@@ -129,14 +129,12 @@ fun ExpensesScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val weekTotal = remember(expenses, weekStartsOnMonday) {
-        expenses.filter { it.date >= weekStart(weekStartsOnMonday) }.sumOf { it.amount }
-    }
+    val weekTotal by viewModel.weekTotal.collectAsState()
     val grouped = remember(expenses, sortByAmount) { groupByDay(expenses, sortByAmount, { it.date }, { it.amount }) }
     val showIncome by viewModel.showIncome.collectAsState()
     val hasAnyIncome by viewModel.hasAnyIncome.collectAsState()
     val incomeGroups = remember(incomes, sortByAmount) { groupByDay(incomes, sortByAmount, { it.date }, { it.amount }) }
-    val weekIncome = remember(incomes, weekStartsOnMonday) { incomes.filter { it.date >= weekStart(weekStartsOnMonday) }.sumOf { it.amount } }
+    val weekIncome by viewModel.weekIncome.collectAsState()
 
 
     Scaffold(
@@ -246,23 +244,25 @@ fun ExpensesScreen(
                         onValueChange = { viewModel.setSearchQuery(it) },
                         modifier = Modifier.weight(1f)
                     )
-                    if (searchQuery.isNotEmpty() || minAmount != null || maxAmount != null || dateRange != null) {
-                        Icon(Icons.Default.Close, null, tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.clearAllFilters() })
-                    } else {
-                        Icon(
-                            Icons.Default.FilterList,
-                            null,
-                            tint = if (sortByAmount) Jade else Muted,
-                            modifier = Modifier.size(16.dp).clickable { 
-                                viewModel.toggleSortOrder()
-                                val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                    // The ✕ belongs to the search text and clears only that. Dates have their own
+                    // chip below, amount limits the filters dialog's Clear, and the category and
+                    // tag chips are untouched. Sort stays reachable while anything is filtered.
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(Icons.Default.Close, "Clear search", tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.setSearchQuery("") })
                     }
                     Icon(
+                        Icons.Default.FilterList,
+                        if (sortByAmount) "Sort by date" else "Sort by amount",
+                        tint = if (sortByAmount) Jade else Muted,
+                        modifier = Modifier.size(16.dp).clickable {
+                            viewModel.toggleSortOrder()
+                            val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Icon(
                         Icons.Default.Tune,
-                        null,
+                        "Filters",
                         tint = if (minAmount != null || maxAmount != null || dateRange != null) Jade else Muted,
                         modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
                     )
@@ -322,9 +322,10 @@ fun ExpensesScreen(
                             items(allTagSummaries) { tag ->
                                 TagChipPill(
                                     label = tag.name,
-                                    selected = tagFilter == tag.name,
+                                    // "Food" and "food" are one tag, so one chip, lit for either
+                                    selected = Tags.same(tagFilter, tag.name),
                                     onClick = {
-                                        if (tagFilter == tag.name) {
+                                        if (Tags.same(tagFilter, tag.name)) {
                                             viewModel.setTagFilter(null)
                                         } else {
                                             viewModel.setTagFilter(tag.name)
@@ -1146,7 +1147,7 @@ private fun EditExpenseDialog(
                 val editChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value = categoryDisplayText(selectedCategory, categories, "Uncategorized"),
+                        value = categoryDisplayText(selectedCategory, categories, UNCATEGORIZED),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Category") },
@@ -1154,6 +1155,11 @@ private fun EditExpenseDialog(
                         modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
                     )
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        // Back to pending, like the add dialog's "Choose later".
+                        DropdownMenuItem(
+                            text = { Text(UNCATEGORIZED, color = Muted) },
+                            onClick = { selectedCategoryId = -1L; expanded = false }
+                        )
                         editParents.forEach { parent ->
                             DropdownMenuItem(
                                 text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
@@ -1386,6 +1392,7 @@ private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Un
 }
 
 private const val CHOOSE_LATER = "Choose later (pending)"
+private const val UNCATEGORIZED = "Uncategorized (pending)"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1469,18 +1476,3 @@ private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T)
         }
 }
 
-private fun weekStart(startsOnMonday: Boolean = true): Long {
-    val cal = Calendar.getInstance()
-    val target = if (startsOnMonday) Calendar.MONDAY else Calendar.SUNDAY
-    val diff = (cal.get(Calendar.DAY_OF_WEEK) - target + 7) % 7
-    cal.add(Calendar.DAY_OF_YEAR, -diff)
-    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-    return cal.timeInMillis
-}
-
-private fun fmtINR(n: Double): String {
-    if (n.isNaN() || n.isInfinite()) return "—"
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = 0; minimumFractionDigits = 0
-    }.format(n.toLong())
-}

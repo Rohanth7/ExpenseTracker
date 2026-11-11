@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.BillRepository
@@ -64,5 +65,23 @@ class DashboardLoansTest {
         // Car: the EMIs 2 and 1 months ago are paid, this month's is still due
         assertEquals(2, s.activeLoans.single().paidMonths)
         assertEquals(10000.0, s.emiStillDue, 0.01)
+    }
+
+    /** B-17: left open across a month's end, the Overview stayed on the old month until data changed. */
+    @Test fun theOverviewMovesToTheNewMonthWhenItComesBack() = runBlocking {
+        fun at(month: Int, day: Int, hour: Int) = Calendar.getInstance().apply { clear(); set(2026, month - 1, day, hour, 0) }.timeInMillis
+        var now = at(11, 30, 23)
+        db.expenseDao().insert(Expense(amount = 400.0, description = "November dinner", categoryId = -1, date = at(11, 30, 20)))
+        val vm = DashboardViewModel(context, CategoryRepository(db.categoryDao(), db.expenseDao()), ExpenseRepository(db.expenseDao(), context),
+            SavingsGoalRepository(db.savingsGoalDao()), BillRepository(db.billDao()), LoanRepository(db.loanDao()),
+            IncomeRepository(db.incomeDao(), db.recurringIncomeDao(), context), prefs, clock = { now })
+        val november = withTimeout(15_000) { vm.uiState.first { it.totalSpent == 400.0 } }
+
+        now = at(12, 1, 0) + 60_000
+        vm.refresh()
+
+        val december = withTimeout(15_000) { vm.uiState.first { it.monthLabel != november.monthLabel } }
+        assertEquals(0.0, december.totalSpent, 0.0)
+        assertEquals(0, december.pendingCount)
     }
 }

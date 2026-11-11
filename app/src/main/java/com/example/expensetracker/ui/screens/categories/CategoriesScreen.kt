@@ -1,5 +1,8 @@
 package com.example.expensetracker.ui.screens.categories
 
+import com.example.expensetracker.ui.util.MAX_CATEGORY_NAME_LENGTH
+import com.example.expensetracker.ui.util.categoryNameError
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -32,8 +35,6 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
-import java.text.NumberFormat
-import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.screens.expenses.Tags
@@ -48,9 +49,6 @@ private val PRESET_COLORS = listOf(
     "#3F51B5", "#2196F3", "#00BCD4", "#009688",
     "#4CAF50", "#8BC34A", "#FFEB3B", "#FF9800"
 )
-
-private fun fmtINR(amount: Double): String =
-    NumberFormat.getNumberInstance(Locale("en", "IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
 fun CategoriesScreen(viewModel: CategoriesViewModel) {
@@ -337,6 +335,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
     if (showDialog && (!editingExisting || editTarget != null)) {
         CategoryDialog(
             initial = editTarget,
+            siblingNames = categories.filter { it.parentId == editTarget?.parentId && it.id != editTarget?.id }.map { it.name },
             onDismiss = { showDialog = false; editTarget = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 val existing = editTarget
@@ -355,6 +354,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
         CategoryDialog(
             initial = null,
             parentName = parent.name,
+            siblingNames = categories.filter { it.parentId == parent.id }.map { it.name },
             onDismiss = { addSubcategoryFor = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 viewModel.addCategory(name, emoji, colorHex, limit, parentId = parent.id)
@@ -619,9 +619,11 @@ private fun RenameTagDialog(
 }
 
 @Composable
-private fun CategoryDialog(
+internal fun CategoryDialog(
     initial: Category?,
     parentName: String? = null,
+    /** The other names under the same parent; a new or renamed category can't take one of them. */
+    siblingNames: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
@@ -633,6 +635,10 @@ private fun CategoryDialog(
     }
     val limit = rememberAmountText(limitText) { parseLimitInput(it) }
     val parsedLimit = limit.value
+    // Like the bill and loan dialogs: Save is enabled only when it will save, and a wrong value
+    // says why. A blank name isn't flagged before anything is typed.
+    val nameError = categoryNameError(name, siblingNames, current = initial?.name)
+    val canSave = nameError == null && parsedLimit != null
 
     AppAlertDialog(
         onDismissRequest = onDismiss,
@@ -650,9 +656,12 @@ private fun CategoryDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    // A name already longer than the limit can be shortened, not lengthened.
+                    onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH || it.length < name.length) name = it },
                     label = { Text("Name") },
                     singleLine = true,
+                    isError = name.isNotBlank() && nameError != null,
+                    supportingText = if (name.isNotBlank() && nameError != null) ({ Text(nameError) }) else null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Jade,
@@ -716,9 +725,9 @@ private fun CategoryDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isBlank() || parsedLimit == null) return@TextButton
+                if (!canSave || parsedLimit == null) return@TextButton
                 onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit)
-            }) { Text("Save", color = Jade) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

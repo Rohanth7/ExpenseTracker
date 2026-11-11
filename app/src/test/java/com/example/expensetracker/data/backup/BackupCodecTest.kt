@@ -9,6 +9,7 @@ import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.data.recurring.BillMonth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -205,5 +206,38 @@ class BackupCodecTest {
         // Once something is entered again, backups go on as before
         val next = reset.copy(incomes = listOf(Income(amount = 5.0, description = "Gift", date = 1)))
         assertTrue(BackupCodec.mayReplace(withRecords, next))
+    }
+
+    /** B-01: the months auto-log bills were handled in travel with the bills. */
+    @Test fun `bill months round-trip and a file without them still reads`() {
+        val months = listOf(BillMonth(billId = 3, year = 2026, month = 11))
+        val data = BackupData(categories = emptyList(), expenses = emptyList(),
+            bills = listOf(Bill(id = 3, name = "Rent", amount = 22000.0, dueDayOfMonth = 5, autoLog = true)), billMonths = months)
+        assertEquals(months, ok(BackupCodec.toJson(data)).billMonths)
+        assertEquals(null, ok("""{"version":3,"categories":[],"expenses":[],"bills":[]}""").billMonths)
+        assertTrue(invalid("""{"version":3,"categories":[],"expenses":[],"billMonths":[{"billId":3,"year":2026,"month":13}]}""").contains("bill month 1"))
+    }
+
+    /** B-02: the dialogs need a bill amount above 0. A ₹0 bill from an older file still restores; a negative one never could be made. */
+    @Test fun `a bill with a negative amount is refused, one saved with 0 still restores`() {
+        fun file(amount: String) = """{"version":3,"categories":[],"expenses":[],"bills":[{"id":1,"name":"Rent","amount":$amount,"dueDayOfMonth":5}]}"""
+        assertTrue(invalid(file("-1")).contains("bill 1"))
+        assertEquals(0.0, ok(file("0")).bills!!.single().amount, 0.0)
+    }
+
+    /** B-16: "Back up now" uploaded an empty phone over a Drive backup that had records, without asking. */
+    @Test fun `a manual backup asks before replacing records with an empty snapshot`() {
+        val withRecords = BackupCodec.toJson(BackupData(categories = emptyList(), expenses = listOf(Expense(amount = 1.0, description = "Tea", date = 1))))
+        val empty = BackupData(categories = listOf(Category(id = 1, name = "Food")), expenses = emptyList())
+        assertTrue(BackupCodec.needsConfirmation(empty) { withRecords })
+        // Nothing to lose: no backup in Drive, an empty one, or one that can't be read
+        assertFalse(BackupCodec.needsConfirmation(empty) { null })
+        assertFalse(BackupCodec.needsConfirmation(empty) { BackupCodec.toJson(empty) })
+        assertFalse(BackupCodec.needsConfirmation(empty) { "not a backup" })
+    }
+
+    @Test fun `a manual backup with records never downloads the old one to check`() {
+        val next = BackupData(categories = emptyList(), expenses = listOf(Expense(amount = 5.0, description = "Coffee", date = 1)))
+        assertFalse(BackupCodec.needsConfirmation(next) { throw AssertionError("downloaded the Drive backup") })
     }
 }

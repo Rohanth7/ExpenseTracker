@@ -48,9 +48,9 @@ class AmountHintTest {
         assertEquals(INVALID_AMOUNT, hint("abc", parse = noneIfBlank))
     }
 
-    @Test fun `bills, loan totals and income accept 0 but not nothing`() {
-        // Saved with 0 before (a reminder-only bill); they must stay editable. Blank income used
-        // to do nothing on Save; it mustn't wipe the income now.
+    @Test fun `loan totals and income accept 0 but not nothing`() {
+        // A loan total is optional. Blank income used to do nothing on Save; it mustn't wipe the
+        // income now. (Bills need an amount above 0 since B-02: they read like an expense amount.)
         assertEquals(0.0, read("0", parse = orZero).value!!, 0.0)
         assertEquals(1500.0, read("1,500", parse = orZero).value!!, 0.0)
         assertNull(read("", parse = orZero).value)

@@ -1,5 +1,6 @@
 package com.example.expensetracker.widget
 
+import com.example.expensetracker.ui.util.fmtINR
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -192,7 +193,9 @@ private fun buildViews(
         setTextViewText(R.id.donut_percent, if (!hasIncome) "—" else "$percent%")
 
         setTextViewText(R.id.spent_label, "SPENT · ${data.monthLabel}")
-        setTextViewText(R.id.spent_amount, fmtINR(spent))
+        val spentText = fmtINR(spent)
+        setTextViewText(R.id.spent_amount, spentText)
+        setTextViewTextSize(R.id.spent_amount, android.util.TypedValue.COMPLEX_UNIT_SP, spentTextSizeSp(spentText))
         setTextViewText(R.id.budget_caption, caption)
 
         setInt(R.id.status_pill, "setBackgroundResource", pillBgRes)
@@ -209,3 +212,14 @@ private fun buildViews(
     }
 }
 
+/**
+ * The widget's spent figure is one line beside the donut: 36sp for up to five characters
+ * ("9,999"), smaller as the amount grows or has paise ("12,34,567.89" at 16sp).
+ */
+internal fun spentTextSizeSp(text: String): Float = when {
+    text.length <= 5 -> 36f
+    text.length <= 7 -> 28f
+    text.length <= 9 -> 22f
+    text.length <= 11 -> 18f
+    else -> 16f
+}

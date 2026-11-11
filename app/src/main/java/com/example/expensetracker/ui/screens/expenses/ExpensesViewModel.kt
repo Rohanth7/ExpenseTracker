@@ -56,10 +56,21 @@ class ExpensesViewModel(
     val categoryFilter: StateFlow<Long?> = _categoryFilter.asStateFlow()
     val tagFilter: StateFlow<String?> = _tagFilter.asStateFlow()
     val sortByAmount: StateFlow<Boolean> = _sortByAmount.asStateFlow()
-    val selectedIds: StateFlow<Set<Long>> = _selectedIds.asStateFlow()
 
     init {
         viewModelScope.launch { _selectedIds.collect { saved["selected_ids"] = it.toLongArray() } }
+    }
+
+    /**
+     * A tag filter no expense has any more is dropped: the tag was renamed or deleted in the
+     * Categories tab, or its last expense went, and the filter would show an empty list with no
+     * chip to turn it off. Only once the expenses have loaded.
+     */
+    private fun dropStaleTagFilter() = viewModelScope.launch {
+        loadedExpenses.filterNotNull().collect { all ->
+            val tag = _tagFilter.value ?: return@collect
+            if (all.none { e -> Tags.parse(e.tags).any { Tags.same(it, tag) } }) _tagFilter.value = null
+        }
     }
     val dateFilter: StateFlow<DateFilter?> = _dateFilter.asStateFlow()
     /** The dates [dateFilter] covers now. */
@@ -71,40 +82,76 @@ class ExpensesViewModel(
     val showIncome: StateFlow<Boolean> = _showIncome.asStateFlow()
     fun setShowIncome(show: Boolean) { _showIncome.value = show; if (show) _selectedIds.value = emptySet() }
 
-    val categories: StateFlow<List<Category>> = categoryRepo.allCategories
+    /** Null until loaded, like [loadedExpenses]: a category filter can't be applied before then. */
+    private val loadedCategories: StateFlow<List<Category>?> = categoryRepo.allCategories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val categories: StateFlow<List<Category>> = loadedCategories.map { it.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _allExpenses: StateFlow<List<Expense>> = expenseRepo.allExpenses
+    /** Null until the database has answered, so "nothing loaded yet" isn't read as "nothing matches". */
+    private val loadedExpenses: StateFlow<List<Expense>?> = expenseRepo.allExpenses
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _allExpenses: StateFlow<List<Expense>> = loadedExpenses.map { it.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init { dropStaleTagFilter() }
 
     val hasAnyExpenses: StateFlow<Boolean> = _allExpenses
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val expenses: StateFlow<List<Expense>> = combine(
-        _allExpenses,
+    /** The list on screen, or null while it's loading. */
+    private val shownExpenses: StateFlow<List<Expense>?> = combine(
+        loadedExpenses,
         _searchQuery,
-        combine(_categoryFilter, categories) { f, cats -> f to cats },
+        combine(_categoryFilter, loadedCategories) { f, cats -> f to cats },
         combine(_sortByAmount, dateRange, _minAmount, _maxAmount, _tagFilter) { b, r, min, max, tag ->
             Quint(b, r, min, max, tag)
         }
     ) { all, query, (catFilter, cats), extra ->
+        if (all == null || cats == null) return@combine null
         val (byAmount, range, minAmt, maxAmt, tag) = extra
         val filtered = all.filter { expense ->
             val matchesQuery = query.isBlank() ||
                 expense.description.contains(query, ignoreCase = true) ||
-                expense.tags.contains(query, ignoreCase = true)
+                Tags.matchesQuery(expense.tags, query)
             val matchesCat = catFilter == null || catFilter == -1L ||
                 expense.categoryId == catFilter ||
                 cats.find { it.id == expense.categoryId }?.parentId == catFilter
             val matchesRange = range == null || expense.date in range.first..range.second
             val matchesMin = minAmt == null || expense.amount >= minAmt
             val matchesMax = maxAmt == null || expense.amount <= maxAmt
-            val matchesTag = tag == null || Tags.parse(expense.tags).any { it.equals(tag, ignoreCase = true) }
+            val matchesTag = tag == null || Tags.parse(expense.tags).any { Tags.same(it, tag) }
             matchesQuery && matchesCat && matchesRange && matchesMin && matchesMax && matchesTag
         }
         if (byAmount) filtered.sortedByDescending { it.amount } else filtered
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val expenses: StateFlow<List<Expense>> = shownExpenses.map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * The selected rows. A search or filter that hides a selected row deselects it, for good: it
+     * left the count and bulk delete and move either way, and kept selected out of sight it came
+     * back into the next bulk action once the filter was cleared, with no way to deselect it
+     * meanwhile. While the list is loading, the saved selection as it was.
+     */
+    val selectedIds: StateFlow<Set<Long>> = combine(_selectedIds, shownExpenses, ::selectionOnScreen)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), _selectedIds.value)
+
+    init {
+        viewModelScope.launch {
+            shownExpenses.filterNotNull().collect { shown ->
+                val onScreen = selectionOnScreen(_selectedIds.value, shown)
+                if (onScreen.size != _selectedIds.value.size) _selectedIds.value = onScreen
+            }
+        }
+    }
+
+    private fun selectionOnScreen(selected: Set<Long>, shown: List<Expense>?): Set<Long> =
+        if (shown == null) selected else shown.mapNotNullTo(mutableSetOf()) { it.id.takeIf(selected::contains) }
 
     private val _allIncomes: StateFlow<List<Income>> = incomeRepo.allIncomes
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -131,6 +178,20 @@ class ExpensesViewModel(
     private val _weekStartsOnMonday = MutableStateFlow(prefs.weekStartsOnMonday)
     val weekStartsOnMonday: StateFlow<Boolean> = _weekStartsOnMonday.asStateFlow()
 
+    /**
+     * "THIS WEEK" in the header: everything spent (or earned) since the week began, whatever the
+     * search and filters show. It was summed from the filtered list.
+     */
+    val weekTotal: StateFlow<Double> = combine(_allExpenses, _weekStartsOnMonday, _now) { all, monday, now ->
+        val start = weekStart(now, monday)
+        all.filter { it.date >= start }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val weekIncome: StateFlow<Double> = combine(_allIncomes, _weekStartsOnMonday, _now) { all, monday, now ->
+        val start = weekStart(now, monday)
+        all.filter { it.date >= start }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
     /** Settings that can change while this screen is away (Settings, a backup restore). */
     fun syncPrefs() {
         _weekStartsOnMonday.value = prefs.weekStartsOnMonday
@@ -147,15 +208,6 @@ class ExpensesViewModel(
     fun clearDateRange() { _dateFilter.value = null }
     fun setMinAmount(amt: Double?) { _minAmount.value = amt }
     fun setMaxAmount(amt: Double?) { _maxAmount.value = amt }
-    fun clearAllFilters() {
-        _searchQuery.value = ""
-        _categoryFilter.value = -1L
-        _tagFilter.value = null
-        _dateFilter.value = null
-        _minAmount.value = null
-        _maxAmount.value = null
-    }
-
     fun renameTag(oldName: String, newName: String) = viewModelScope.launch {
         val name = Tags.cleanName(newName) ?: return@launch
         Tags.renameEverywhere(expenseRepo, incomeRepo, oldName, name)
@@ -175,18 +227,18 @@ class ExpensesViewModel(
     fun clearSelection() { _selectedIds.value = emptySet() }
 
     fun bulkDelete() = viewModelScope.launch {
-        val ids = _selectedIds.value
+        val ids = selectionOnScreen(_selectedIds.value, shownExpenses.value)
         if (ids.isEmpty()) return@launch
-        
+
         val toDelete = _allExpenses.value.filter { it.id in ids }
         toDelete.forEach { expenseRepo.delete(it) }
         _selectedIds.value = emptySet()
     }
 
     fun bulkCategorize(categoryId: Long) = viewModelScope.launch {
-        val ids = _selectedIds.value
+        val ids = selectionOnScreen(_selectedIds.value, shownExpenses.value)
         if (ids.isEmpty() || categoryId == -1L) return@launch
-        
+
         val toUpdate = _allExpenses.value.filter { it.id in ids }
         toUpdate.forEach { 
             expenseRepo.update(it.copy(categoryId = categoryId))
@@ -282,4 +334,14 @@ class ExpensesViewModel(
                     ExpensesViewModel(expenseRepo, categoryRepo, mappingRepo, incomeRepo, appContext, prefs, extras.createSavedStateHandle()) as T
             }
     }
+}
+
+/** Midnight at the start of the week [now] is in. */
+internal fun weekStart(now: Long, startsOnMonday: Boolean): Long {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+    val target = if (startsOnMonday) java.util.Calendar.MONDAY else java.util.Calendar.SUNDAY
+    val diff = (cal.get(java.util.Calendar.DAY_OF_WEEK) - target + 7) % 7
+    cal.add(java.util.Calendar.DAY_OF_YEAR, -diff)
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0); cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
 }

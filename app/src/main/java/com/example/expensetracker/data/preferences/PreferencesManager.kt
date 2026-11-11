@@ -3,6 +3,7 @@ package com.example.expensetracker.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.recurring.BillMonth
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -98,4 +99,18 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
     var lastManualCategoryId: Long
         get() = prefs.getLong("last_manual_category_id", -1L)
         set(value) = prefs.edit().putLong("last_manual_category_id", value).apply()
+
+    /** The months auto-log bills have been handled in (`RecurringManager.applyBills`). Setting it replaces them all. */
+    var billMonths: List<BillMonth>
+        get() = prefs.all.filterValues { it == true }.keys.mapNotNull(BillMonth::fromKey)
+        set(value) {
+            val edit = prefs.edit()
+            prefs.all.keys.filter { it.startsWith(BillMonth.PREFIX) }.forEach(edit::remove)
+            value.forEach { edit.putBoolean(it.key, true) }
+            edit.apply()
+        }
+
+    fun isBillMonthDone(month: BillMonth): Boolean = prefs.getBoolean(month.key, false)
+
+    fun markBillMonthDone(month: BillMonth) = prefs.edit().putBoolean(month.key, true).apply()
 }

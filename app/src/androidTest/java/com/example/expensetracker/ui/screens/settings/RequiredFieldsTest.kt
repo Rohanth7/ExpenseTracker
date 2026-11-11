@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.entity.Bill
+import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.ui.screens.dashboard.AddGoalDialog
 import org.junit.Assert.assertEquals
@@ -58,6 +59,74 @@ class RequiredFieldsTest {
         assertEquals(listOf("Rent", 15000.0, 5, 2, false), added)
     }
 
+    /** B-02: a ₹0 bill could be saved, and with auto-log it added a ₹0 expense every month. */
+    @Test fun aBillAmountMustBeAboveZero() {
+        var added: Double? = null
+        compose.setContent { AddBillDialog(emptyList(), onDismiss = {}, onConfirm = { _, a, _, _, _, _ -> added = a }) }
+        type("Name (e.g. Rent, Netflix)", "Rent")
+        type("Due day", "5")
+        type("Amount (₹)", "0")
+        compose.onNodeWithText("Add").assertIsNotEnabled().performClick()
+        compose.onNodeWithText("Enter a valid amount").assertExists()
+        assertNull(added)
+        retype("Amount (₹)", "0.5")
+        compose.onNodeWithText("Add").assertIsEnabled().performClick()
+        assertEquals(0.5, added!!, 0.0)
+    }
+
+    /** Review of B-02: a reminder-only bill saved with ₹0 before the rule couldn't be edited at all. */
+    @Test fun aReminderBillSavedWithZeroCanStillBeEdited() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 0.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
+        retype("Due day", "7")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(0.0 to 7, saved!!.amount to saved!!.dueDayOfMonth)
+        // Auto-log adds the amount as an expense every month: now it needs one
+        compose.onNodeWithText("Auto-log expense monthly").performClick()
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+        retype("Amount (₹)", "15000")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(15000.0, saved!!.amount, 0.0)
+    }
+
+    /** A bill that has an amount can't be edited down to ₹0. */
+    @Test fun aBillWithAnAmountCantBeSetToZero() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 15000.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
+        retype("Amount (₹)", "0")
+        compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        assertNull(saved)
+    }
+
+    /** B-19: the category is optional, but the first one was pre-selected and couldn't be unpicked. */
+    @Test fun aBillHasNoCategoryUnlessOneIsPicked() {
+        val categories = listOf(Category(id = 7, name = "Food"), Category(id = 8, name = "Rent"))
+        var category: Long? = null
+        compose.setContent { AddBillDialog(categories, onDismiss = {}, onConfirm = { _, _, _, _, c, _ -> category = c }) }
+        type("Name (e.g. Rent, Netflix)", "Gym"); type("Amount (₹)", "900"); type("Due day", "5")
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(-1L, category)
+
+        // Picked, then unpicked again
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("📦 Rent").performClick()
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(8L, category)
+        compose.onNodeWithText("📦 Rent").performClick()
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("Add").performClick()
+        assertEquals(-1L, category)
+    }
+
+    @Test fun editingABillCanRemoveItsCategory() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Gym", amount = 900.0, dueDayOfMonth = 5, categoryId = 7), listOf(Category(id = 7, name = "Food")), onDismiss = {}, onConfirm = { saved = it }) }
+        compose.onNode(hasText("Food", substring = true) and hasText("Category (optional)")).performClick()
+        compose.onNodeWithText("None").performClick()
+        compose.onNodeWithText("Save").performClick()
+        assertEquals(-1L, saved!!.categoryId)
+    }
+
     @Test fun editingABillCantBlankItsName() {
         var saved: Bill? = null
         compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 15000.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
@@ -90,6 +159,42 @@ class RequiredFieldsTest {
         field("Tenure (mo)").performTextClearance()
         compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
         assertNull(saved)
+    }
+
+    /** B-07: a blank "1st EMI, months ago" was saved as 0, so a loan 10 months in went back to its first month. */
+    @Test fun editingALoanCantBlankWhenItStarted() {
+        val tenMonthsAgo = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -10); set(java.util.Calendar.DAY_OF_MONTH, 1) }.timeInMillis
+        var saved: Loan? = null
+        compose.setContent { EditLoanDialog(Loan(name = "Car", totalAmount = 60000.0, monthlyEmi = 5000.0, tenureMonths = 12, startDate = tenMonthsAgo), onDismiss = {}, onConfirm = { saved = it }) }
+        field("1st EMI, months ago").performTextClearance()
+        compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        compose.onNodeWithText("0 to 1200 months").assertExists()
+        assertNull(saved)
+        type("1st EMI, months ago", "10")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(10, monthsBetween(saved!!.startDate))
+    }
+
+    @Test fun addingALoanNeedsWhenItStarted() {
+        var start: Long? = null
+        compose.setContent { AddLoanDialog(onDismiss = {}, onConfirm = { _, _, _, _, _, s, _ -> start = s }) }
+        type("Loan name", "Car"); type("Total (₹)", "60000"); type("EMI (₹)", "5000"); type("Tenure (mo)", "12")
+        compose.onNodeWithText("Add").assertIsEnabled()
+        field("1st EMI, months ago").performTextClearance()
+        compose.onNodeWithText("Add").assertIsNotEnabled()
+        // Past any loan: it used to overflow and be saved as 0
+        type("1st EMI, months ago", "99999999999")
+        compose.onNodeWithText("Add").assertIsNotEnabled().performClick()
+        assertNull(start)
+        retype("1st EMI, months ago", "3")
+        compose.onNodeWithText("Add").assertIsEnabled().performClick()
+        assertEquals(3, monthsBetween(start!!))
+    }
+
+    private fun monthsBetween(start: Long): Int {
+        val now = java.util.Calendar.getInstance()
+        val then = java.util.Calendar.getInstance().apply { timeInMillis = start }
+        return (now.get(java.util.Calendar.YEAR) - then.get(java.util.Calendar.YEAR)) * 12 + now.get(java.util.Calendar.MONTH) - then.get(java.util.Calendar.MONTH)
     }
 
     /** BUG-26: the icon took at most 2 UTF-16 units, so 🇮🇳 (4) or 👨‍👩‍👧 (8) was refused. */

@@ -1,0 +1,130 @@
+package com.example.expensetracker.ui.screens.expenses
+
+import android.content.Context
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.expensetracker.data.db.AppDatabase
+import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.export.DateFilter
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.repository.CategoryRepository
+import com.example.expensetracker.data.repository.ExpenseRepository
+import com.example.expensetracker.data.repository.IncomeRepository
+import com.example.expensetracker.data.repository.MerchantMappingRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** The Expenses header and search bar against a throwaway in-memory database and settings file. */
+@RunWith(AndroidJUnit4::class)
+class ExpensesFiltersTest {
+    @get:Rule val compose = createComposeRule()
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private lateinit var db: AppDatabase
+    private lateinit var vm: ExpensesViewModel
+    private var food = 0L
+
+    @Before fun setUp() {
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        context.deleteSharedPreferences("expenses_filters_test")
+        runBlocking {
+            food = db.categoryDao().insert(Category(name = "Food"))
+            db.expenseDao().insert(Expense(amount = 900.0, description = "Dinner", source = "Manual", categoryId = food, tags = "goa"))
+            db.expenseDao().insert(Expense(amount = 250.0, description = "Cab", source = "Manual", tags = "goa"))
+            db.expenseDao().insert(Expense(amount = 180.0, description = "Coffee", source = "Manual", categoryId = food))
+        }
+        vm = runBlocking(Dispatchers.Main) { ExpensesViewModel(ExpenseRepository(db.expenseDao(), context), CategoryRepository(db.categoryDao(), db.expenseDao()),
+            MerchantMappingRepository(db.merchantMappingDao()), IncomeRepository(db.incomeDao(), db.recurringIncomeDao(), context),
+            context, PreferencesManager(context, "expenses_filters_test"), SavedStateHandle()) }
+        compose.setContent { ExpensesScreen(vm, onCategorize = {}) }
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Dinner")).fetchSemanticsNodes().isNotEmpty() }
+    }
+    @After fun tearDown() { vm.viewModelScope.cancel(); db.close() }
+
+    private fun shows(text: String) = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
+
+    /** B-09: "THIS WEEK" was summed from the filtered list, so a search changed the week's total. */
+    @Test fun theWeekTotalIgnoresSearchAndFilters() {
+        // Unfiltered, today's total says the same; filtered, only the week's does
+        assertTrue(shows("₹1,330"))
+        compose.runOnUiThread { vm.setSearchQuery("Dinner") }
+        compose.waitUntil(5_000) { !shows("Cab") }
+        compose.onNodeWithText("₹1,330").assertExists()
+        compose.runOnUiThread { vm.setSearchQuery(""); vm.setCategoryFilter(food) }
+        compose.waitUntil(5_000) { !shows("Cab") && shows("Coffee") }
+        compose.onNodeWithText("₹1,330").assertExists()
+    }
+
+    /** B-10: the ✕ took the sort toggle's place while a search, amount or date filter was on. */
+    @Test fun sortStaysReachableWhileSearchingOrFiltering() {
+        compose.runOnUiThread { vm.setSearchQuery("C"); vm.setMinAmount(100.0); vm.setDateFilter(DateFilter(ExportPreset.THIS_MONTH)) }
+        compose.onNodeWithContentDescription("Sort by amount").performClick()
+        compose.waitUntil(5_000) { vm.sortByAmount.value }
+        compose.onNodeWithContentDescription("Sort by date").assertExists()
+        compose.onNodeWithContentDescription("Filters").assertExists()
+    }
+
+    /** B-10: the ✕ in the search bar also reset the category and tag chips, dates and amount limits. */
+    @Test fun clearingTheSearchKeepsTheOtherFilters() {
+        compose.runOnUiThread { vm.setCategoryFilter(food); vm.setMinAmount(100.0); vm.setSearchQuery("Din") }
+        compose.waitUntil(5_000) { !shows("Coffee") }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.waitUntil(5_000) { shows("Coffee") }
+        assertEquals("", vm.searchQuery.value)
+        assertEquals(food, vm.categoryFilter.value)
+        assertEquals(100.0, vm.minAmount.value!!, 0.0)
+        // Nothing to clear: no ✕
+        compose.onNodeWithContentDescription("Clear search").assertDoesNotExist()
+        assertTrue(!shows("Cab"))
+    }
+
+    @Test fun clearingTheSearchKeepsTheTagChip() {
+        compose.runOnUiThread { vm.setTagFilter("goa"); vm.setSearchQuery("Din") }
+        compose.waitUntil(5_000) { !shows("Cab") }
+        compose.onNodeWithContentDescription("Clear search").performClick()
+        compose.waitUntil(5_000) { shows("Cab") }
+        assertEquals("goa", vm.tagFilter.value)
+        assertTrue(!shows("Coffee"))
+    }
+
+    /** B-13: Edit had no way to move a filed expense back to pending. */
+    @Test fun editCanMoveAnExpenseBackToPending() {
+        compose.onNodeWithText("Dinner").performClick()
+        compose.onNode(hasText("Food", substring = true) and hasAnyAncestor(isDialog()) and hasText("Category")).performClick()
+        compose.onNodeWithText("Uncategorized (pending)").performClick()
+        compose.onNode(hasText("Save") and hasAnyAncestor(isDialog())).performClick()
+        compose.waitUntil(5_000) { runBlocking { db.expenseDao().getPending().first().any { it.description == "Dinner" } } }
+        // Pending rows say so
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Tap to categorize", substring = true)).fetchSemanticsNodes().size == 2 }
+    }
+
+    /** B-13: an expense whose category no longer exists showed "?" and wasn't pending. */
+    @Test fun anExpenseWhoseCategoryIsGoneBecomesPending() {
+        runBlocking {
+            db.expenseDao().insert(Expense(amount = 60.0, description = "Orphan", source = "Manual", categoryId = 999))
+            db.expenseDao().moveOrphansToPending()
+            assertEquals(listOf("Cab", "Orphan"), db.expenseDao().getPending().first().map { it.description }.sorted())
+            assertEquals(2, db.expenseDao().getAll().first().count { it.categoryId == food })
+        }
+    }
+}

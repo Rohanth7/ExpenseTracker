@@ -71,6 +71,12 @@ object SmsParser {
         "collect request", "requested", "has requested", "request from", "approve"
     )
 
+    // A person's number: 10 to 15 digits, with or without "+" and a country code. Banks send from
+    // a name ("JD-ICICIB") or a short code, which this doesn't match.
+    private val PHONE_NUMBER = Regex("""^\+?\d{10,15}$""")
+
+    private fun isPhoneNumber(sender: String) = PHONE_NUMBER.matches(sender.filterNot { it == ' ' || it == '-' })
+
     fun isTransactionSms(sender: String, body: String): Boolean {
         val senderLower = sender.lowercase()
         val bodyLower = body.lowercase()
@@ -82,6 +88,9 @@ object SmsParser {
 
         if (!hasAmount || !(fromKnownSender || fromMerchant || hasDebitKeyword)) return false
         if (fromMerchant && !hasAccountRef) return false
+        // A text from someone's own number ("I paid Rs 500 to the shop for you") is theirs, not a
+        // bank's: it counts only if it names an account or card.
+        if (!fromKnownSender && isPhoneNumber(sender) && !hasAccountRef) return false
 
         // Promotional SMS filter: if the message contains promo signals and no account
         // reference, and is not from a known bank/payment sender, reject it.

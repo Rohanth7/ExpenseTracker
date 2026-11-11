@@ -13,7 +13,22 @@ data class TagSummary(val name: String, val count: Int, val totalSpent: Double)
  */
 object Tags {
     fun parse(raw: String): List<String> =
-        raw.split(",").map { it.trim().trimStart('#') }.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+        raw.split(",").map { it.trim().trimStart('#').trim() }.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+
+    /**
+     * [raw] as it's stored: names trimmed, without their "#", each once (the first spelling wins).
+     * The repositories save tags through this, so every screen stores them the same way; tags
+     * stored before that read the same through [parse].
+     */
+    fun normalize(raw: String): String = parse(raw).joinToString(",")
+
+    /** Whether a search for [query] finds one of [raw]'s tags. "#food" finds the tag "food". */
+    fun matchesQuery(raw: String, query: String): Boolean {
+        val q = query.trim().trimStart('#').trim()
+        return q.isNotEmpty() && parse(raw).any { it.contains(q, ignoreCase = true) }
+    }
+
+    fun same(a: String?, b: String?): Boolean = a != null && b != null && a.equals(b, ignoreCase = true)
 
     /** A name the user typed for a tag, or null if it's blank or has a comma (it would become two tags). */
     fun cleanName(name: String): String? = name.trim().trimStart('#').trim().takeIf { it.isNotEmpty() && ',' !in it }

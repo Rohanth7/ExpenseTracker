@@ -1,5 +1,7 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -40,9 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.formatRupees
 import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
-import java.text.NumberFormat
 import java.util.Calendar
-import java.util.Locale
 import kotlin.math.roundToInt
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.formatLimitInput
@@ -65,8 +65,19 @@ fun DashboardScreen(
     var showAddGoalDialog by rememberSaveable { mutableStateOf(false) }
     var showNotifCenter by rememberSaveable { mutableStateOf(false) }
     var goalToUpdate by rememberSaveableItem(state.savingsGoals) { it.id }
+    var goalToDelete by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
+    // "As of now" figures move on when the screen comes back (past midnight, a new budget month,
+    // a changed alert threshold).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val spentFraction = if (state.monthlyIncome > 0)
         (state.totalSpent / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat() else 0f
@@ -315,7 +326,7 @@ fun DashboardScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "UPI transactions need categorizing",
+                            pendingBannerText(state.pendingCount),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Ink
@@ -405,7 +416,7 @@ fun DashboardScreen(
         }
 
         // ── Against budgets ─────────────────────────────────────
-        val budgeted = state.categorySummaries.filter { it.category.monthlyLimit > 0 }
+        val budgeted = state.budgets
         if (budgeted.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
@@ -425,8 +436,8 @@ fun DashboardScreen(
                 ) {
                     budgeted.forEachIndexed { i, summary ->
                         if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        val pct = (summary.spent / summary.category.monthlyLimit).coerceIn(0.0, 1.0).toFloat()
-                        val over = summary.spent > summary.category.monthlyLimit
+                        val pct = (summary.spent / summary.limit).coerceIn(0.0, 1.0).toFloat()
+                        val over = summary.spent > summary.limit
                         val catColor = parseColor(summary.category.colorHex)
                         Column(
                             modifier = Modifier
@@ -445,12 +456,13 @@ fun DashboardScreen(
                                         .clip(CircleShape)
                                         .background(catColor)
                                 )
-                                Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f))
+                                // "Food › Coffee" for a subcategory's own limit
+                                Text(summary.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text(
                                     buildAnnotatedString {
                                         append("₹${fmtINR(summary.spent)} ")
                                         withStyle(SpanStyle(color = Muted.copy(alpha = 0.5f))) {
-                                            append("/ ₹${fmtINR(summary.category.monthlyLimit)}")
+                                            append("/ ₹${fmtINR(summary.limit)}")
                                         }
                                     },
                                     fontFamily = FontFamily.Monospace,
@@ -526,7 +538,7 @@ fun DashboardScreen(
                 SavingsGoalCard(
                     goal = goal,
                     onAdd = { goalToUpdate = goal },
-                    onDelete = { viewModel.deleteSavingsGoal(goal) },
+                    onDelete = { goalToDelete = goal },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
             }
@@ -674,6 +686,17 @@ fun DashboardScreen(
         )
     }
 
+    goalToDelete?.let { goal ->
+        AppAlertDialog(onDismissRequest = { goalToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Delete goal?") },
+            text = {
+                Text(if (goal.currentAmount > 0) "\"${goal.name}\" and the ₹${fmtINR(goal.currentAmount)} saved in it will be removed."
+                     else "\"${goal.name}\" will be removed.")
+            },
+            confirmButton = { TextButton(onClick = { viewModel.deleteSavingsGoal(goal); goalToDelete = null }) { Text("Delete", color = Coral) } },
+            dismissButton = { TextButton(onClick = { goalToDelete = null }) { Text("Cancel", color = Muted) } })
+    }
+
     goalToUpdate?.let { goal ->
         DepositDialog(
             goalName = goal.name,
@@ -686,6 +709,13 @@ fun DashboardScreen(
         )
     }
 }
+
+/**
+ * The Overview banner's words beside the pending count. Pending expenses come from SMS, payment
+ * apps, cards and hand entry ("Choose later"), so it doesn't name a source.
+ */
+internal fun pendingBannerText(count: Int): String =
+    if (count == 1) "expense needs categorizing" else "expenses need categorizing"
 
 /** "45% achieved"; past the target it keeps counting ("110% achieved"), while the bar stays full. */
 internal fun goalAchieved(goal: SavingsGoal): String =
@@ -726,7 +756,7 @@ private fun SavingsGoalCard(
                     Icon(Icons.Default.Add, null, tint = Jade, modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Delete, "Delete goal ${goal.name}", tint = Muted, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -990,23 +1020,30 @@ fun DsSectionLabel(title: String, modifier: Modifier = Modifier, action: String?
 
 @Composable
 fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = Modifier) {
+    val text = fmtINR(amount)
+    // One line, always: an amount with paise ("1,00,100.74") is longer than the card is wide at
+    // full size, so the text steps down until it fits.
+    var scale by remember(text, size) { mutableStateOf(1f) }
     Text(
         buildAnnotatedString {
             withStyle(SpanStyle(
-                fontSize = (size * 0.55).sp,
+                fontSize = (size * 0.55 * scale).sp,
                 fontStyle = FontStyle.Normal,
                 color = color.copy(alpha = 0.55f),
                 fontFamily = FontFamily.Serif
             )) { append("₹") }
             withStyle(SpanStyle(
-                fontSize = size.sp,
+                fontSize = (size * scale).sp,
                 fontFamily = FontFamily.Serif,
                 fontStyle = FontStyle.Italic,
                 fontWeight = FontWeight.Normal,
                 color = color,
                 letterSpacing = (-0.5).sp
-            )) { append(fmtINR(amount)) }
+            )) { append(text) }
         },
+        maxLines = 1,
+        softWrap = false,
+        onTextLayout = { if (it.didOverflowWidth && scale > 0.4f) scale *= 0.92f },
         modifier = modifier
     )
 }
@@ -1280,9 +1317,3 @@ private fun NotifRow(item: NotifItem, isLast: Boolean = false) {
     if (!isLast) Box(Modifier.fillMaxWidth().height(0.5.dp).background(HairlineSoft))
 }
 
-private fun fmtINR(n: Double): String {
-    if (n.isNaN() || n.isInfinite()) return "—"
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = 0; minimumFractionDigits = 0
-    }.format(n.toLong())
-}

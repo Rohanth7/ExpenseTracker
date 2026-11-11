@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.categorize
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.ui.util.AmountInputState
@@ -35,6 +36,7 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.util.categoryIcon
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.screens.dashboard.LoanProgress
@@ -69,6 +71,9 @@ fun CategorizeScreen(
     // Savings mode state
     var selectedGoalId by rememberSaveable { mutableStateOf(-1L) }
     val savingsAmount = rememberAmountInputState()
+
+    // "Dismiss" deletes the expense, so it asks first.
+    var confirmDismiss by rememberSaveable { mutableStateOf(false) }
 
     // Filled from the expense once: after a rotation (or Android closing the app) the fields
     // come back as the user left them, and refilling them would undo their edits.
@@ -165,7 +170,7 @@ fun CategorizeScreen(
                     onTagsChange = { tags = it },
                     selectedCategoryId = selectedCategoryId,
                     onSelectCategory = { selectedCategoryId = it },
-                    onDismiss = { viewModel.dismissExpense(exp, onDone) },
+                    onDismiss = { confirmDismiss = true },
                     onLater = { viewModel.categorizeLater(onDone) },
                     onSave = {
                         if (selectedCategoryId != -1L) {
@@ -180,7 +185,7 @@ fun CategorizeScreen(
                     loans = loans,
                     selectedLoanId = selectedLoanId,
                     onSelectLoan = { selectedLoanId = it },
-                    onDismiss = { viewModel.dismissExpense(exp, onDone) },
+                    onDismiss = { confirmDismiss = true },
                     onLater = { viewModel.categorizeLater(onDone) },
                     onSave = {
                         loans.find { it.id == selectedLoanId }?.let { viewModel.linkToLoanEmi(exp, it, onDone) }
@@ -192,7 +197,7 @@ fun CategorizeScreen(
                     amount = savingsAmount,
                     selectedGoalId = selectedGoalId,
                     onSelectGoal = { selectedGoalId = it },
-                    onDismiss = { viewModel.dismissExpense(exp, onDone) },
+                    onDismiss = { confirmDismiss = true },
                     onLater = { viewModel.categorizeLater(onDone) },
                     onSave = {
                         val goal = savingsGoals.find { it.id == selectedGoalId }
@@ -203,6 +208,20 @@ fun CategorizeScreen(
                     }
                 )
             }
+        }
+
+        if (confirmDismiss) {
+            AppAlertDialog(
+                onDismissRequest = { confirmDismiss = false },
+                title = { Text("Delete this expense?") },
+                text = { Text("\"${exp.description.take(60)}\" will be removed from your expenses. This can't be undone.") },
+                confirmButton = {
+                    TextButton(onClick = { confirmDismiss = false; viewModel.dismissExpense(exp, onDone) }) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = { TextButton(onClick = { confirmDismiss = false }) { Text("Cancel") } }
+            )
         }
     }
 }
@@ -455,7 +474,7 @@ private fun LoanTile(loan: Loan, selected: Boolean, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(loan.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "EMI ₹${loan.monthlyEmi.toLong()} · $remainingMonths months left",
+                    "EMI ₹${fmtINR(loan.monthlyEmi)} · $remainingMonths months left",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -489,7 +508,7 @@ private fun SavingsGoalTile(goal: SavingsGoal, selected: Boolean, onClick: () ->
                 color = color
             )
             Text(
-                "₹${goal.currentAmount.toLong()} of ₹${goal.targetAmount.toLong()}",
+                "₹${fmtINR(goal.currentAmount)} of ₹${fmtINR(goal.targetAmount)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )

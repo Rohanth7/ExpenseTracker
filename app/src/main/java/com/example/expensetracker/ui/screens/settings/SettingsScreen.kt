@@ -1,5 +1,10 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.R
+import androidx.compose.ui.res.stringResource
+import com.example.expensetracker.ui.util.appFooter
+import com.example.expensetracker.ui.util.appVersionName
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import android.app.Activity
@@ -63,7 +68,6 @@ import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseLimitInput
-import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
@@ -74,9 +78,6 @@ import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
 private enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
-
-private fun fmtINR(amount: Double): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit = {}) {
@@ -144,12 +145,15 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
     }
     val driveSignInClient = remember { GoogleSignIn.getClient(context, driveSignInOptions) }
     val driveSignInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            try {
-                val account = GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java)
-                account?.email?.let { viewModel.setDriveAccount(it) }
-            } catch (_: ApiException) {}
+        // A cancelled or failed sign-in comes back as RESULT_CANCELED, with the reason in the data.
+        val email = try {
+            if (result.data == null) null
+            else GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java)?.email
+        } catch (e: ApiException) {
+            viewModel.showMessage(driveSignInFailure(e.statusCode))
+            return@rememberLauncherForActivityResult
         }
+        if (email != null) viewModel.setDriveAccount(email) else viewModel.showMessage(driveSignInFailure(null))
     }
 
     val driveAuthLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -250,6 +254,14 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
                 onReset = { viewModel.resetAll() }
             )
         }
+    }
+
+    if (viewModel.confirmEmptyBackup) {
+        AppAlertDialog(onDismissRequest = { viewModel.cancelEmptyBackup() }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
+            title = { Text("Replace your Drive backup?") },
+            text = { Text("This phone has nothing to back up, and the backup in your Google Drive has records. Backing up now replaces it with an empty one. To get those records onto this phone, use Restore from Drive instead.") },
+            confirmButton = { TextButton(onClick = { viewModel.backUpToDriveNow(replaceRecords = true) }) { Text("Replace backup", color = Coral) } },
+            dismissButton = { TextButton(onClick = { viewModel.cancelEmptyBackup() }) { Text("Cancel", color = Muted) } })
     }
 
     if (pendingRestore != null) {
@@ -384,7 +396,7 @@ private fun SettingsMainMenu(
                     subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
                     onClick = { onNavigate(SettingsPage.Loans) })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                val budgetedCount = categories.count { it.monthlyLimit > 0 && it.parentId == null }
+                val budgetedCount = categories.count { it.monthlyLimit > 0 }
                 MenuRow(
                     icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
                     title = "Category Budgets",
@@ -425,7 +437,8 @@ private fun SettingsMainMenu(
             Spacer(Modifier.height(32.dp))
         }
         item {
-            Text("Expense Tracker · v2.1", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Whisper,
+            val context = LocalContext.current
+            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Whisper,
                 modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(40.dp))
         }
@@ -443,13 +456,15 @@ private fun CategoryBudgetsSubPage(
 ) {
     var categoryToEdit by rememberSaveableItem(categories) { it.id }
     val parentCategories = categories.filter { it.parentId == null }
+    // Each category, then its subcategories: a subcategory can have a limit of its own.
+    val rows = parentCategories.flatMap { parent -> listOf(parent) + categories.filter { it.parentId == parent.id } }
 
     LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
         item { SubPageHeader("Category Budgets", onBack); Spacer(Modifier.height(8.dp)) }
         item {
             SectionLabel("MONTHLY LIMITS")
             Text(
-                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit.",
+                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit. A subcategory's spending counts toward its own limit and its category's.",
                 fontSize = 11.5.sp, color = Muted, lineHeight = 16.sp,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -474,7 +489,7 @@ private fun CategoryBudgetsSubPage(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper)
                         .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
-                    parentCategories.forEachIndexed { i, cat ->
+                    rows.forEachIndexed { i, cat ->
                         if (i > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                         CategoryLimitRow(category = cat, onClick = { categoryToEdit = cat })
                     }
@@ -1098,11 +1113,12 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
 internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
-    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
-    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
+    // Above 0: an auto-log bill adds its amount as an expense every month.
+    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf("") }
     var reminderDays by rememberSaveable { mutableStateOf("3") }
-    var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
+    // Optional: none unless the user picks one.
+    var selectedCategoryId by rememberSaveable { mutableStateOf(-1L) }
     var expanded by rememberSaveable { mutableStateOf(false) }
     var autoLog by rememberSaveable { mutableStateOf(false) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
@@ -1147,12 +1163,13 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Category (optional)",
-                            onValueChange = {}, readOnly = true, label = { Text("Category") },
+                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
+                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
+                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
                                 DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
                             }
@@ -1203,13 +1220,16 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
     var name by rememberSaveable { mutableStateOf(bill.name) }
     var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
-    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
-    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
+    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
+    // Above 0: an auto-log bill adds its amount as an expense every month. A reminder-only bill
+    // saved with ₹0 before that rule may keep its 0, so its name, due day and reminder can still
+    // be changed; turning auto-log on asks for an amount.
+    val amountText = if (bill.amount == 0.0 && !autoLog) rememberAmountText(amount) { parseAmountOrZero(it) }
+        else rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf(bill.dueDayOfMonth.toString()) }
     var reminderDays by rememberSaveable { mutableStateOf(bill.reminderDays.toString()) }
     var selectedCategoryId by rememberSaveable { mutableStateOf(bill.categoryId) }
     var expanded by rememberSaveable { mutableStateOf(false) }
-    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
     val dayValue = wholeNumberIn(dueDay, 1..31)
     val remindValue = wholeNumberIn(reminderDays, 0..14)
@@ -1252,12 +1272,13 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: "Category (optional)",
-                            onValueChange = {}, readOnly = true, label = { Text("Category") },
+                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
+                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
+                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
                                 DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
                             }
@@ -1276,6 +1297,9 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
+
+/** A bill's category picker when it has none: an auto-logged expense is then pending. */
+private const val NO_CATEGORY = "None"
 
 /** 100 years: enough for any loan, and keeps the month arithmetic in range. */
 private const val MAX_TENURE_MONTHS = 1200
@@ -1307,7 +1331,9 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
     var dueDay by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
     val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
     val dueValue = wholeNumberIn(dueDay, 1..31)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
+    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
+    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Loan") },
@@ -1343,6 +1369,8 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = agoValue == null,
+                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1357,7 +1385,7 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                 val emi = emiText.value ?: return@TextButton
                 val tenure = tenureValue ?: return@TextButton
                 val due = dueValue ?: return@TextButton
-                val ago = monthsAgo.toIntOrNull() ?: 0
+                val ago = agoValue ?: return@TextButton
                 val newStartDate = java.util.Calendar.getInstance().apply {
                     add(java.util.Calendar.MONTH, -ago)
                     set(java.util.Calendar.DAY_OF_MONTH, 1)
@@ -1386,7 +1414,9 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
     var dueDay by rememberSaveable { mutableStateOf("5") }
     val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
     val dueValue = wholeNumberIn(dueDay, 1..31)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
+    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
+    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Loan / EMI") },
@@ -1412,6 +1442,8 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = agoValue == null,
+                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1426,7 +1458,7 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
                 val emi = emiText.value ?: return@TextButton
                 val tenure = tenureValue ?: return@TextButton
                 val due = dueValue ?: return@TextButton
-                val ago = monthsAgo.toIntOrNull() ?: 0
+                val ago = agoValue ?: return@TextButton
                 val startDate = java.util.Calendar.getInstance().apply {
                     add(java.util.Calendar.MONTH, -ago)
                     set(java.util.Calendar.DAY_OF_MONTH, 1)

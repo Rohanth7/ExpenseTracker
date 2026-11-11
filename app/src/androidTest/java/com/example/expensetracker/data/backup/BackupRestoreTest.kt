@@ -1,6 +1,8 @@
 package com.example.expensetracker.data.backup
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,8 +15,12 @@ import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.MerchantMapping
 import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
+import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.data.recurring.BillMonth
+import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRule
 import com.example.expensetracker.sms.ParsingRuleStore
 import kotlinx.coroutines.flow.first
@@ -25,6 +31,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import java.io.RandomAccessFile
 import java.util.Calendar
 
 /** Runs on a device against throwaway in-memory databases; the app's real data isn't touched. */
@@ -46,9 +54,35 @@ class BackupRestoreTest {
         context.deleteSharedPreferences("backup_test_rules_target")
         sourcePrefs = PreferencesManager(context, "backup_test_source")
         targetPrefs = PreferencesManager(context, "backup_test_target")
+        savedFiles = appFiles.associateWith { context.getSharedPreferences(it, Context.MODE_PRIVATE).all.toMap() }
+        savedDismissed = DismissedSubscriptions.flow(context).value
     }
 
-    @After fun tearDown() { source.close(); target.close() }
+    @After fun tearDown() {
+        source.close(); target.close()
+        // A restore clears the app's own alert history and dismissed subscriptions: put them back
+        savedFiles.forEach { (name, entries) -> context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putAll(entries).commit() }
+        DismissedSubscriptions.clear(context)
+        savedDismissed.forEach { DismissedSubscriptions.dismiss(context, it) }
+    }
+
+    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs", "bill_reminder_prefs")
+    private lateinit var savedFiles: Map<String, Map<String, *>>
+    private lateinit var savedDismissed: Set<String>
+
+    private fun SharedPreferences.Editor.putAll(entries: Map<String, *>) = apply {
+        clear()
+        entries.forEach { (k, v) ->
+            when (v) {
+                is Boolean -> putBoolean(k, v)
+                is Long -> putLong(k, v)
+                is Int -> putInt(k, v)
+                is Float -> putFloat(k, v)
+                is String -> putString(k, v)
+                is Set<*> -> putStringSet(k, v.filterIsInstance<String>().toSet())
+            }
+        }
+    }
 
     private fun rulesFor(prefs: PreferencesManager) =
         if (prefs === sourcePrefs) sourceRules else targetRules
@@ -206,5 +240,129 @@ class BackupRestoreTest {
         targetPrefs.lastManualCategoryId = 10
         manager(target, targetPrefs).restore(manager(source, sourcePrefs).snapshot())
         assertEquals(-1L, targetPrefs.lastManualCategoryId)
+    }
+
+    private fun recurringExpenses() = runBlocking { target.expenseDao().getAll().first().filter { it.source == "Recurring" }.map { it.description } }
+    private fun thisMonth(billId: Long) = Calendar.getInstance().let { BillMonth(billId, it.get(Calendar.YEAR), it.get(Calendar.MONTH) + 1) }
+    /** When a backup was made, for one from before this month's bills were due. */
+    private val beforeThisMonth get() = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); add(Calendar.DAY_OF_YEAR, -1) }.timeInMillis
+    private val rentDueOnThe1st = Bill(id = 5, name = "Rent", amount = 22000.0, dueDayOfMonth = 1, autoLog = true)
+
+    /** B-01: the phone logged the bill, then a backup from before its due day came back without that expense. */
+    @Test fun aBillThePhoneHadLoggedIsLoggedAgainAfterRestoringAnEarlierBackup() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(5))
+        manager(target, targetPrefs).restore(BackupData(exportedAt = beforeThisMonth, categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf("Rent"), recurringExpenses())
+        // Once: the next launch finds the month handled
+        RecurringManager.applyBills(target, targetPrefs, Calendar.getInstance())
+        assertEquals(listOf("Rent"), recurringExpenses())
+    }
+
+    /** The auto-logged expense was deleted on purpose before the backup: its month comes back handled. */
+    @Test fun aBillExpenseDeletedBeforeTheBackupStaysDeleted() = runBlocking {
+        source.billDao().insert(rentDueOnThe1st)
+        RecurringManager.applyBills(source, sourcePrefs, Calendar.getInstance())
+        source.expenseDao().getAll().first().forEach { source.expenseDao().delete(it) }
+        val json = BackupCodec.toJson(manager(source, sourcePrefs).snapshot())
+        manager(target, targetPrefs).restore((BackupCodec.parse(json) as ParseResult.Ok).data)
+        assertEquals(emptyList<String>(), recurringExpenses())
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(5)))
+    }
+
+    /** A file from before bill months were backed up: logged unless the month already has the expense. */
+    @Test fun anOlderBackupLogsADueBillOnlyIfItsExpenseIsMissing() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(5))
+        val logged = Expense(id = 1, amount = 22000.0, description = "Rent", source = "Recurring", date = System.currentTimeMillis())
+        manager(target, targetPrefs).restore(BackupData(exportedAt = beforeThisMonth, categories = emptyList(), expenses = listOf(logged), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf("Rent"), recurringExpenses())
+    }
+
+    /**
+     * Review of B-01: a file from before bill months were saved, made this month after the bill
+     * was logged. The user had corrected the amount (or deleted the expense): it isn't logged again.
+     */
+    @Test fun anOlderBackupMadeAfterTheDueDayDoesNotLogTheBillAgain() = runBlocking {
+        val corrected = Expense(id = 1, amount = 21500.0, description = "Rent", source = "Recurring", date = System.currentTimeMillis())
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = listOf(corrected), bills = listOf(rentDueOnThe1st)))
+        assertEquals(listOf(21500.0), target.expenseDao().getAll().first().map { it.amount })
+
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = listOf(rentDueOnThe1st)))
+        assertEquals(emptyList<String>(), recurringExpenses())
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(5)))
+    }
+
+    /** Review of B-15: recurring templates were left out of the sweep for categories the file didn't bring. */
+    @Test fun aRestoredTemplateDoesNotPointAtAMissingCategory() = runBlocking {
+        manager(target, targetPrefs).restore(BackupData(categories = listOf(Category(id = 1, name = "Food")), expenses = emptyList(),
+            recurringTemplates = listOf(RecurringTemplate(id = 1, name = "Milk", amount = 60.0, categoryId = 1), RecurringTemplate(id = 2, name = "Ghost", amount = 5.0, categoryId = 77))))
+        assertEquals(mapOf("Milk" to 1L, "Ghost" to -1L), target.recurringTemplateDao().getAll().first().associate { it.name to it.categoryId })
+    }
+
+    /** A v1 file has no bills: the phone's bills and their handled months stay. */
+    @Test fun aBackupWithoutBillsKeepsThePhonesBillMonths() = runBlocking {
+        targetPrefs.markBillMonthDone(thisMonth(1))
+        manager(target, targetPrefs).restore(BackupData(version = 1, categories = emptyList(), expenses = emptyList()))
+        assertTrue(targetPrefs.isBillMonthDone(thisMonth(1)))
+    }
+
+    /**
+     * B-15: a v1 file has categories but no bills or learned merchants. The phone's stayed, pointing
+     * at ids that now belong to the file's categories: a Rent bill started logging under Food.
+     */
+    @Test fun anOlderBackupKeepsThePhonesBillsAndLearnedMerchantsOnTheRightCategories() = runBlocking {
+        target.categoryDao().insertAll(listOf(Category(id = 3, name = "Rent"), Category(id = 4, name = "Pets")))
+        target.billDao().insert(Bill(id = 1, name = "Flat", amount = 22000.0, dueDayOfMonth = 28, categoryId = 3))
+        target.billDao().insert(Bill(id = 2, name = "Vet plan", amount = 500.0, dueDayOfMonth = 28, categoryId = 4))
+        target.billDao().insert(Bill(id = 3, name = "No category", amount = 100.0, dueDayOfMonth = 28))
+        target.merchantMappingDao().insert(MerchantMapping("Landlord", 3))
+        target.merchantMappingDao().insert(MerchantMapping("Petshop", 4))
+
+        // In the file, id 3 is Food and Rent is id 8; it has no Pets
+        val v1 = BackupData(version = 1, categories = listOf(Category(id = 3, name = "Food"), Category(id = 8, name = "rent")),
+            expenses = listOf(Expense(id = 2, amount = 9.0, description = "Tea", categoryId = 3)))
+        manager(target, targetPrefs).restore(v1)
+
+        assertEquals(mapOf("Flat" to 8L, "Vet plan" to -1L, "No category" to -1L), target.billDao().getAllOnce().associate { it.name to it.categoryId })
+        assertEquals(listOf(MerchantMapping("Landlord", 8)), target.merchantMappingDao().getAllMappings())
+    }
+
+    /** B-15: whatever a file says, nothing is left pointing at a category it didn't bring. */
+    @Test fun aRestoredFileLeavesNoLinkToACategoryItDoesNotHave() = runBlocking {
+        val file = BackupData(categories = listOf(Category(id = 1, name = "Food")),
+            expenses = listOf(Expense(id = 1, amount = 9.0, description = "Tea", categoryId = 1), Expense(id = 2, amount = 5.0, description = "Lost", categoryId = 77)),
+            bills = listOf(Bill(id = 1, name = "Gym", amount = 900.0, dueDayOfMonth = 28, categoryId = 77)),
+            merchantMappings = listOf(MerchantMapping("Chai Point", 1), MerchantMapping("Ghost", 77)))
+        manager(target, targetPrefs).restore(file)
+
+        assertEquals(mapOf("Tea" to 1L, "Lost" to -1L), target.expenseDao().getAll().first().associate { it.description to it.categoryId })
+        assertEquals(-1L, target.billDao().getAllOnce().single().categoryId)
+        assertEquals(listOf(MerchantMapping("Chai Point", 1)), target.merchantMappingDao().getAllMappings())
+    }
+
+    /**
+     * B-15: alerts already sent were about the data the restore replaced. A dismissed subscription
+     * is the user's decision about a payee and stays (review of B-15).
+     */
+    @Test fun restoreForgetsAlertHistoryAndKeepsDismissedSubscriptions() = runBlocking {
+        appFiles.forEach { context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().putBoolean("restore_test", true).commit() }
+        DismissedSubscriptions.dismiss(context, "restore test payee")
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = emptyList()))
+        appFiles.forEach { assertTrue("$it not cleared", context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()) }
+        assertTrue("restore test payee" in DismissedSubscriptions.flow(context).value)
+    }
+
+    /** B-24: any file can be picked as a backup; one too large to be one is refused before it's read. */
+    @Test fun aFileTooLargeToBeABackupIsRefusedAndOtherFilesSayWhatTheyAre() = runBlocking {
+        val large = File(context.cacheDir, "restore_test_large.bin")
+        val binary = File(context.cacheDir, "restore_test_binary.bin")
+        try {
+            RandomAccessFile(large, "rw").use { it.setLength(BackupManager.MAX_BACKUP_BYTES + 1L) }
+            binary.writeBytes(ByteArray(4096) { (it * 31).toByte() })
+            val manager = manager(target, targetPrefs)
+            assertEquals(ParseResult.Invalid("This file is too large to be a MyMoney backup (over 50 MB)."), manager.readFromUri(Uri.fromFile(large)))
+            assertEquals(ParseResult.Invalid("This file isn't a MyMoney backup."), manager.readFromUri(Uri.fromFile(binary)))
+        } finally {
+            large.delete(); binary.delete()
+        }
     }
 }

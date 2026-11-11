@@ -98,4 +98,49 @@ class TagEditTest {
         act { fromCategories.renameTag("goa", "beach,trip") }
         assertEquals(mapOf("Dinner" to "goa"), expenseTags())
     }
+
+    /** B-12: tags were stored exactly as typed, "#" and repeats included. */
+    @Test fun tagsAreStoredCleanWhoeverSavesThem() = runBlocking {
+        val vm = expensesScreen()
+        withContext(Dispatchers.Main) { vm.addExpense(120.0, "Lunch", -1L, System.currentTimeMillis(), tags = " #Food, food ,, #travel ") }
+        withTimeout(10_000) { db.expenseDao().getAll().first { it.isNotEmpty() } }
+        assertEquals(mapOf("Lunch" to "Food,travel"), expenseTags())
+
+        act { vm.addIncome(500.0, "Refund", System.currentTimeMillis(), "#side, Side") }
+        assertEquals(mapOf("Refund" to "side"), incomeTags())
+
+        val lunch = db.expenseDao().getAll().first().single()
+        act { vm.updateExpense(lunch, 120.0, "Lunch", -1L, lunch.date, tags = "#gift,gift") }
+        assertEquals(mapOf("Lunch" to "gift"), expenseTags())
+    }
+
+    /** B-12: a tag renamed or deleted in Categories stayed as Expenses' filter, which then showed nothing. */
+    @Test fun aTagFilterThatNoExpenseHasAnyMoreIsCleared() = runBlocking {
+        db.expenseDao().insert(Expense(amount = 300.0, description = "Dinner", tags = "goa"))
+        db.expenseDao().insert(Expense(amount = 80.0, description = "Tea"))
+        val vm = expensesScreen()
+        val shown = screen.launch { vm.expenses.collect {} }
+        withContext(Dispatchers.Main) { vm.setTagFilter("Goa") }
+        assertEquals(listOf("Dinner"), withTimeout(10_000) { vm.expenses.first { it.size == 1 } }.map { it.description })
+
+        val fromCategories = categoriesScreen()
+        act { fromCategories.renameTag("goa", "beach") }
+
+        withTimeout(10_000) { vm.tagFilter.first { it == null } }
+        assertEquals(2, withTimeout(10_000) { vm.expenses.first { it.size == 2 } }.size)
+        shown.cancel()
+    }
+
+    /** A filter whose tag is still in use stays, whatever case it was typed in. */
+    @Test fun aTagFilterStillInUseStays() = runBlocking {
+        db.expenseDao().insert(Expense(amount = 300.0, description = "Dinner", tags = "goa"))
+        val vm = expensesScreen()
+        val shown = screen.launch { vm.expenses.collect {} }
+        withContext(Dispatchers.Main) { vm.setTagFilter("GOA") }
+        db.expenseDao().insert(Expense(amount = 80.0, description = "Tea"))
+        withTimeout(10_000) { vm.hasAnyExpenses.first { it } }
+        assertEquals(listOf("Dinner"), withTimeout(10_000) { vm.expenses.first { it.size == 1 } }.map { it.description })
+        assertEquals("GOA", vm.tagFilter.value)
+        shown.cancel()
+    }
 }

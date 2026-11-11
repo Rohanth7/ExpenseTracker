@@ -135,6 +135,7 @@
                     android:id="@+id/spent_amount"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
                     android:textColor="#F2EBD9"
                     android:textSize="36sp"
                     android:textStyle="italic"

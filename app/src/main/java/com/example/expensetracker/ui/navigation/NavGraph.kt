@@ -115,6 +115,8 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
 
     // Apply recurring expenses if it's a new month; schedule bill reminders
     LaunchedEffect(Unit) {
+        // An expense whose category is gone is pending, not a "?" row nobody is asked to sort.
+        runCatching { AppDatabase.getInstance(context).expenseDao().moveOrphansToPending() }
         RecurringManager.applyIfNeeded(context)
         BillReminderHelper.schedule(context)
     }
