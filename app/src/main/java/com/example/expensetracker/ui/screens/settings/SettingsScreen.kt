@@ -1315,7 +1315,9 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
     var dueDay by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
     val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
     val dueValue = wholeNumberIn(dueDay, 1..31)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
+    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
+    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Edit Loan") },
@@ -1351,6 +1353,8 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = agoValue == null,
+                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1365,7 +1369,7 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                 val emi = emiText.value ?: return@TextButton
                 val tenure = tenureValue ?: return@TextButton
                 val due = dueValue ?: return@TextButton
-                val ago = monthsAgo.toIntOrNull() ?: 0
+                val ago = agoValue ?: return@TextButton
                 val newStartDate = java.util.Calendar.getInstance().apply {
                     add(java.util.Calendar.MONTH, -ago)
                     set(java.util.Calendar.DAY_OF_MONTH, 1)
@@ -1394,7 +1398,9 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
     var dueDay by rememberSaveable { mutableStateOf("5") }
     val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
     val dueValue = wholeNumberIn(dueDay, 1..31)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null
+    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
+    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
+    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text("Add Loan / EMI") },
@@ -1420,6 +1426,8 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
+                        isError = agoValue == null,
+                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1434,7 +1442,7 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
                 val emi = emiText.value ?: return@TextButton
                 val tenure = tenureValue ?: return@TextButton
                 val due = dueValue ?: return@TextButton
-                val ago = monthsAgo.toIntOrNull() ?: 0
+                val ago = agoValue ?: return@TextButton
                 val startDate = java.util.Calendar.getInstance().apply {
                     add(java.util.Calendar.MONTH, -ago)
                     set(java.util.Calendar.DAY_OF_MONTH, 1)

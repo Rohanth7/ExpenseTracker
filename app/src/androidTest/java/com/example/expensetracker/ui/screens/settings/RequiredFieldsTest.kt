@@ -117,6 +117,42 @@ class RequiredFieldsTest {
         assertNull(saved)
     }
 
+    /** B-07: a blank "1st EMI, months ago" was saved as 0, so a loan 10 months in went back to its first month. */
+    @Test fun editingALoanCantBlankWhenItStarted() {
+        val tenMonthsAgo = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -10); set(java.util.Calendar.DAY_OF_MONTH, 1) }.timeInMillis
+        var saved: Loan? = null
+        compose.setContent { EditLoanDialog(Loan(name = "Car", totalAmount = 60000.0, monthlyEmi = 5000.0, tenureMonths = 12, startDate = tenMonthsAgo), onDismiss = {}, onConfirm = { saved = it }) }
+        field("1st EMI, months ago").performTextClearance()
+        compose.onNodeWithText("Save").assertIsNotEnabled().performClick()
+        compose.onNodeWithText("0 to 1200 months").assertExists()
+        assertNull(saved)
+        type("1st EMI, months ago", "10")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(10, monthsBetween(saved!!.startDate))
+    }
+
+    @Test fun addingALoanNeedsWhenItStarted() {
+        var start: Long? = null
+        compose.setContent { AddLoanDialog(onDismiss = {}, onConfirm = { _, _, _, _, _, s, _ -> start = s }) }
+        type("Loan name", "Car"); type("Total (₹)", "60000"); type("EMI (₹)", "5000"); type("Tenure (mo)", "12")
+        compose.onNodeWithText("Add").assertIsEnabled()
+        field("1st EMI, months ago").performTextClearance()
+        compose.onNodeWithText("Add").assertIsNotEnabled()
+        // Past any loan: it used to overflow and be saved as 0
+        type("1st EMI, months ago", "99999999999")
+        compose.onNodeWithText("Add").assertIsNotEnabled().performClick()
+        assertNull(start)
+        retype("1st EMI, months ago", "3")
+        compose.onNodeWithText("Add").assertIsEnabled().performClick()
+        assertEquals(3, monthsBetween(start!!))
+    }
+
+    private fun monthsBetween(start: Long): Int {
+        val now = java.util.Calendar.getInstance()
+        val then = java.util.Calendar.getInstance().apply { timeInMillis = start }
+        return (now.get(java.util.Calendar.YEAR) - then.get(java.util.Calendar.YEAR)) * 12 + now.get(java.util.Calendar.MONTH) - then.get(java.util.Calendar.MONTH)
+    }
+
     /** BUG-26: the icon took at most 2 UTF-16 units, so 🇮🇳 (4) or 👨‍👩‍👧 (8) was refused. */
     @Test fun theLoanIconTakesAnyOneEmoji() {
         var emoji: String? = null
