@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.categorize
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.ui.util.AmountInputState
@@ -473,7 +474,7 @@ private fun LoanTile(loan: Loan, selected: Boolean, onClick: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(loan.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "EMI ₹${loan.monthlyEmi.toLong()} · $remainingMonths months left",
+                    "EMI ₹${fmtINR(loan.monthlyEmi)} · $remainingMonths months left",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
@@ -507,7 +508,7 @@ private fun SavingsGoalTile(goal: SavingsGoal, selected: Boolean, onClick: () ->
                 color = color
             )
             Text(
-                "₹${goal.currentAmount.toLong()} of ₹${goal.targetAmount.toLong()}",
+                "₹${fmtINR(goal.currentAmount)} of ₹${fmtINR(goal.targetAmount)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )

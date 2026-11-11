@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.expenses
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
@@ -51,7 +52,6 @@ import com.example.expensetracker.ui.util.buildTimestamp
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.toUtcMidnight
 import com.example.expensetracker.ui.util.parseColor
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 import com.example.expensetracker.ui.util.formatLimitInput
@@ -1478,9 +1478,3 @@ private fun weekStart(startsOnMonday: Boolean = true): Long {
     return cal.timeInMillis
 }
 
-private fun fmtINR(n: Double): String {
-    if (n.isNaN() || n.isInfinite()) return "—"
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = 0; minimumFractionDigits = 0
-    }.format(n.toLong())
-}

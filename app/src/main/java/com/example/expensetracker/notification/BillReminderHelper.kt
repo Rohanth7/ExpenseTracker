@@ -1,5 +1,6 @@
 package com.example.expensetracker.notification
 
+import com.example.expensetracker.ui.util.fmtINR
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -67,13 +68,11 @@ object BillReminderHelper {
         }
         // The day it's actually due (31 → 30 in November)
         val dueDay = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, daysUntilDue) }.get(Calendar.DAY_OF_MONTH)
-        val fmt = java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag("en-IN"))
-            .apply { maximumFractionDigits = 0 }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("${bill.name} is $dueText")
-            .setContentText("₹${fmt.format(bill.amount)} — day $dueDay of the month")
+            .setContentText("₹${fmtINR(bill.amount)} — day $dueDay of the month")
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()

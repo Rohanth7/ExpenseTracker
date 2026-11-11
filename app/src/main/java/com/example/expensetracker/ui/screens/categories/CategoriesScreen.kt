@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.categories
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -32,8 +33,6 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
-import java.text.NumberFormat
-import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.screens.expenses.Tags
@@ -48,9 +47,6 @@ private val PRESET_COLORS = listOf(
     "#3F51B5", "#2196F3", "#00BCD4", "#009688",
     "#4CAF50", "#8BC34A", "#FFEB3B", "#FF9800"
 )
-
-private fun fmtINR(amount: Double): String =
-    NumberFormat.getNumberInstance(Locale("en", "IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
 fun CategoriesScreen(viewModel: CategoriesViewModel) {

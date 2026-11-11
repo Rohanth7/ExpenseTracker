@@ -1,8 +1,6 @@
 package com.example.expensetracker.widget
 
 import androidx.compose.ui.graphics.Color
-import java.text.NumberFormat
-import java.util.Locale
 
 object WidgetTheme {
     val Deep         = Color(0xFF171511)   // background
@@ -24,8 +22,3 @@ object WidgetTheme {
     val AmberInk     = Color(0xFFF2D9A1)   // watch-pace pill text
     val AmberSoftBg  = Color(0x26E5B84F)   // 15% amber — pill bg
 }
-
-fun fmtINR(n: Double): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN"))
-        .apply { maximumFractionDigits = 0 }
-        .format(n.toLong())

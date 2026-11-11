@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.subscriptions.Subscription
 import com.example.expensetracker.data.subscriptions.SubscriptionDetector
@@ -14,8 +15,6 @@ import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.SavingsGoal
-import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.roundToInt
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.BillRepository
@@ -247,9 +246,9 @@ class DashboardViewModel(
             val pct = ((total - prevPaced) / prevPaced * 100).roundToInt()
             when {
                 pct > 20 -> result.add(SmartInsight("📈", "${pct}% up on last month",
-                    "₹${fmtVM(total - prevPaced)} more than at this point last month"))
+                    "₹${fmtINR(total - prevPaced)} more than at this point last month"))
                 pct < -15 -> result.add(SmartInsight("📉", "${-pct}% under last month's pace",
-                    "₹${fmtVM(prevPaced - total)} less than at this point last month — great job!"))
+                    "₹${fmtINR(prevPaced - total)} less than at this point last month — great job!"))
             }
         }
 
@@ -262,7 +261,7 @@ class DashboardViewModel(
             val displayName = allMonthExpenses.first { it.description.trim().lowercase() == topMerchant.key }.description
             val merchantTotal = topMerchant.value.sumOf { it.amount }
             result.add(SmartInsight("🛒", "$displayName · ${topMerchant.value.size}×",
-                "₹${fmtVM(merchantTotal)} across ${topMerchant.value.size} transactions this month"))
+                "₹${fmtINR(merchantTotal)} across ${topMerchant.value.size} transactions this month"))
         }
 
         // No-spend days (days with zero transactions)
@@ -290,21 +289,21 @@ class DashboardViewModel(
         if (wkdayPerDay > 100 && wkendPerDay > 0 && wkendPerDay / wkdayPerDay >= 1.6) {
             val ratio = "%.1f".format(wkendPerDay / wkdayPerDay)
             result.add(SmartInsight("🎉", "${ratio}× more on weekends",
-                "₹${fmtVM(wkendPerDay)}/day on weekends vs ₹${fmtVM(wkdayPerDay)}/day on weekdays"))
+                "₹${fmtINR(wkendPerDay)}/day on weekends vs ₹${fmtINR(wkdayPerDay)}/day on weekdays"))
         }
 
         // Top category dominance (> 38% of total)
         val top = summaries.firstOrNull()
         if (top != null && top.percentage > 38f) {
             result.add(SmartInsight(top.category.emoji, "${top.category.name} takes the most",
-                "${top.percentage.roundToInt()}% of this month's spending — ₹${fmtVM(top.spent)}"))
+                "${top.percentage.roundToInt()}% of this month's spending — ₹${fmtINR(top.spent)}"))
         }
 
         // Biggest single expense (always present as fallback)
         val biggest = allMonthExpenses.maxByOrNull { it.amount }
         if (biggest != null) {
             result.add(SmartInsight("💸", "Biggest expense this month",
-                "${biggest.description} · ₹${fmtVM(biggest.amount)}"))
+                "${biggest.description} · ₹${fmtINR(biggest.amount)}"))
         }
 
         return result
@@ -328,7 +327,7 @@ class DashboardViewModel(
                     type = NotifType.CAPTURE,
                     emoji = if (isPending) "🔔" else (cat?.emoji ?: "📱"),
                     title = exp.description,
-                    subtitle = "₹${fmtVM(exp.amount)} · ${relativeTime(exp.date)}" +
+                    subtitle = "₹${fmtINR(exp.amount)} · ${relativeTime(exp.date)}" +
                         if (isPending) " · needs category" else "",
                     isUrgent = isPending
                 ))
@@ -344,7 +343,7 @@ class DashboardViewModel(
                     type = NotifType.BUDGET,
                     emoji = s.category.emoji,
                     title = "${s.category.name} ${if (isOver) "over budget" else "near limit"}",
-                    subtitle = "${pct}% of ₹${fmtVM(s.category.monthlyLimit)} limit used this month",
+                    subtitle = "${pct}% of ₹${fmtINR(s.category.monthlyLimit)} limit used this month",
                     isUrgent = isOver
                 ))
             }
@@ -362,7 +361,7 @@ class DashboardViewModel(
                 type = NotifType.BILL,
                 emoji = "📋",
                 title = upcoming.bill.name,
-                subtitle = "$dueText · ₹${fmtVM(upcoming.bill.amount)}",
+                subtitle = "$dueText · ₹${fmtINR(upcoming.bill.amount)}",
                 isUrgent = upcoming.daysUntilDue <= 0
             ))
         }
@@ -381,11 +380,6 @@ class DashboardViewModel(
             else        -> "${days}d ago"
         }
     }
-
-    private fun fmtVM(n: Double): String =
-        NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN"))
-            .apply { maximumFractionDigits = 0; minimumFractionDigits = 0 }
-            .format(n.toLong())
 
     private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
     private operator fun <A, B, C, D> Quad<A, B, C, D>.component1() = first

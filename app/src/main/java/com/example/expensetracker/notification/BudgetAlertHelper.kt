@@ -1,5 +1,6 @@
 package com.example.expensetracker.notification
 
+import com.example.expensetracker.ui.util.fmtINR
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -98,7 +99,7 @@ object BudgetAlertHelper {
                     context,
                     id = 100_000 + budgetCategory.id.toInt(),
                     title = "${budgetCategory.emoji} ${budgetCategory.name} limit exceeded!",
-                    text = "Spent ₹${"%.0f".format(spent)} of ₹${"%.0f".format(budgetCategory.monthlyLimit)} monthly limit"
+                    text = "Spent ₹${fmtINR(spent)} of ₹${fmtINR(budgetCategory.monthlyLimit)} monthly limit"
                 )
             }
             pct >= warningRatio && !prefs.getBoolean(warningKey, false) -> {
@@ -107,7 +108,7 @@ object BudgetAlertHelper {
                     context,
                     id = 200_000 + budgetCategory.id.toInt(),
                     title = "${budgetCategory.emoji} ${budgetCategory.name} at ${"%.0f".format(pct * 100)}%",
-                    text = "Spent ₹${"%.0f".format(spent)} of ₹${"%.0f".format(budgetCategory.monthlyLimit)} monthly limit"
+                    text = "Spent ₹${fmtINR(spent)} of ₹${fmtINR(budgetCategory.monthlyLimit)} monthly limit"
                 )
             }
         }

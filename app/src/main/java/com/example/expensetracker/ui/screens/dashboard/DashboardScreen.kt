@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.dashboard
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
@@ -40,9 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.formatRupees
 import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
-import java.text.NumberFormat
 import java.util.Calendar
-import java.util.Locale
 import kotlin.math.roundToInt
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.formatLimitInput
@@ -1292,9 +1291,3 @@ private fun NotifRow(item: NotifItem, isLast: Boolean = false) {
     if (!isLast) Box(Modifier.fillMaxWidth().height(0.5.dp).background(HairlineSoft))
 }
 
-private fun fmtINR(n: Double): String {
-    if (n.isNaN() || n.isInfinite()) return "—"
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply {
-        maximumFractionDigits = 0; minimumFractionDigits = 0
-    }.format(n.toLong())
-}

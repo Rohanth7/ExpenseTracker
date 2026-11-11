@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.util.rememberSaveableItem
 import android.app.Activity
@@ -63,7 +64,6 @@ import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
 import com.example.expensetracker.ui.util.rememberAmountInputState
 import com.example.expensetracker.ui.util.parseLimitInput
-import java.text.NumberFormat
 import java.util.Locale
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
@@ -74,9 +74,6 @@ import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
 private enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
-
-private fun fmtINR(amount: Double): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit = {}) {

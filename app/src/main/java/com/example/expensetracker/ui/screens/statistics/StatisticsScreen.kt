@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.statistics
 
+import com.example.expensetracker.ui.util.fmtINR
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -38,14 +39,9 @@ import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.components.DateRangePickerDialog
 import com.example.expensetracker.ui.util.categoryIcon
 import com.example.expensetracker.ui.util.parseColor
-import java.text.NumberFormat
-import java.util.Locale
 import kotlin.math.abs
 import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.AppModalBottomSheet
-
-private fun fmtINR(amount: Double): String =
-    NumberFormat.getNumberInstance(Locale.forLanguageTag("en-IN")).apply { maximumFractionDigits = 0 }.format(amount)
 
 @Composable
 private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {

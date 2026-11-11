@@ -1,5 +1,6 @@
 package com.example.expensetracker.notification
 
+import com.example.expensetracker.ui.util.fmtINR
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -51,7 +52,7 @@ object NotificationHelper {
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("New expense: ₹${"%.2f".format(amount)}")
+            .setContentTitle("New expense: ₹${fmtINR(amount)}")
             .setContentText(description)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$description\nTap to choose another category"))
             .setAutoCancel(true)
