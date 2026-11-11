@@ -339,13 +339,16 @@ class BackupRestoreTest {
         assertEquals(listOf(MerchantMapping("Chai Point", 1)), target.merchantMappingDao().getAllMappings())
     }
 
-    /** B-15: alerts already sent and subscriptions dismissed were about the data the restore replaced. */
-    @Test fun restoreForgetsAlertHistoryAndDismissedSubscriptions() = runBlocking {
+    /**
+     * B-15: alerts already sent were about the data the restore replaced. A dismissed subscription
+     * is the user's decision about a payee and stays (review of B-15).
+     */
+    @Test fun restoreForgetsAlertHistoryAndKeepsDismissedSubscriptions() = runBlocking {
         appFiles.forEach { context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().putBoolean("restore_test", true).commit() }
         DismissedSubscriptions.dismiss(context, "restore test payee")
         manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList(), bills = emptyList()))
         appFiles.forEach { assertTrue("$it not cleared", context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()) }
-        assertEquals(emptySet<String>(), DismissedSubscriptions.flow(context).value)
+        assertTrue("restore test payee" in DismissedSubscriptions.flow(context).value)
     }
 
     /** B-24: any file can be picked as a backup; one too large to be one is refused before it's read. */

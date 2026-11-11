@@ -14,7 +14,6 @@ import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.BillMonth
 import com.example.expensetracker.data.recurring.RecurringManager
-import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.notification.BillReminderHelper
 import com.example.expensetracker.notification.BudgetAlertHelper
 import com.example.expensetracker.notification.PriceChangeAlerts
@@ -137,11 +136,11 @@ class BackupManager(
             db.categoryDao().deleteMerchantMappingsForMissingCategories()
             db.categoryDao().clearMissingTemplateCategories()
         }
-        // What the phone remembered about the data it had, as "Reset everything" forgets it:
-        // alerts already sent this month, price changes already alerted, subscriptions dismissed.
+        // What the phone remembered about the data it had: alerts already sent this month and
+        // price changes already alerted. A dismissed subscription stays dismissed: that is the
+        // user's decision about a payee, not a fact about the data ("Reset everything" clears it).
         PriceChangeAlerts.forgetAlerts(context)
         BudgetAlertHelper.forgetAlerts(context)
-        DismissedSubscriptions.clear(context)
         if (data.bills != null) BillReminderHelper.forgetReminders(context)
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
