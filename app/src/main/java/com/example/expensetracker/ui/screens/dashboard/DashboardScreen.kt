@@ -315,7 +315,7 @@ fun DashboardScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "UPI transactions need categorizing",
+                            pendingBannerText(state.pendingCount),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Ink
@@ -697,6 +697,13 @@ fun DashboardScreen(
         )
     }
 }
+
+/**
+ * The Overview banner's words beside the pending count. Pending expenses come from SMS, payment
+ * apps, cards and hand entry ("Choose later"), so it doesn't name a source.
+ */
+internal fun pendingBannerText(count: Int): String =
+    if (count == 1) "expense needs categorizing" else "expenses need categorizing"
 
 /** "45% achieved"; past the target it keeps counting ("110% achieved"), while the bar stays full. */
 internal fun goalAchieved(goal: SavingsGoal): String =
