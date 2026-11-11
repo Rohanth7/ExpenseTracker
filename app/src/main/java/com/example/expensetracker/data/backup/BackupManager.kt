@@ -13,6 +13,9 @@ import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.RecurringManager
+import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
+import com.example.expensetracker.notification.BudgetAlertHelper
+import com.example.expensetracker.notification.PriceChangeAlerts
 import com.example.expensetracker.sms.ParsingRuleStore
 import com.example.expensetracker.ui.widgets.WidgetUpdateHelper
 import kotlinx.coroutines.CancellationException
@@ -96,6 +99,7 @@ class BackupManager(
     suspend fun restore(data: BackupData) = withContext(Dispatchers.IO) {
         val db = db
         db.withTransaction {
+            val categoriesBefore = if (data.categories != null) db.categoryDao().getAllOnce() else null
             data.categories?.let { list -> db.categoryDao().deleteAll(); db.categoryDao().insertAll(list) }
             data.expenses?.let { list -> db.expenseDao().deleteAll(); list.forEach { db.expenseDao().insert(it) } }
             data.recurringTemplates?.let { list -> db.recurringTemplateDao().deleteAll(); db.recurringTemplateDao().insertAll(list) }
@@ -109,7 +113,30 @@ class BackupManager(
                 // The handled months go with the recurring incomes they describe, never the phone's
                 db.recurringIncomeDao().deleteAllMonths(); db.recurringIncomeDao().insertAllMonths(data.recurringIncomeMonths.orEmpty())
             }
+            // An older file (v1, v2) has categories but not bills or learned merchants. The phone's
+            // stay, and their category ids now belong to the file's categories: follow each to the
+            // restored category of the same name, or drop the link.
+            if (categoriesBefore != null) {
+                val links = CategoryLinks(categoriesBefore, data.categories.orEmpty())
+                if (data.bills == null) db.billDao().getAllOnce().filter { it.categoryId != -1L }.forEach { bill ->
+                    db.billDao().update(bill.copy(categoryId = links.moved(bill.categoryId) ?: -1L))
+                }
+                if (data.merchantMappings == null) db.merchantMappingDao().getAllMappings().forEach { mapping ->
+                    val moved = links.moved(mapping.categoryId)
+                    if (moved != null) db.merchantMappingDao().insert(mapping.copy(categoryId = moved))
+                    else db.merchantMappingDao().deleteByNames(listOf(mapping.merchantName))
+                }
+            }
+            // Whatever the file said, nothing is left pointing at a category it didn't bring.
+            db.expenseDao().moveOrphansToPending()
+            db.categoryDao().clearMissingBillCategories()
+            db.categoryDao().deleteMerchantMappingsForMissingCategories()
         }
+        // What the phone remembered about the data it had, as "Reset everything" forgets it:
+        // alerts already sent this month, price changes already alerted, subscriptions dismissed.
+        PriceChangeAlerts.forgetAlerts(context)
+        BudgetAlertHelper.forgetAlerts(context)
+        DismissedSubscriptions.clear(context)
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.
         if (data.categories != null) prefs.lastManualCategoryId = -1L

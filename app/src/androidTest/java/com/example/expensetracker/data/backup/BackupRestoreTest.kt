@@ -1,6 +1,7 @@
 package com.example.expensetracker.data.backup
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,6 +17,7 @@ import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.BillMonth
+import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
 import com.example.expensetracker.data.recurring.RecurringManager
 import com.example.expensetracker.sms.ParsingRule
 import com.example.expensetracker.sms.ParsingRuleStore
@@ -48,9 +50,35 @@ class BackupRestoreTest {
         context.deleteSharedPreferences("backup_test_rules_target")
         sourcePrefs = PreferencesManager(context, "backup_test_source")
         targetPrefs = PreferencesManager(context, "backup_test_target")
+        savedFiles = appFiles.associateWith { context.getSharedPreferences(it, Context.MODE_PRIVATE).all.toMap() }
+        savedDismissed = DismissedSubscriptions.flow(context).value
     }
 
-    @After fun tearDown() { source.close(); target.close() }
+    @After fun tearDown() {
+        source.close(); target.close()
+        // A restore clears the app's own alert history and dismissed subscriptions: put them back
+        savedFiles.forEach { (name, entries) -> context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putAll(entries).commit() }
+        DismissedSubscriptions.clear(context)
+        savedDismissed.forEach { DismissedSubscriptions.dismiss(context, it) }
+    }
+
+    private val appFiles = listOf("budget_alert_prefs", "price_alert_prefs")
+    private lateinit var savedFiles: Map<String, Map<String, *>>
+    private lateinit var savedDismissed: Set<String>
+
+    private fun SharedPreferences.Editor.putAll(entries: Map<String, *>) = apply {
+        clear()
+        entries.forEach { (k, v) ->
+            when (v) {
+                is Boolean -> putBoolean(k, v)
+                is Long -> putLong(k, v)
+                is Int -> putInt(k, v)
+                is Float -> putFloat(k, v)
+                is String -> putString(k, v)
+                is Set<*> -> putStringSet(k, v.filterIsInstance<String>().toSet())
+            }
+        }
+    }
 
     private fun rulesFor(prefs: PreferencesManager) =
         if (prefs === sourcePrefs) sourceRules else targetRules
@@ -248,5 +276,48 @@ class BackupRestoreTest {
         targetPrefs.markBillMonthDone(thisMonth(1))
         manager(target, targetPrefs).restore(BackupData(version = 1, categories = emptyList(), expenses = emptyList()))
         assertTrue(targetPrefs.isBillMonthDone(thisMonth(1)))
+    }
+
+    /**
+     * B-15: a v1 file has categories but no bills or learned merchants. The phone's stayed, pointing
+     * at ids that now belong to the file's categories: a Rent bill started logging under Food.
+     */
+    @Test fun anOlderBackupKeepsThePhonesBillsAndLearnedMerchantsOnTheRightCategories() = runBlocking {
+        target.categoryDao().insertAll(listOf(Category(id = 3, name = "Rent"), Category(id = 4, name = "Pets")))
+        target.billDao().insert(Bill(id = 1, name = "Flat", amount = 22000.0, dueDayOfMonth = 28, categoryId = 3))
+        target.billDao().insert(Bill(id = 2, name = "Vet plan", amount = 500.0, dueDayOfMonth = 28, categoryId = 4))
+        target.billDao().insert(Bill(id = 3, name = "No category", amount = 100.0, dueDayOfMonth = 28))
+        target.merchantMappingDao().insert(MerchantMapping("Landlord", 3))
+        target.merchantMappingDao().insert(MerchantMapping("Petshop", 4))
+
+        // In the file, id 3 is Food and Rent is id 8; it has no Pets
+        val v1 = BackupData(version = 1, categories = listOf(Category(id = 3, name = "Food"), Category(id = 8, name = "rent")),
+            expenses = listOf(Expense(id = 2, amount = 9.0, description = "Tea", categoryId = 3)))
+        manager(target, targetPrefs).restore(v1)
+
+        assertEquals(mapOf("Flat" to 8L, "Vet plan" to -1L, "No category" to -1L), target.billDao().getAllOnce().associate { it.name to it.categoryId })
+        assertEquals(listOf(MerchantMapping("Landlord", 8)), target.merchantMappingDao().getAllMappings())
+    }
+
+    /** B-15: whatever a file says, nothing is left pointing at a category it didn't bring. */
+    @Test fun aRestoredFileLeavesNoLinkToACategoryItDoesNotHave() = runBlocking {
+        val file = BackupData(categories = listOf(Category(id = 1, name = "Food")),
+            expenses = listOf(Expense(id = 1, amount = 9.0, description = "Tea", categoryId = 1), Expense(id = 2, amount = 5.0, description = "Lost", categoryId = 77)),
+            bills = listOf(Bill(id = 1, name = "Gym", amount = 900.0, dueDayOfMonth = 28, categoryId = 77)),
+            merchantMappings = listOf(MerchantMapping("Chai Point", 1), MerchantMapping("Ghost", 77)))
+        manager(target, targetPrefs).restore(file)
+
+        assertEquals(mapOf("Tea" to 1L, "Lost" to -1L), target.expenseDao().getAll().first().associate { it.description to it.categoryId })
+        assertEquals(-1L, target.billDao().getAllOnce().single().categoryId)
+        assertEquals(listOf(MerchantMapping("Chai Point", 1)), target.merchantMappingDao().getAllMappings())
+    }
+
+    /** B-15: alerts already sent and subscriptions dismissed were about the data the restore replaced. */
+    @Test fun restoreForgetsAlertHistoryAndDismissedSubscriptions() = runBlocking {
+        appFiles.forEach { context.getSharedPreferences(it, Context.MODE_PRIVATE).edit().putBoolean("restore_test", true).commit() }
+        DismissedSubscriptions.dismiss(context, "restore test payee")
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList()))
+        appFiles.forEach { assertTrue("$it not cleared", context.getSharedPreferences(it, Context.MODE_PRIVATE).all.isEmpty()) }
+        assertEquals(emptySet<String>(), DismissedSubscriptions.flow(context).value)
     }
 }

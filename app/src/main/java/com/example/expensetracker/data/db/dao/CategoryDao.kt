@@ -44,4 +44,11 @@ interface CategoryDao {
 
     @Query("DELETE FROM merchant_mappings")
     suspend fun deleteAllMerchantMappings()
+
+    /** Bills and learned merchants never point at a category that isn't there (after a restore). */
+    @Query("UPDATE bills SET categoryId = -1 WHERE categoryId != -1 AND categoryId NOT IN (SELECT id FROM categories)")
+    suspend fun clearMissingBillCategories()
+
+    @Query("DELETE FROM merchant_mappings WHERE categoryId NOT IN (SELECT id FROM categories)")
+    suspend fun deleteMerchantMappingsForMissingCategories()
 }
