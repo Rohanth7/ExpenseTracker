@@ -157,7 +157,8 @@ object BackupCodec {
             if ((t as Any?) == null || (t.name as String?) == null || !(t.amount as Double?).ok()) return "recurring item ${i + 1} is incomplete"
         }
         d.bills?.forEachIndexed { i, b ->
-            if ((b as Any?) == null || (b.name as String?) == null || !(b.amount as Double?).ok()) return "bill ${i + 1} is incomplete"
+            // 0 passes: bills could be saved with it before, and those files must still restore.
+            if ((b as Any?) == null || (b.name as String?) == null || !(b.amount as Double?).atLeastZero()) return "bill ${i + 1} is incomplete"
             if (b.dueDayOfMonth !in 1..31 || b.reminderDays !in 0..14) return "bill ${i + 1} has an invalid due day or reminder"
         }
         d.loans?.forEachIndexed { i, l ->

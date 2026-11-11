@@ -58,6 +58,31 @@ class RequiredFieldsTest {
         assertEquals(listOf("Rent", 15000.0, 5, 2, false), added)
     }
 
+    /** B-02: a ₹0 bill could be saved, and with auto-log it added a ₹0 expense every month. */
+    @Test fun aBillAmountMustBeAboveZero() {
+        var added: Double? = null
+        compose.setContent { AddBillDialog(emptyList(), onDismiss = {}, onConfirm = { _, a, _, _, _, _ -> added = a }) }
+        type("Name (e.g. Rent, Netflix)", "Rent")
+        type("Due day", "5")
+        type("Amount (₹)", "0")
+        compose.onNodeWithText("Add").assertIsNotEnabled().performClick()
+        compose.onNodeWithText("Enter a valid amount").assertExists()
+        assertNull(added)
+        retype("Amount (₹)", "0.5")
+        compose.onNodeWithText("Add").assertIsEnabled().performClick()
+        assertEquals(0.5, added!!, 0.0)
+    }
+
+    /** A bill saved with ₹0 before B-02 opens with the amount flagged and can't be saved until it has one. */
+    @Test fun aBillSavedWithZeroNeedsAnAmountToBeSavedAgain() {
+        var saved: Bill? = null
+        compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 0.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }
+        compose.onNodeWithText("Save").assertIsNotEnabled()
+        retype("Amount (₹)", "15000")
+        compose.onNodeWithText("Save").assertIsEnabled().performClick()
+        assertEquals(15000.0, saved!!.amount, 0.0)
+    }
+
     @Test fun editingABillCantBlankItsName() {
         var saved: Bill? = null
         compose.setContent { EditBillDialog(Bill(name = "Rent", amount = 15000.0, dueDayOfMonth = 5), emptyList(), onDismiss = {}, onConfirm = { saved = it }) }

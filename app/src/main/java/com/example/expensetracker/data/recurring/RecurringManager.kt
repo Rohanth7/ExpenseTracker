@@ -31,6 +31,8 @@ object RecurringManager {
         val (monthStart, monthEnd) = RecurringSchedule.monthBounds(cal)
 
         bills.forEach { bill ->
+            // Bills could be saved with ₹0 before the dialogs refused it; there is nothing to log.
+            if (bill.amount <= 0) return@forEach
             val month = BillMonth(bill.id, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
             if (prefs.isBillMonthDone(month)) return@forEach
             // Logged on its due day, dated that day (it used to be logged on the 1st).

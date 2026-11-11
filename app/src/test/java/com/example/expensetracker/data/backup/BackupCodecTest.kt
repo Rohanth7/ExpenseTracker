@@ -217,4 +217,11 @@ class BackupCodecTest {
         assertEquals(null, ok("""{"version":3,"categories":[],"expenses":[],"bills":[]}""").billMonths)
         assertTrue(invalid("""{"version":3,"categories":[],"expenses":[],"billMonths":[{"billId":3,"year":2026,"month":13}]}""").contains("bill month 1"))
     }
+
+    /** B-02: the dialogs need a bill amount above 0. A ₹0 bill from an older file still restores; a negative one never could be made. */
+    @Test fun `a bill with a negative amount is refused, one saved with 0 still restores`() {
+        fun file(amount: String) = """{"version":3,"categories":[],"expenses":[],"bills":[{"id":1,"name":"Rent","amount":$amount,"dueDayOfMonth":5}]}"""
+        assertTrue(invalid(file("-1")).contains("bill 1"))
+        assertEquals(0.0, ok(file("0")).bills!!.single().amount, 0.0)
+    }
 }

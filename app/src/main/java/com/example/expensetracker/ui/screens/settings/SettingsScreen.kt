@@ -1098,8 +1098,8 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
 internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var amount by rememberSaveable { mutableStateOf("") }
-    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
-    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
+    // Above 0: an auto-log bill adds its amount as an expense every month.
+    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf("") }
     var reminderDays by rememberSaveable { mutableStateOf("3") }
     var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
@@ -1203,8 +1203,8 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
 internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
     var name by rememberSaveable { mutableStateOf(bill.name) }
     var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
-    // 0 is allowed: reminder-only bills were saved with 0 and must stay editable.
-    val amountText = rememberAmountText(amount) { parseAmountOrZero(it) }
+    // Above 0: an auto-log bill adds its amount as an expense every month.
+    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
     var dueDay by rememberSaveable { mutableStateOf(bill.dueDayOfMonth.toString()) }
     var reminderDays by rememberSaveable { mutableStateOf(bill.reminderDays.toString()) }
     var selectedCategoryId by rememberSaveable { mutableStateOf(bill.categoryId) }

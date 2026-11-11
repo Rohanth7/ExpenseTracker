@@ -55,4 +55,11 @@ class RecurringBillTest {
         RecurringManager.applyBills(db, prefs, day(2026, 11, 20))
         assertEquals(setOf("Netflix" to 649.0, "Spotify" to 649.0), recurring().toSet())
     }
+
+    /** B-02: a bill saved with ₹0 (allowed before) must not add a ₹0 expense. */
+    @Test fun aZeroAmountBillIsNotLogged() = runBlocking {
+        db.billDao().insert(Bill(name = "Rent", amount = 0.0, dueDayOfMonth = 1, autoLog = true))
+        RecurringManager.applyBills(db, prefs, day(2026, 11, 20))
+        assertEquals(emptyList<Pair<String, Double>>(), recurring())
+    }
 }
