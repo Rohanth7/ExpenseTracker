@@ -1,24 +1,23 @@
 package com.example.expensetracker.ui.screens.rules
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.sms.ParsingRule
+import com.example.expensetracker.ui.components.HeaderIcon
+import com.example.expensetracker.ui.components.MCard
+import com.example.expensetracker.ui.components.PrimaryButton
+import com.example.expensetracker.ui.components.ScreenHeader
+import com.example.expensetracker.ui.components.ScreenPadding
 import com.example.expensetracker.ui.theme.*
 
 @Composable
@@ -35,37 +34,32 @@ fun MessageRulesScreen(viewModel: MessageRulesViewModel, onTeach: () -> Unit, on
     }
 
     Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp)) {
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)
+        ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
-                    Text("Message rules", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink)
-                }
+                ScreenHeader("Message rules", onBack = onBack)
                 Text("Rules you've taught MyMoney. They're checked before its own reading of bank messages.",
-                    fontSize = 13.sp, color = Muted, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Gold)
-                        .clickable(role = Role.Button, onClick = onTeach).padding(vertical = 14.dp),
-                    contentAlignment = Alignment.Center
-                ) { Text("Teach a message", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Deep) }
+                    fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 12.dp))
+                PrimaryButton("Teach a message", onTeach)
                 Spacer(Modifier.height(16.dp))
             }
             if (rules.isEmpty()) item {
                 Text("No rules yet. When a bank message is read wrong, open the expense and tap \"Read wrong? Teach MyMoney\", or paste the message here.",
-                    fontSize = 13.sp, color = Muted, lineHeight = 19.sp, modifier = Modifier.padding(4.dp))
+                    fontSize = 13.sp, color = Muted)
             }
             items(rules, key = { it.id }) { rule ->
-                Row(
-                    Modifier.fillMaxWidth().padding(bottom = 10.dp).clip(RoundedCornerShape(16.dp)).background(Paper).padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(if (rule.kind == ParsingRule.Kind.PAYMENT) "PAYMENT" else "IGNORED",
-                            fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.5.sp,
-                            color = if (rule.kind == ParsingRule.Kind.PAYMENT) Gold else Muted)
-                        Text(rule.label, fontSize = 13.sp, color = Ink, lineHeight = 18.sp)
+                MCard(Modifier.padding(bottom = 10.dp), padding = PaddingValues(start = 16.dp, top = 12.dp, end = 6.dp, bottom = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if (rule.kind == ParsingRule.Kind.PAYMENT) "PAYMENT" else "IGNORED",
+                                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+                                color = if (rule.kind == ParsingRule.Kind.PAYMENT) Gold else Muted)
+                            Text(rule.label, fontSize = 15.sp, color = Ink)
+                        }
+                        HeaderIcon(Icons.Default.Delete, "Delete rule", onClick = { viewModel.delete(rule) }, tint = Muted)
                     }
-                    IconButton(onClick = { viewModel.delete(rule) }) { Icon(Icons.Default.Delete, "Delete rule", tint = Muted) }
                 }
             }
         }

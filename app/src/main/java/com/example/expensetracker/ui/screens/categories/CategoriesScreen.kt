@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -24,9 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
@@ -35,7 +36,7 @@ import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.rememberAmountText
-import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.screens.expenses.Tags
 
 private val PRESET_EMOJIS = listOf(
@@ -63,209 +64,82 @@ fun CategoriesScreen(viewModel: CategoriesViewModel, onBack: () -> Unit = {}) {
     var tagToDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(Canvas)) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header
-            Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
-                Text(
-                    text = "BUCKETS",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.5.sp,
-                    letterSpacing = 1.8.sp,
-                    color = Muted
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
-                        }
-                        Text(
-                            text = "Categories",
-                            fontFamily = AnekLatin,
-                            fontSize = 28.sp,
-                            color = Ink,
-                            lineHeight = 30.sp,
-                            modifier = Modifier.offset(x = (-12).dp)
-                        )
-                    }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 96.dp)
+        ) {
+            item {
+                ScreenHeader("Categories & tags", onBack = onBack, actions = {
                     val subCount = categories.count { it.parentId != null }
                     Text(
                         text = if (subCount > 0) "${categories.count { it.parentId == null }} + $subCount sub" else "${categories.size} active",
-                        fontFamily = AnekLatin,
-                        fontSize = 11.sp,
-                        color = Muted,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        fontSize = 13.sp,
+                        color = Muted
                     )
+                })
+            }
+
+            item {
+                MCard(padding = RowCardPadding) {
+                    if (groupedCategories.isEmpty()) {
+                        Text(
+                            text = "No categories yet.\nTap + to create one.",
+                            fontSize = 13.sp,
+                            color = Muted,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp)
+                        )
+                    } else {
+                        groupedCategories.forEachIndexed { groupIndex, group ->
+                            if (groupIndex > 0) RowDivider()
+                            CategoryRow(
+                                category = group.parent,
+                                onEdit = { editTarget = group.parent; editingExisting = true; showDialog = true },
+                                onDelete = { categoryToDelete = group.parent },
+                                onAddSubcategory = { addSubcategoryFor = group.parent }
+                            )
+                            group.children.forEach { child ->
+                                RowDivider()
+                                SubcategoryRow(
+                                    category = child,
+                                    onEdit = { editTarget = child; editingExisting = true; showDialog = true },
+                                    onDelete = { categoryToDelete = child }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 90.dp)
-            ) {
-                // Categories list card
+            if (tagSummaries.isNotEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Paper)
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    ) {
-                        if (groupedCategories.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No categories yet.\nTap + to create one.",
-                                    fontFamily = AnekLatin,
-                                    fontSize = 12.sp,
-                                    color = Muted,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 20.sp
-                                )
-                            }
-                        } else {
-                            Column {
-                                groupedCategories.forEachIndexed { groupIndex, group ->
-                                    if (groupIndex > 0) {
-                                        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                    }
-                                    CategoryRow(
-                                        category = group.parent,
-                                        onEdit = { editTarget = group.parent; editingExisting = true; showDialog = true },
-                                        onDelete = { categoryToDelete = group.parent },
-                                        onAddSubcategory = { addSubcategoryFor = group.parent }
-                                    )
-                                    group.children.forEach { child ->
-                                        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                        SubcategoryRow(
-                                            category = child,
-                                            onEdit = { editTarget = child; editingExisting = true; showDialog = true },
-                                            onDelete = { categoryToDelete = child }
-                                        )
-                                    }
+                    SectionLabel("Tags")
+                    MCard(padding = RowCardPadding) {
+                        tagSummaries.forEachIndexed { index, tag ->
+                            if (index > 0) RowDivider()
+                            AccentRow(
+                                accent = Gold,
+                                title = "#${tag.name}",
+                                subtitle = "${tag.count} expense${if (tag.count != 1) "s" else ""}",
+                                trailing = "₹${fmtINR(tag.totalSpent)}",
+                                actions = {
+                                    Spacer(Modifier.width(4.dp))
+                                    RowAction(Icons.Default.Edit, "Rename tag") { tagToRename = tag.name }
+                                    RowAction(Icons.Default.Delete, "Delete tag") { tagToDelete = tag.name }
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // Available palette section label
-                item {
-                    Spacer(Modifier.height(20.dp))
-                    Text(
-                        text = "AVAILABLE PALETTE",
-                        fontFamily = AnekLatin,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.6.sp,
-                        color = Muted,
-                        modifier = Modifier.padding(bottom = 10.dp)
-                    )
-                }
-
-                // Palette card
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Paper)
-                            .padding(18.dp)
-                    ) {
-                        Text(
-                            text = "Each new category picks an icon and a color.",
-                            fontSize = 12.sp,
-                            color = Muted,
-                            lineHeight = 18.sp,
-                            modifier = Modifier.padding(bottom = 14.dp)
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            PRESET_COLORS.forEach { hex ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(parseColor(hex))
-                                )
-                            }
-                        }
-                        HorizontalDivider(
-                            color = HairlineSoft,
-                            thickness = 0.5.dp,
-                            modifier = Modifier.padding(vertical = 16.dp)
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            PRESET_EMOJIS.forEach { emoji ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Canvas),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(emoji, fontSize = 17.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Tags section
-                if (tagSummaries.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(20.dp))
-                        Text(
-                            text = "TAGS",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Muted,
-                            modifier = Modifier.padding(bottom = 10.dp)
-                        )
-                    }
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Paper)
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                        ) {
-                            tagSummaries.forEachIndexed { index, tag ->
-                                if (index > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                TagRow(
-                                    name = tag.name,
-                                    count = tag.count,
-                                    totalSpent = tag.totalSpent,
-                                    onRename = { tagToRename = tag.name },
-                                    onDelete = { tagToDelete = tag.name }
-                                )
-                            }
+                            )
                         }
                     }
                 }
             }
         }
 
-        // FAB
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 22.dp, bottom = 92.dp)
-                .size(58.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .padding(end = ScreenPadding, bottom = 24.dp)
+                .size(56.dp)
+                .clip(ButtonShape)
                 .background(Gold)
                 .clickable { editTarget = null; editingExisting = false; showDialog = true },
             contentAlignment = Alignment.Center
@@ -371,207 +245,54 @@ fun CategoriesScreen(viewModel: CategoriesViewModel, onBack: () -> Unit = {}) {
 @Composable
 private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> Unit, onAddSubcategory: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 14.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(parseColor(category.colorHex)),
+            modifier = Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(parseColor(category.colorHex)),
             contentAlignment = Alignment.Center
         ) {
-            Text(category.emoji, fontSize = 20.sp)
+            Text(category.emoji, fontSize = 16.sp)
         }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(category.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                text = category.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Ink
+                text = if (category.monthlyLimit > 0) "limit ₹${fmtINR(category.monthlyLimit)}" else "no limit",
+                fontSize = 13.sp,
+                color = Muted
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 2.dp)
-            ) {
-                if (category.monthlyLimit > 0) {
-                    Text(
-                        text = "limit ₹${fmtINR(category.monthlyLimit)}/mo",
-                        fontFamily = AnekLatin,
-                        fontSize = 10.5.sp,
-                        color = Muted
-                    )
-                } else {
-                    Text(
-                        text = "no limit set",
-                        fontFamily = AnekLatin,
-                        fontSize = 10.5.sp,
-                        color = Muted.copy(alpha = 0.7f)
-                    )
-                }
-            }
         }
-        Row {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onAddSubcategory),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add subcategory", tint = Gold, modifier = Modifier.size(16.dp))
-            }
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onEdit),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(16.dp))
-            }
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onDelete),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(16.dp))
-            }
-        }
+        RowAction(Icons.Default.Add, "Add subcategory", onAddSubcategory)
+        RowAction(Icons.Default.Edit, "Edit", onEdit)
+        RowAction(Icons.Default.Delete, "Delete", onDelete)
     }
 }
 
 @Composable
 private fun SubcategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 20.dp)
-            .padding(vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 28.dp).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(parseColor(category.colorHex).copy(alpha = 0.7f))
-        )
-        Spacer(Modifier.width(10.dp))
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(parseColor(category.colorHex).copy(alpha = 0.7f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(category.emoji, fontSize = 16.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = category.name,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Ink.copy(alpha = 0.85f)
-            )
+        Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(parseColor(category.colorHex)))
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(category.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (category.monthlyLimit > 0) {
-                Text(
-                    text = "limit ₹${fmtINR(category.monthlyLimit)}/mo",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.sp,
-                    color = Muted
-                )
+                Text("limit ₹${fmtINR(category.monthlyLimit)}", fontSize = 13.sp, color = Muted)
             }
         }
-        Row {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onEdit),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
-            }
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onDelete),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
-            }
-        }
+        RowAction(Icons.Default.Edit, "Edit", onEdit)
+        RowAction(Icons.Default.Delete, "Delete", onDelete)
     }
 }
 
 @Composable
-private fun TagRow(
-    name: String,
-    count: Int,
-    totalSpent: Double,
-    onRename: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun RowAction(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(GoldSoft)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(
-                "#$name",
-                fontFamily = AnekLatin,
-                fontSize = 12.sp,
-                color = GoldInk,
-                fontWeight = FontWeight.Medium
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "₹${fmtINR(totalSpent)}",
-                fontFamily = AnekLatin,
-                fontSize = 15.sp,
-                color = Ink
-            )
-            Text(
-                "$count expense${if (count != 1) "s" else ""}",
-                fontFamily = AnekLatin,
-                fontSize = 10.sp,
-                color = Muted
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onRename),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Edit, contentDescription = "Rename tag", tint = Muted, modifier = Modifier.size(16.dp))
-        }
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onDelete),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete tag", tint = Muted, modifier = Modifier.size(16.dp))
-        }
+        Icon(icon, contentDescription = contentDescription, tint = Muted, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -601,15 +322,7 @@ private fun RenameTagDialog(
                 isError = hasComma,
                 supportingText = if (hasComma) ({ Text("A tag name can't have a comma") }) else null,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Gold,
-                    focusedLabelColor = Gold,
-                    unfocusedBorderColor = Hairline,
-                    unfocusedLabelColor = Muted,
-                    focusedTextColor = Ink,
-                    unfocusedTextColor = Ink,
-                    cursorColor = Gold
-                )
+                shape = FieldShape, colors = fieldColors()
             )
         },
         confirmButton = {
@@ -643,95 +356,70 @@ internal fun CategoryDialog(
     val nameError = categoryNameError(name, siblingNames, current = initial?.name)
     val canSave = nameError == null && parsedLimit != null
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        titleContentColor = Ink,
-        textContentColor = Muted,
-        title = {
-            Text(when {
-                initial != null -> "Edit ${if (initial.parentId != null) "Subcategory" else "Category"}"
-                parentName != null -> "Add to $parentName"
-                else -> "New Category"
-            })
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    // A name already longer than the limit can be shortened, not lengthened.
-                    onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH || it.length < name.length) name = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    isError = name.isNotBlank() && nameError != null,
-                    supportingText = if (name.isNotBlank() && nameError != null) ({ Text(nameError) }) else null,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gold,
-                        focusedLabelColor = Gold,
-                        unfocusedBorderColor = Hairline,
-                        unfocusedLabelColor = Muted,
-                        focusedTextColor = Ink,
-                        unfocusedTextColor = Ink,
-                        cursorColor = Gold
-                    )
-                )
-                Text("Icon", style = MaterialTheme.typography.labelMedium, color = Muted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PRESET_EMOJIS.forEach { emoji ->
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(if (emoji == selectedEmoji) GoldDeep else Color.Transparent)
-                                .clickable { selectedEmoji = emoji },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(emoji, fontSize = 18.sp)
-                        }
+    MSheet(onDismiss) {
+        SheetTitle(when {
+            initial != null -> "Edit ${if (initial.parentId != null) "Subcategory" else "Category"}"
+            parentName != null -> "Add to $parentName"
+            else -> "New Category"
+        })
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = name,
+                // A name already longer than the limit can be shortened, not lengthened.
+                onValueChange = { if (it.length <= MAX_CATEGORY_NAME_LENGTH || it.length < name.length) name = it },
+                label = { Text("Name") },
+                singleLine = true,
+                isError = name.isNotBlank() && nameError != null,
+                supportingText = if (name.isNotBlank() && nameError != null) ({ Text(nameError) }) else null,
+                modifier = Modifier.fillMaxWidth(),
+                shape = FieldShape, colors = fieldColors()
+            )
+            Text("Icon", fontSize = 13.sp, color = Muted)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PRESET_EMOJIS.forEach { emoji ->
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(if (emoji == selectedEmoji) Gold else Color.Transparent)
+                            .clickable { selectedEmoji = emoji },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(emoji, fontSize = 18.sp)
                     }
                 }
-                Text("Color", style = MaterialTheme.typography.labelMedium, color = Muted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    PRESET_COLORS.forEach { hex ->
-                        val selected = hex == selectedColor
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(parseColor(hex))
-                                .then(if (selected) Modifier.border(2.dp, Ink, CircleShape) else Modifier)
-                                .clickable { selectedColor = hex }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = limitText,
-                    onValueChange = { limitText = it },
-                    label = { Text("Monthly limit ₹ (optional)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = limit.invalid,
-                    supportingText = limit.supportingText,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gold,
-                        focusedLabelColor = Gold,
-                        unfocusedBorderColor = Hairline,
-                        unfocusedLabelColor = Muted,
-                        focusedTextColor = Ink,
-                        unfocusedTextColor = Ink,
-                        cursorColor = Gold
-                    )
-                )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (!canSave || parsedLimit == null) return@TextButton
-                onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit)
-            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
+            Text("Color", fontSize = 13.sp, color = Muted)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PRESET_COLORS.forEach { hex ->
+                    val selected = hex == selectedColor
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(parseColor(hex))
+                            .then(if (selected) Modifier.border(2.dp, Ink, CircleShape) else Modifier)
+                            .clickable { selectedColor = hex }
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = limitText,
+                onValueChange = { limitText = it },
+                label = { Text("Monthly limit ₹ (optional)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                isError = limit.invalid,
+                supportingText = limit.supportingText,
+                modifier = Modifier.fillMaxWidth(),
+                shape = FieldShape, colors = fieldColors()
+            )
+        }
+        ButtonPair(
+            secondary = "Cancel", onSecondary = onDismiss,
+            primary = "Save",
+            onPrimary = { if (canSave && parsedLimit != null) onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit) },
+            primaryEnabled = canSave
+        )
+    }
 }
