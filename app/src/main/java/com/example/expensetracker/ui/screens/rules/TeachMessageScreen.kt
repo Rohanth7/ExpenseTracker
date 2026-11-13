@@ -18,8 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,7 +75,7 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
     Column(Modifier.fillMaxSize().background(Canvas).systemBarsPadding()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
-            Text("Teach a message", fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 26.sp, color = Ink)
+            Text("Teach a message", fontFamily = AnekLatin, fontSize = 26.sp, color = Ink)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             if (editing) {
@@ -87,8 +85,8 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
                     value = text, onValueChange = { text = it; reset() },
                     label = { Text("Message") }, minLines = 5, modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Ink, unfocusedTextColor = Ink, focusedBorderColor = Jade, unfocusedBorderColor = Hairline,
-                        focusedLabelColor = Jade, unfocusedLabelColor = Muted, cursorColor = Jade
+                        focusedTextColor = Ink, unfocusedTextColor = Ink, focusedBorderColor = Gold, unfocusedBorderColor = Hairline,
+                        focusedLabelColor = Gold, unfocusedLabelColor = Muted, cursorColor = Gold
                     )
                 )
             } else {
@@ -114,8 +112,8 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
                     words.forEachIndexed { i, w ->
                         val inAmount = amount != null && amount.first >= w.first && amount.last <= w.last
                         val inPayee = payee != null && i in payeeFrom..payeeTo
-                        val bg = when { inAmount -> JadeDeep; inPayee -> AmberSoft; else -> Color.Transparent }
-                        val fg = when { inAmount -> JadeInk; inPayee -> Amber; else -> Ink }
+                        val bg = when { inAmount -> GoldDeep; inPayee -> SkySoft; else -> Color.Transparent }
+                        val fg = when { inAmount -> GoldInk; inPayee -> Sky; else -> Ink }
                         Text(
                             text.substring(w), fontSize = 14.sp, color = fg,
                             modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg)
@@ -128,8 +126,8 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
                 if (isPayment && amount != null) {
                     Spacer(Modifier.height(16.dp))
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Deep).padding(16.dp)) {
-                        Text("WILL BE LOGGED AS", fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted)
-                        Text("₹" + text.substring(amount), fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 28.sp, color = Ink)
+                        Text("WILL BE LOGGED AS", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted)
+                        Text("₹" + text.substring(amount), fontFamily = AnekLatin, fontSize = 28.sp, color = Ink)
                         Text(payee?.let { "to " + text.substring(it) } ?: "with the bank's name as the payee", fontSize = 14.sp, color = InkSoft)
                     }
                     if (payee == null) {
@@ -144,13 +142,13 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
                         fontSize = 12.5.sp, color = Muted)
                 }
             }
-            error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = Coral, fontSize = 13.sp) }
+            error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = Pink, fontSize = 13.sp) }
             Spacer(Modifier.height(24.dp))
         }
         Box(Modifier.padding(20.dp)) {
             val ready = if (editing) text.isNotBlank() else (!isPayment || amount != null)
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (ready) Jade else Jade.copy(alpha = 0.35f))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (ready) Gold else Gold.copy(alpha = 0.35f))
                     .clickable(enabled = ready, role = Role.Button) {
                         if (editing) { editing = false; reset() }
                         else error = viewModel.save(text, if (isPayment) ParsingRule.Kind.PAYMENT else ParsingRule.Kind.IGNORE,

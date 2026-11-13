@@ -35,8 +35,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -260,7 +258,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
         AppAlertDialog(onDismissRequest = { viewModel.cancelEmptyBackup() }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Replace your Drive backup?") },
             text = { Text("This phone has nothing to back up, and the backup in your Google Drive has records. Backing up now replaces it with an empty one. To get those records onto this phone, use Restore from Drive instead.") },
-            confirmButton = { TextButton(onClick = { viewModel.backUpToDriveNow(replaceRecords = true) }) { Text("Replace backup", color = Coral) } },
+            confirmButton = { TextButton(onClick = { viewModel.backUpToDriveNow(replaceRecords = true) }) { Text("Replace backup", color = Pink) } },
             dismissButton = { TextButton(onClick = { viewModel.cancelEmptyBackup() }) { Text("Cancel", color = Muted) } })
     }
 
@@ -287,7 +285,7 @@ private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) 
                     items((BudgetPeriod.MIN_START_DAY..BudgetPeriod.MAX_START_DAY).toList()) { day ->
                         Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = day == current, onClick = { onPick(day) },
-                                colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                                colors = RadioButtonDefaults.colors(selectedColor = Gold, unselectedColor = Muted))
                             Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
                         }
                     }
@@ -330,7 +328,7 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
                 }
             })
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Restore", color = Jade) } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Restore", color = Gold) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
 }
@@ -357,23 +355,23 @@ private fun SettingsMainMenu(
         contentPadding = PaddingValues(16.dp)
     ) {
         item {
-            Text("SYSTEM", fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
-            Text("Settings", fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
+            Text("SYSTEM", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
+            Text("Settings", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
             Spacer(Modifier.height(24.dp))
         }
         item {
             SectionLabel("AUTO-TRACKING")
             MenuCard {
                 MenuRow(icon = Icons.Default.Sms,
-                    iconBg = if (tracking.sms) JadeSoft else CoralSoft,
-                    iconTint = if (tracking.sms) JadeInk else Coral,
+                    iconBg = if (tracking.sms) GoldSoft else PinkSoft,
+                    iconTint = if (tracking.sms) GoldInk else Pink,
                     title = "Bank SMS",
                     subtitle = if (tracking.sms) "On · payments are logged from bank texts" else "Off · tap to allow SMS access",
                     onClick = { if (!tracking.sms) onFixSms() })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
                 MenuRow(icon = Icons.Default.NotificationsActive,
-                    iconBg = if (tracking.notifications) JadeSoft else CoralSoft,
-                    iconTint = if (tracking.notifications) JadeInk else Coral,
+                    iconBg = if (tracking.notifications) GoldSoft else PinkSoft,
+                    iconTint = if (tracking.notifications) GoldInk else Pink,
                     title = "Payment app notifications",
                     subtitle = if (tracking.notifications) "On · GPay, PhonePe, Paytm and bank apps" else "Off · tap to turn on notification access",
                     onClick = onFixNotifications)
@@ -388,7 +386,7 @@ private fun SettingsMainMenu(
         item {
             SectionLabel("TRACKING")
             MenuCard {
-                MenuRow(icon = Icons.Default.Receipt, iconBg = JadeSoft, iconTint = JadeInk, title = "Bills & Reminders",
+                MenuRow(icon = Icons.Default.Receipt, iconBg = GoldSoft, iconTint = GoldInk, title = "Bills & Reminders",
                     subtitle = if (bills.isEmpty()) "No bills set up" else "${bills.size} bill${if (bills.size != 1) "s" else ""} · ${bills.count { it.isEnabled }} active",
                     onClick = { onNavigate(SettingsPage.Bills) })
                 HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
@@ -410,8 +408,8 @@ private fun SettingsMainMenu(
             SectionLabel("CLOUD")
             MenuCard {
                 MenuRow(icon = Icons.Default.Cloud,
-                    iconBg = if (driveConnected) JadeSoft else Canvas,
-                    iconTint = if (driveConnected) JadeInk else Muted,
+                    iconBg = if (driveConnected) GoldSoft else Canvas,
+                    iconTint = if (driveConnected) GoldInk else Muted,
                     title = "Cloud Backup",
                     subtitle = if (driveConnected) driveAccountEmail else "Not connected",
                     onClick = { onNavigate(SettingsPage.Cloud) })
@@ -438,7 +436,7 @@ private fun SettingsMainMenu(
         }
         item {
             val context = LocalContext.current
-            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Whisper,
+            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = AnekLatin, fontSize = 10.sp, color = Whisper,
                 modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(40.dp))
         }
@@ -530,7 +528,7 @@ private fun CategoryLimitRow(category: Category, onClick: () -> Unit) {
             Text(
                 if (category.monthlyLimit > 0) "₹${fmtINR(category.monthlyLimit)} / month" else "No limit",
                 fontSize = 11.sp,
-                color = if (category.monthlyLimit > 0) Jade else Muted
+                color = if (category.monthlyLimit > 0) Gold else Muted
             )
         }
         Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
@@ -566,7 +564,7 @@ private fun CategoryLimitDialog(
                     supportingText = limit.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Jade,
+                        focusedBorderColor = Gold,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink
                     )
@@ -580,7 +578,7 @@ private fun CategoryLimitDialog(
             TextButton(
                 onClick = { parsedLimit?.let(onConfirm) },
                 enabled = parsedLimit != null
-            ) { Text("Save", color = if (parsedLimit != null) Jade else Muted) }
+            ) { Text("Save", color = if (parsedLimit != null) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -601,7 +599,7 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("BILLS & RECURRING")
-                Text("Add +", fontSize = 12.sp, color = Jade, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddBill = true })
+                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddBill = true })
             }
         }
         if (bills.isEmpty()) {
@@ -621,7 +619,7 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("RECURRING INCOME")
-                Text("Add +", fontSize = 12.sp, color = Jade, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddIncome = true })
+                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddIncome = true })
             }
         }
         if (recurringIncomes.isEmpty()) {
@@ -652,7 +650,7 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
         AppAlertDialog(onDismissRequest = { incomeToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Delete recurring income?") },
             text = { Text("\"${r.name}\" won't be logged any more. Income it already logged stays.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteRecurringIncome(r); incomeToDelete = null }) { Text("Delete", color = Coral) } },
+            confirmButton = { TextButton(onClick = { viewModel.deleteRecurringIncome(r); incomeToDelete = null }) { Text("Delete", color = Pink) } },
             dismissButton = { TextButton(onClick = { incomeToDelete = null }) { Text("Cancel", color = Muted) } })
     }
 
@@ -665,7 +663,7 @@ private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMode
     billToDelete?.let { bill ->
         AppAlertDialog(onDismissRequest = { billToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Delete bill?") }, text = { Text("\"${bill.name}\" will be removed from your bill reminders.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteBill(bill); billToDelete = null }) { Text("Delete", color = Coral) } },
+            confirmButton = { TextButton(onClick = { viewModel.deleteBill(bill); billToDelete = null }) { Text("Delete", color = Pink) } },
             dismissButton = { TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = Muted) } })
     }
     billToEdit?.let { bill ->
@@ -685,7 +683,7 @@ private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifi
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("LOANS")
-                Text("Add +", fontSize = 12.sp, color = Jade, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddLoan = true })
+                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddLoan = true })
             }
         }
         if (loans.isEmpty()) {
@@ -713,7 +711,7 @@ private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifi
     loanToDelete?.let { loan ->
         AppAlertDialog(onDismissRequest = { loanToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Delete loan?") }, text = { Text("\"${loan.name}\" will be removed from your EMI tracker.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteLoan(loan); loanToDelete = null }) { Text("Delete", color = Coral) } },
+            confirmButton = { TextButton(onClick = { viewModel.deleteLoan(loan); loanToDelete = null }) { Text("Delete", color = Pink) } },
             dismissButton = { TextButton(onClick = { loanToDelete = null }) { Text("Cancel", color = Muted) } })
     }
     loanToEdit?.let { loan ->
@@ -736,14 +734,14 @@ private fun CloudSubPage(
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(20.dp)) {
                 if (driveConnected) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(JadeSoft), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Cloud, null, tint = JadeInk, modifier = Modifier.size(20.dp))
+                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(GoldSoft), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Cloud, null, tint = GoldInk, modifier = Modifier.size(20.dp))
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text(driveAccountEmail, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+                            Text(driveAccountEmail, fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
                         }
-                        TextButton(onClick = onDisconnectDrive) { Text("Disconnect", color = Coral, fontSize = 12.sp) }
+                        TextButton(onClick = onDisconnectDrive) { Text("Disconnect", color = Pink, fontSize = 12.sp) }
                     }
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
@@ -763,14 +761,14 @@ private fun CloudSubPage(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text("Not connected", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+                            Text("Not connected", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
                         }
                     }
                     Spacer(Modifier.height(14.dp))
                     Text("Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
                         fontSize = 11.sp, color = Muted, lineHeight = 16.sp)
                     Spacer(Modifier.height(14.dp))
-                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Jade).clickable(onClick = onConnectDrive).padding(vertical = 12.dp),
+                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Gold).clickable(onClick = onConnectDrive).padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center) {
                         Text("Connect Google Drive", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Deep)
                     }
@@ -802,17 +800,17 @@ private fun PreferencesSubPage(
                             Text(if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit" else "Disabled", fontSize = 11.5.sp, color = Muted)
                         }
                         Switch(checked = budgetAlertsEnabled, onCheckedChange = onSetBudgetAlerts,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                     }
                     androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
                         Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Warning threshold", fontSize = 11.5.sp, color = Muted)
-                                Text("$budgetAlertThreshold%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Jade, fontFamily = FontFamily.Monospace)
+                                Text("$budgetAlertThreshold%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Gold, fontFamily = AnekLatin)
                             }
                             Slider(value = budgetAlertThreshold.toFloat(), onValueChange = { onSetBudgetThreshold(it.toInt()) },
                                 valueRange = 50f..95f, steps = 8, modifier = Modifier.fillMaxWidth(),
-                                colors = SliderDefaults.colors(thumbColor = Jade, activeTrackColor = Jade, inactiveTrackColor = Hairline))
+                                colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Hairline))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("50%", fontSize = 10.sp, color = Whisper)
                                 Text("95%", fontSize = 10.sp, color = Whisper)
@@ -827,7 +825,7 @@ private fun PreferencesSubPage(
                         Text("Tell me when a subscription's price changes", fontSize = 11.5.sp, color = Muted)
                     }
                     Switch(checked = priceAlertsEnabled, onCheckedChange = onSetPriceAlerts,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -844,7 +842,7 @@ private fun PreferencesSubPage(
                             indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                         ) { showWeekStartInfo = !showWeekStartInfo })
                     }
-                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
                 }
                 androidx.compose.animation.AnimatedVisibility(visible = showWeekStartInfo) {
                     Text("Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
@@ -860,7 +858,7 @@ private fun PreferencesSubPage(
                         Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
                     }
                     Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
-                        fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade, letterSpacing = 0.4.sp)
+                        fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
                 }
                 if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
                     onSetMonthStart(it); showMonthStart = false
@@ -913,12 +911,12 @@ private fun DataSubPage(
             Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
                 // Debug builds only: it deletes all real data before loading samples.
                 if (showMockData) {
-                    SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Jade, modifier = Modifier.size(17.dp)) },
+                    SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Gold, modifier = Modifier.size(17.dp)) },
                         title = "Load mock data", subtitle = "Fill app with 3 months of sample expenses for testing",
                         onClick = { showMockDataDialog = true })
                     HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
                 }
-                SettingRow(icon = { Icon(Icons.Default.Delete, null, tint = Coral, modifier = Modifier.size(17.dp)) },
+                SettingRow(icon = { Icon(Icons.Default.Delete, null, tint = Pink, modifier = Modifier.size(17.dp)) },
                     title = "Reset everything", subtitle = "Delete all data on this phone",
                     danger = true, onClick = { showResetDialog = true })
             }
@@ -936,14 +934,14 @@ private fun DataSubPage(
         AppAlertDialog(onDismissRequest = { showMockDataDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Load mock data?") },
             text = { Text("This will replace all existing data with 3 months of sample expenses, categories, bills, a loan, a salary and savings goals.") },
-            confirmButton = { TextButton(onClick = { onMockData(); showMockDataDialog = false }) { Text("Load", color = Jade) } },
+            confirmButton = { TextButton(onClick = { onMockData(); showMockDataDialog = false }) { Text("Load", color = Gold) } },
             dismissButton = { TextButton(onClick = { showMockDataDialog = false }) { Text("Cancel", color = Muted) } })
     }
     if (showResetDialog) {
         AppAlertDialog(onDismissRequest = { showResetDialog = false }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
             title = { Text("Reset everything?") },
             text = { Text("This permanently deletes all expenses, income, categories, bills, loans, savings goals and message rules on this phone. Auto backup is turned off, so your backups keep your data. App Lock, privacy mode and Google Drive stay as they are.") },
-            confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Coral) } },
+            confirmButton = { TextButton(onClick = { onReset(); showResetDialog = false }) { Text("Delete all", color = Pink) } },
             dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel", color = Muted) } })
     }
 }
@@ -952,7 +950,7 @@ private fun DataSubPage(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 10.dp))
+    Text(text, fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 10.dp))
 }
 
 @Composable
@@ -981,7 +979,7 @@ private fun SubPageHeader(title: String, onBack: () -> Unit) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
         }
-        Text(title, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 22.sp, color = Ink)
+        Text(title, fontFamily = AnekLatin, fontSize = 22.sp, color = Ink)
     }
 }
 
@@ -993,7 +991,7 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheck
             Text(subtitle, fontSize = 11.5.sp, color = Muted)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
     }
 }
 
@@ -1001,9 +999,9 @@ private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheck
 private fun SettingRow(icon: @Composable () -> Unit, title: String, subtitle: String, danger: Boolean = false, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(if (danger) CoralSoft else Canvas), contentAlignment = Alignment.Center) { icon() }
+        Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(if (danger) PinkSoft else Canvas), contentAlignment = Alignment.Center) { icon() }
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = if (danger) Coral else Ink)
+            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = if (danger) Pink else Ink)
             Text(subtitle, fontSize = 11.5.sp, color = Muted)
         }
         Icon(Icons.Default.ChevronRight, null, tint = Whisper, modifier = Modifier.size(16.dp))
@@ -1024,16 +1022,16 @@ private fun ordinal(day: Int) = when {
 private fun RecurringIncomeRow(r: RecurringIncome, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Jade.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
             Text("💰", fontSize = 18.sp)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(r.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Text("+₹${fmtINR(r.amount)} · logged on the ${ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
-                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+                fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
         }
         Switch(checked = r.isEnabled, onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
         IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(18.dp)) }
     }
 }
@@ -1046,7 +1044,7 @@ private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> U
     var day by rememberSaveable { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
     var enabled by rememberSaveable { mutableStateOf(existing?.isEnabled ?: true) }
     val dayValue = day.toIntOrNull()?.takeIf { it in 1..31 }
-    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
+    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
 
     AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
         title = { Text(if (existing == null) "Add Recurring Income" else "Edit Recurring Income") },
@@ -1060,11 +1058,11 @@ private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> U
                     singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors,
                     isError = day.isNotEmpty() && dayValue == null,
                     supportingText = { Text(if (day.isNotEmpty() && dayValue == null) "Enter a day from 1 to 31" else "Logged as income on this day; 31 means the month's last day") })
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (enabled) JadeSoft else Canvas).clickable { enabled = !enabled }.padding(horizontal = 12.dp, vertical = 10.dp),
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (enabled) GoldSoft else Canvas).clickable { enabled = !enabled }.padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Log it each month", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                     Switch(checked = enabled, onCheckedChange = { enabled = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                 }
             }
         },
@@ -1075,7 +1073,7 @@ private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> U
                 val d = dayValue ?: return@TextButton
                 val base = existing ?: RecurringIncome(name = "", amount = 0.0, dayOfMonth = 1)
                 onConfirm(base.copy(name = name.trim(), amount = amt, dayOfMonth = d, isEnabled = enabled))
-            }, enabled = canSave) { Text(if (existing == null) "Add" else "Save", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text(if (existing == null) "Add" else "Save", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1093,17 +1091,17 @@ private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDel
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(if (bill.autoLog) JadeSoft else Canvas).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Text(if (bill.autoLog) "AUTO" else "REMIND", fontSize = 8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = if (bill.autoLog) JadeInk else Muted)
+                Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(if (bill.autoLog) GoldSoft else Canvas).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Text(if (bill.autoLog) "AUTO" else "REMIND", fontSize = 8.sp, fontFamily = AnekLatin, fontWeight = FontWeight.Bold, color = if (bill.autoLog) GoldInk else Muted)
                 }
             }
             Text(
                 if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on $ordinal of month"
                 else "₹${fmtINR(bill.amount)} · due $ordinal · remind ${bill.reminderDays}d before",
-                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+                fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
         }
         Switch(checked = bill.isEnabled, onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
         IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
     }
 }
@@ -1132,34 +1130,34 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (e.g. Rent, Netflix)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) JadeSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) GoldSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                         Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
                     }
                     Switch(checked = autoLog, onCheckedChange = { autoLog = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = amountText.invalid, supportingText = amountText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
                     OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
                         label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
                         isError = dueDay.isNotEmpty() && dayValue == null,
                         supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
                         label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
                         isError = reminderDays.isNotEmpty() && remindValue == null,
                         supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -1167,7 +1165,7 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
                             onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
                             DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
@@ -1184,7 +1182,7 @@ internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, on
                 val day = dayValue ?: return@TextButton
                 val remind = if (autoLog) 0 else remindValue ?: return@TextButton
                 onConfirm(name.trim(), amt, day, remind, selectedCategoryId, autoLog)
-            }, enabled = canSave) { Text("Add", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text("Add", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1203,13 +1201,13 @@ private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(loan.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text("₹${fmtINR(loan.monthlyEmi)}/mo · ${loan.tenureMonths} months", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+            Text("₹${fmtINR(loan.monthlyEmi)}/mo · ${loan.tenureMonths} months", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
             Spacer(Modifier.height(8.dp))
             Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(100.dp)).background(Canvas)) {
-                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Jade))
+                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Gold))
             }
             Spacer(Modifier.height(4.dp))
-            Text("$paidMonths paid · $remaining remaining", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Muted)
+            Text("$paidMonths paid · $remaining remaining", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
         }
         IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
     }
@@ -1241,34 +1239,34 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) JadeSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) GoldSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
                         Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                         Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
                     }
                     Switch(checked = autoLog, onCheckedChange = { autoLog = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Jade, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
+                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = amountText.invalid, supportingText = amountText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
                     OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
                         label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
                         isError = dueDay.isNotEmpty() && dayValue == null,
                         supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (!autoLog) {
                     OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
                         label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
                         isError = reminderDays.isNotEmpty() && remindValue == null,
                         supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 if (categories.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -1276,7 +1274,7 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
                             onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
                             DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
                             categories.forEach { cat ->
@@ -1293,7 +1291,7 @@ internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: (
                 val day = dayValue ?: return@TextButton
                 val remind = if (autoLog) 0 else remindValue ?: return@TextButton
                 onConfirm(bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = autoLog))
-            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1343,40 +1341,40 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                 Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Canvas).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("$paidMonths of ${loan.tenureMonths} EMIs paid", fontSize = 11.sp, color = Muted)
-                        Text("${"%.0f".format(progress * 100)}%", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Jade, fontFamily = FontFamily.Monospace)
+                        Text("${"%.0f".format(progress * 100)}%", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Gold, fontFamily = AnekLatin)
                     }
                     Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(100.dp)).background(Hairline)) {
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Jade))
+                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Gold))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = totalText.invalid, supportingText = totalText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = emiText.invalid, supportingText = emiText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         isError = tenureMonths.isNotEmpty() && tenureValue == null,
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         isError = agoValue == null,
                         supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
                     isError = dueDay.isNotEmpty() && dueValue == null,
                     supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
             }
         },
         confirmButton = {
@@ -1393,7 +1391,7 @@ internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan)
                     set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
                 }.timeInMillis
                 onConfirm(loan.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, totalAmount = total, monthlyEmi = emi, tenureMonths = tenure, startDate = newStartDate, dueDayOfMonth = due))
-            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1424,32 +1422,32 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = totalText.invalid, supportingText = totalText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
                         isError = emiText.invalid, supportingText = emiText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         isError = tenureMonths.isNotEmpty() && tenureValue == null,
                         supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                     OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
                         isError = agoValue == null,
                         supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
                 }
                 OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
                     isError = dueDay.isNotEmpty() && dueValue == null,
                     supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedLabelColor = Jade, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
             }
         },
         confirmButton = {
@@ -1466,7 +1464,7 @@ internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Do
                     set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
                 }.timeInMillis
                 onConfirm(name.trim(), emoji.ifBlank { "🏦" }, total, emi, tenure, startDate, due)
-            }, enabled = canSave) { Text("Add", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text("Add", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
 }
@@ -1503,7 +1501,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
             TextButton(enabled = ready, onClick = {
                 val monthStartDay = MonthStartDay.get(context)
                 onExport(preset, ExportRange.forPreset(preset, System.currentTimeMillis(), custom, monthStartDay), monthStartDay)
-            }) { Text("Export", color = if (ready) Jade else Muted) }
+            }) { Text("Export", color = if (ready) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

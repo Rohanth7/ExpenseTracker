@@ -16,8 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,7 +59,7 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
-                    Text("Subscriptions", fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 28.sp, color = Ink)
+                    Text("Subscriptions", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink)
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -96,9 +94,9 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
 @Composable
 private fun Summary(list: List<Subscription>) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Deep).padding(20.dp)) {
-        Text("ESTIMATED COST", fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted)
+        Text("ESTIMATED COST", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted)
         Text("${formatRupees(list.sumOf { it.yearlyCost })} a year",
-            fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 34.sp, color = Ink)
+            fontFamily = AnekLatin, fontSize = 34.sp, color = Ink)
         Text("across ${list.size} subscription${if (list.size == 1) "" else "s"}", fontSize = 13.sp, color = InkSoft)
     }
     Spacer(Modifier.height(16.dp))
@@ -124,8 +122,8 @@ private fun SubscriptionCard(s: Subscription, category: Category?, canTrack: Boo
         priceChangeLabel(s)?.let { label ->
             val rise = s.priceRose
             Text(
-                label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (rise) Coral else Jade,
-                modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(if (rise) CoralSoft else JadeSoft)
+                label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (rise) Pink else Gold,
+                modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(if (rise) PinkSoft else GoldSoft)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
                     .semantics { contentDescription = "Price ${if (rise) "up" else "down"} ${label.drop(2)}" }
             )
@@ -133,7 +131,7 @@ private fun SubscriptionCard(s: Subscription, category: Category?, canTrack: Boo
         Text("Paid ${s.payments} times, last on ${formatShortDate(s.lastPaid)}", fontSize = 12.sp, color = Muted,
             modifier = Modifier.padding(top = 10.dp))
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (canTrack) Chip("Remind me", Jade, onTrack)
+            if (canTrack) Chip("Remind me", Gold, onTrack)
             Chip("Not a subscription", Muted, onDismiss)
         }
     }

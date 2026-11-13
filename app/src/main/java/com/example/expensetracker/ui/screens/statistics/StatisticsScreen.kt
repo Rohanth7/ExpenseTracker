@@ -25,8 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.material3.Icon
@@ -50,16 +48,14 @@ private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
             withStyle(
                 SpanStyle(
                     fontSize = (size * 0.65f).sp,
-                    fontFamily = FontFamily.Serif,
-                    fontStyle = FontStyle.Italic,
+                    fontFamily = AnekLatin,
                     color = color.copy(alpha = 0.55f)
                 )
             ) { append("₹") }
             withStyle(
                 SpanStyle(
                     fontSize = size.sp,
-                    fontFamily = FontFamily.Serif,
-                    fontStyle = FontStyle.Italic,
+                    fontFamily = AnekLatin,
                     color = color
                 )
             ) { append(fmtINR(amount)) }
@@ -85,7 +81,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
         Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
             Text(
                 text = "STATISTICS",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 10.5.sp,
                 letterSpacing = 1.8.sp,
                 color = Muted
@@ -97,10 +93,9 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             ) {
                 Text(
                     text = headerLabel,
-                    fontFamily = FontFamily.Serif,
+                    fontFamily = AnekLatin,
                     // Date spans ("25 Sep – 24 Oct") are longer than "Oct 2026"
                     fontSize = if (headerLabel.length > 10) 26.sp else 36.sp,
-                    fontStyle = FontStyle.Italic,
                     color = Ink,
                     lineHeight = 36.sp,
                     modifier = Modifier.weight(1f, fill = false)
@@ -166,7 +161,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("No expenses for ${view.label}.", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Muted)
+                            Text("No expenses for ${view.label}.", fontFamily = AnekLatin, fontSize = 12.sp, color = Muted)
                         }
                     }
                 } else {
@@ -176,7 +171,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     }
                     if (view.stats.categories.isNotEmpty()) {
                         item {
-                            Text("ALL CATEGORIES", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                            Text("ALL CATEGORIES", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
                         item {
                             Column(
@@ -195,13 +190,13 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     }
                     if (view.stats.paymentSplit.total > 0) {
                         item {
-                            Text("HOW YOU PAY", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                            Text("HOW YOU PAY", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
                         item { PaymentSplitCard(split = view.stats.paymentSplit) }
                     }
                     if (view.stats.detectionSplit.total > 0) {
                         item {
-                            Text("HOW IT WAS TRACKED", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                            Text("HOW IT WAS TRACKED", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
                         }
                         item { DetectionSplitCard(split = view.stats.detectionSplit) }
                     }
@@ -221,13 +216,13 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                                     modifier = Modifier
                                         .size(42.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(JadeSoft),
+                                        .background(GoldSoft),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(insight.emoji, fontSize = 22.sp)
                                 }
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("INSIGHT", fontFamily = FontFamily.Monospace, fontSize = 8.5.sp, letterSpacing = 1.4.sp, color = Muted)
+                                    Text("INSIGHT", fontFamily = AnekLatin, fontSize = 8.5.sp, letterSpacing = 1.4.sp, color = Muted)
                                     Text(insight.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.padding(top = 1.dp))
                                     Text(insight.detail, fontSize = 11.sp, color = InkSoft, lineHeight = 15.sp, modifier = Modifier.padding(top = 2.dp))
                                 }
@@ -245,7 +240,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     ) {
                         Text(
                             text = "No expenses recorded for ${state.yearLabel}.",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 12.sp,
                             color = Muted
                         )
@@ -268,7 +263,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                         ) {
                             Text(
                                 text = "TOTAL YTD",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.6.sp,
                                 color = Ink.copy(alpha = 0.55f)
@@ -279,7 +274,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             val monthsRecorded = state.monthStats.count { it.total > 0 }
                             Text(
                                 text = "over $monthsRecorded months",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 10.5.sp,
                                 color = Ink.copy(alpha = 0.6f)
                             )
@@ -294,7 +289,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                         ) {
                             Text(
                                 text = "MONTHLY AVG",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.6.sp,
                                 color = Muted
@@ -304,7 +299,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 text = "per active month",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 10.5.sp,
                                 color = Muted
                             )
@@ -320,7 +315,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(AmberSoft)
+                                .background(SkySoft)
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(14.dp)
@@ -334,16 +329,15 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                             ) {
                                 Text(
                                     text = "★",
-                                    fontFamily = FontFamily.Serif,
-                                    fontStyle = FontStyle.Italic,
+                                    fontFamily = AnekLatin,
                                     fontSize = 22.sp,
-                                    color = Amber
+                                    color = Sky
                                 )
                             }
                             Column {
                                 Text(
                                     text = "BUSIEST MONTH",
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = AnekLatin,
                                     fontSize = 9.5.sp,
                                     letterSpacing = 1.6.sp,
                                     color = Muted
@@ -364,7 +358,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 item {
                     Text(
                         text = "MONTHLY BREAKDOWN",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 10.sp,
                         letterSpacing = 1.6.sp,
                         color = Muted,
@@ -394,7 +388,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     item {
                         Text(
                             text = "ALL CATEGORIES",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.sp,
                             letterSpacing = 1.6.sp,
                             color = Muted,
@@ -429,7 +423,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     item {
                         Text(
                             text = "HOW YOU PAY",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.sp,
                             letterSpacing = 1.6.sp,
                             color = Muted,
@@ -445,7 +439,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     item {
                         Text(
                             text = "HOW IT WAS TRACKED",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.sp,
                             letterSpacing = 1.6.sp,
                             color = Muted,
@@ -462,7 +456,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     item {
                         Text(
                             text = "AUTO-TRACKING",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.sp,
                             letterSpacing = 1.6.sp,
                             color = Muted,
@@ -480,17 +474,17 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(18.dp))
-                            .background(JadeSoft)
+                            .background(GoldSoft)
                             .padding(horizontal = 18.dp, vertical = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("✦", fontSize = 18.sp, color = Jade)
+                        Text("✦", fontSize = 18.sp, color = Gold)
                         Column {
                             Text(
                                 text = state.insightTitle,
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = JadeInk
+                                color = GoldInk
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
@@ -537,7 +531,7 @@ private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (Sta
     var showPicker by rememberSaveable { mutableStateOf(false) }
     AppModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
-            Text("SHOW", fontFamily = FontFamily.Monospace, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+            Text("SHOW", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
             listOf(StatsRange.LastMonths(3) to "Last 3 months", StatsRange.LastMonths(6) to "Last 6 months", StatsRange.AllTime to "All time")
                 .forEach { (range, label) ->
                     RangeOption(label, selected = current == range) { onPick(range) }
@@ -559,7 +553,7 @@ private fun RangeOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontSize = 15.sp, color = Ink, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = Jade, modifier = Modifier.size(18.dp))
+        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = Gold, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -601,14 +595,14 @@ private fun IncomeSpentSavedRow(summary: IncomeSummary) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         @Composable fun part(label: String, value: String, color: Color) = Column {
-            Text(label, fontFamily = FontFamily.Monospace, fontSize = 9.sp, letterSpacing = 1.6.sp, color = Ink.copy(alpha = 0.55f))
+            Text(label, fontFamily = AnekLatin, fontSize = 9.sp, letterSpacing = 1.6.sp, color = Ink.copy(alpha = 0.55f))
             Spacer(Modifier.height(2.dp))
-            Text(value, fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color)
+            Text(value, fontFamily = AnekLatin, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color)
         }
-        part("INCOME", "₹${fmtINR(summary.income)}", Jade)
+        part("INCOME", "₹${fmtINR(summary.income)}", Gold)
         part("SPENT", "₹${fmtINR(summary.spent)}", Ink)
         val saved = summary.saved
-        part("SAVED", "${if (saved < 0) "−" else ""}₹${fmtINR(kotlin.math.abs(saved))}", if (saved < 0) Coral else Jade)
+        part("SAVED", "${if (saved < 0) "−" else ""}₹${fmtINR(kotlin.math.abs(saved))}", if (saved < 0) Pink else Gold)
     }
 }
 
@@ -629,7 +623,7 @@ private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedW
             Column {
                 Text(
                     text = "TOTAL SPENT",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 9.sp,
                     letterSpacing = 1.6.sp,
                     color = Ink.copy(alpha = 0.55f)
@@ -642,15 +636,15 @@ private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedW
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(100.dp))
-                        .background(if (isUp) Coral.copy(alpha = 0.18f) else Jade.copy(alpha = 0.18f))
+                        .background(if (isUp) Pink.copy(alpha = 0.18f) else Gold.copy(alpha = 0.18f))
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Text(
                         text = "${if (isUp) "▲" else "▼"} ${abs(monthVsLastPct)}%",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isUp) Coral else Jade
+                        color = if (isUp) Pink else Gold
                     )
                 }
             }
@@ -659,7 +653,7 @@ private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedW
             Spacer(Modifier.height(5.dp))
             Text(
                 text = "vs $comparedWith",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 10.sp,
                 color = Ink.copy(alpha = 0.5f)
             )
@@ -674,7 +668,7 @@ private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedW
         ) {
             Text(
                 text = "View all expenses →",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 10.sp,
                 color = Ink.copy(alpha = 0.85f)
             )
@@ -719,10 +713,10 @@ private fun PaymentSplitCard(split: PaymentSplit) {
 }
 
 private fun paymentColor(label: String): Color = when (label) {
-    PaymentSplit.UPI -> Jade
-    PaymentSplit.CREDIT_CARD -> Amber
+    PaymentSplit.UPI -> Gold
+    PaymentSplit.CREDIT_CARD -> Sky
     PaymentSplit.DEBIT_CARD -> InkSoft
-    PaymentSplit.CASH -> Coral
+    PaymentSplit.CASH -> Pink
     else -> Muted
 }
 
@@ -731,16 +725,16 @@ private fun PaymentSplitLegend(label: String, amount: Double, pct: Int, color: C
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
-            Text(label, fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
+            Text(label, fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
         }
         Spacer(Modifier.height(4.dp))
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(amount)) }
+                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(amount)) }
             }
         )
-        Text("$pct%", fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
+        Text("$pct%", fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
     }
 }
 
@@ -762,9 +756,9 @@ private fun DetectionSplitCard(split: DetectionSplit) {
             val autoFrac = split.fraction(split.autoAmount)
             val manFrac = split.fraction(split.manualAmount)
             val recFrac = split.fraction(split.recurringAmount)
-            if (autoFrac > 0) Box(Modifier.fillMaxHeight().weight(autoFrac).background(Jade))
-            if (manFrac > 0) Box(Modifier.fillMaxHeight().weight(manFrac).background(Amber))
-            if (recFrac > 0) Box(Modifier.fillMaxHeight().weight(recFrac).background(Coral))
+            if (autoFrac > 0) Box(Modifier.fillMaxHeight().weight(autoFrac).background(Gold))
+            if (manFrac > 0) Box(Modifier.fillMaxHeight().weight(manFrac).background(Sky))
+            if (recFrac > 0) Box(Modifier.fillMaxHeight().weight(recFrac).background(Pink))
             val remainder = 1f - autoFrac - manFrac - recFrac
             if (remainder > 0.001f) Box(Modifier.fillMaxHeight().weight(remainder).background(HairlineSoft))
         }
@@ -776,7 +770,7 @@ private fun DetectionSplitCard(split: DetectionSplit) {
                     amount = split.autoAmount,
                     count = split.autoCount,
                     pct = (split.fraction(split.autoAmount) * 100).toInt(),
-                    color = Jade,
+                    color = Gold,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -786,7 +780,7 @@ private fun DetectionSplitCard(split: DetectionSplit) {
                     amount = split.manualAmount,
                     count = split.manualCount,
                     pct = (split.fraction(split.manualAmount) * 100).toInt(),
-                    color = Amber,
+                    color = Sky,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -796,7 +790,7 @@ private fun DetectionSplitCard(split: DetectionSplit) {
                     amount = split.recurringAmount,
                     count = split.recurringCount,
                     pct = (split.fraction(split.recurringAmount) * 100).toInt(),
-                    color = Coral,
+                    color = Pink,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -809,16 +803,16 @@ private fun DetectionLegend(label: String, amount: Double, count: Int, pct: Int,
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
-            Text(label, fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
+            Text(label, fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
         }
         Spacer(Modifier.height(4.dp))
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(amount)) }
+                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(amount)) }
             }
         )
-        Text("$count txn · $pct%", fontSize = 10.sp, color = Muted, fontFamily = FontFamily.Monospace)
+        Text("$count txn · $pct%", fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
     }
 }
 
@@ -860,7 +854,7 @@ private fun CategoryDetailDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = Jade) }
+            TextButton(onClick = onDismiss) { Text("Close", color = Gold) }
         }
     )
 }
@@ -890,7 +884,7 @@ private fun CategoryTrendChart(trend: List<CategoryTrend>, color: Color) {
                             Text(
                                 "₹${fmtINR(item.amount)}",
                                 fontSize = 7.sp, color = Ink,
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center
                             )
@@ -929,7 +923,7 @@ private fun CategoryTrendChart(trend: List<CategoryTrend>, color: Color) {
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     fontSize = 9.sp, color = Muted,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = AnekLatin
                 )
             }
         }
@@ -975,7 +969,7 @@ private fun MonthlyBarChart(monthStats: List<MonthStat>, busiestLabel: String, o
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = month.label,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 9.sp,
                     color = if (isBusiest) Ink else Muted,
                     fontWeight = if (isBusiest) FontWeight.SemiBold else FontWeight.Normal
@@ -1026,15 +1020,15 @@ private fun SubcategoryBreakdownChart(breakdown: List<SubcategoryBreakdown>) {
             )
             Text(
                 text = buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 10.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                    withStyle(SpanStyle(fontSize = 14.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(item.amount)) }
+                    withStyle(SpanStyle(fontSize = 10.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                    withStyle(SpanStyle(fontSize = 14.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(item.amount)) }
                 }
             )
             Text(
                 text = "$pct%",
                 fontSize = 10.sp,
                 color = Muted,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 modifier = Modifier.width(28.dp)
             )
         }
@@ -1059,7 +1053,7 @@ private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(JadeSoft),
+                    .background(GoldSoft),
                 contentAlignment = Alignment.Center
             ) {
                 Text("📡", fontSize = 24.sp)
@@ -1067,15 +1061,14 @@ private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
             Column {
                 Text(
                     text = "${stats.rate}%",
-                    fontFamily = FontFamily.Serif,
-                    fontStyle = FontStyle.Italic,
+                    fontFamily = AnekLatin,
                     fontSize = 34.sp,
                     color = Ink,
                     lineHeight = 36.sp
                 )
                 Text(
                     text = "auto-captured in $yearLabel",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.sp,
                     color = Muted
                 )
@@ -1100,14 +1093,14 @@ private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
                     .fillMaxHeight()
                     .fillMaxWidth(stats.rate / 100f)
                     .clip(RoundedCornerShape(100.dp))
-                    .background(Jade)
+                    .background(Gold)
             )
         }
         if (stats.monthlyAutoCounts.any { it > 0 }) {
             Spacer(Modifier.height(18.dp))
             Text(
                 text = "BY MONTH",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 8.5.sp,
                 letterSpacing = 1.4.sp,
                 color = Muted
@@ -1134,7 +1127,7 @@ private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
                                 if (count > 0) Box(
                                     Modifier.fillMaxWidth().fillMaxHeight(frac)
                                         .clip(RoundedCornerShape(2.dp))
-                                        .background(Jade.copy(alpha = (0.4f + 0.6f * frac).coerceIn(0f, 1f)))
+                                        .background(Gold.copy(alpha = (0.4f + 0.6f * frac).coerceIn(0f, 1f)))
                                 )
                             }
                         }
@@ -1152,7 +1145,7 @@ private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
                             textAlign = TextAlign.Center,
                             fontSize = 8.sp,
                             color = Muted,
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = AnekLatin
                         )
                     }
                 }
@@ -1177,14 +1170,13 @@ private fun AutoStatPill(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
-            fontFamily = FontFamily.Serif,
-            fontStyle = FontStyle.Italic,
+            fontFamily = AnekLatin,
             fontSize = 24.sp,
             color = Ink
         )
         Text(
             text = label,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = AnekLatin,
             fontSize = 9.sp,
             color = Muted
         )
@@ -1221,11 +1213,11 @@ private fun CategoryAccordionRow(stat: CategoryYearlyStat, grandTotal: Double, o
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = buildAnnotatedString {
-                        withStyle(SpanStyle(fontSize = 11.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.55f))) { append("₹") }
-                        withStyle(SpanStyle(fontSize = 18.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink)) { append(fmtINR(stat.total)) }
+                        withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.55f))) { append("₹") }
+                        withStyle(SpanStyle(fontSize = 18.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(stat.total)) }
                     }
                 )
-                Text("$pct%", fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = Muted)
+                Text("$pct%", fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
             }
             if (hasSubcats) {
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
@@ -1271,8 +1263,8 @@ private fun SubcategoryInlineRow(sub: SubcategoryRow, parentTotal: Double) {
         }
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 9.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 13.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = InkSoft)) { append(fmtINR(sub.amount)) }
+                withStyle(SpanStyle(fontSize = 9.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
+                withStyle(SpanStyle(fontSize = 13.sp, fontFamily = AnekLatin, color = InkSoft)) { append(fmtINR(sub.amount)) }
             }
         )
     }

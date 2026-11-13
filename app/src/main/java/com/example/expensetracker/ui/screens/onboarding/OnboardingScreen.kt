@@ -24,8 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -132,7 +130,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                             "🔒  Your data never leaves your phone unless you back it up"
                         )
                     )
-                    viewModel.restoreError?.let { Text(it, color = Coral, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
+                    viewModel.restoreError?.let { Text(it, color = Pink, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
                 }
                 Step.Sms -> StepBody(
                     eyebrow = "STEP 1 · BANK SMS",
@@ -194,8 +192,8 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Ink, unfocusedTextColor = Ink,
-                            focusedBorderColor = Jade, unfocusedBorderColor = Hairline,
-                            focusedLabelColor = Jade, unfocusedLabelColor = Muted, cursorColor = Jade
+                            focusedBorderColor = Gold, unfocusedBorderColor = Hairline,
+                            focusedLabelColor = Gold, unfocusedLabelColor = Muted, cursorColor = Gold
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -247,7 +245,7 @@ private fun ProgressDots(count: Int, current: Int) {
         repeat(count) { i ->
             Box(
                 Modifier.height(4.dp).width(if (i == current) 24.dp else 12.dp).clip(CircleShape)
-                    .background(if (i <= current) Jade else Hairline)
+                    .background(if (i <= current) Gold else Hairline)
             )
         }
     }
@@ -262,9 +260,9 @@ private fun StepBody(
     hint: String? = null,
     status: String? = null
 ) {
-    Text(eyebrow, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
+    Text(eyebrow, fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
     Spacer(Modifier.height(8.dp))
-    Text(title, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 30.sp, color = Ink, lineHeight = 34.sp)
+    Text(title, fontFamily = AnekLatin, fontSize = 30.sp, color = Ink, lineHeight = 34.sp)
     Spacer(Modifier.height(16.dp))
     Text(body, fontSize = 15.sp, color = InkSoft, lineHeight = 22.sp)
     if (points.isNotEmpty()) {
@@ -281,9 +279,9 @@ private fun StepBody(
     if (status != null) {
         Spacer(Modifier.height(20.dp))
         Row(
-            Modifier.clip(RoundedCornerShape(12.dp)).background(JadeSoft).padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.clip(RoundedCornerShape(12.dp)).background(GoldSoft).padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
-        ) { Text("✓  $status", fontSize = 14.sp, color = JadeInk, fontWeight = FontWeight.Medium) }
+        ) { Text("✓  $status", fontSize = 14.sp, color = GoldInk, fontWeight = FontWeight.Medium) }
     }
 }
 
@@ -291,7 +289,7 @@ private fun StepBody(
 private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(if (enabled) Jade else Jade.copy(alpha = 0.35f))
+            .background(if (enabled) Gold else Gold.copy(alpha = 0.35f))
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center
