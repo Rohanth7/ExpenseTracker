@@ -1,20 +1,31 @@
 package com.example.expensetracker.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.example.expensetracker.ui.theme.Canvas
-import com.example.expensetracker.ui.theme.Ink
+import com.example.expensetracker.ui.theme.Deep
+import com.example.expensetracker.ui.theme.Gold
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.theme.Paper
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +61,7 @@ import com.example.expensetracker.ui.screens.dashboard.DashboardScreen
 import com.example.expensetracker.ui.screens.dashboard.DashboardViewModel
 import com.example.expensetracker.ui.screens.expenses.ExpensesScreen
 import com.example.expensetracker.ui.screens.expenses.ExpensesViewModel
+import com.example.expensetracker.ui.screens.settings.SettingsHome
 import com.example.expensetracker.ui.screens.settings.SettingsScreen
 import com.example.expensetracker.ui.screens.settings.SettingsViewModel
 import com.example.expensetracker.ui.screens.statistics.StatisticsScreen
@@ -62,10 +74,11 @@ import com.example.expensetracker.ui.screens.rules.TeachMessageScreen
 import kotlinx.coroutines.flow.first
 
 sealed class Screen(val route: String, val label: String, val pattern: String = route) {
-    object Dashboard : Screen("dashboard", "Overview")
-    object Expenses : Screen("expenses", "Expenses")
+    object Dashboard : Screen("dashboard", "Home")
+    object Expenses : Screen("expenses", "Activity")
     object Categories : Screen("categories", "Categories")
-    object Statistics : Screen("statistics", "Stats")
+    object Statistics : Screen("statistics", "Insights")
+    object Plan : Screen("plan", "Plan")
     object Settings : Screen("settings", "Settings")
     object Subscriptions : Screen("subscriptions", "Subscriptions")
     object Categorize : Screen("categorize", "Categorize", "categorize/{expenseId}") {
@@ -78,7 +91,7 @@ sealed class Screen(val route: String, val label: String, val pattern: String = 
 }
 
 /**
- * Go to a top-level tab the way the bottom nav does: back to Overview first (so screens don't pile
+ * Go to a top-level tab the way the bottom nav does: back to Home first (so screens don't pile
  * up), one copy of the tab, and its saved state (filters, scroll) restored unless [restore] is false.
  */
 private fun NavController.navigateToTab(route: String, restore: Boolean = true) = navigate(route) {
@@ -87,7 +100,43 @@ private fun NavController.navigateToTab(route: String, restore: Boolean = true) 
     restoreState = restore
 }
 
-private val bottomNavItems = listOf(Screen.Dashboard, Screen.Expenses, Screen.Categories, Screen.Statistics, Screen.Settings)
+// The gold Add button sits between the second and third tab.
+private val bottomNavItems = listOf(
+    Screen.Dashboard to Icons.Default.Home,
+    Screen.Expenses to Icons.AutoMirrored.Filled.List,
+    Screen.Statistics to Icons.Default.BarChart,
+    Screen.Plan to Icons.Default.CalendarMonth,
+)
+
+@Composable
+private fun RowScope.TabItem(screen: Screen, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    NavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = { Icon(icon, screen.label) },
+        label = { Text(screen.label) },
+        colors = NavigationBarItemDefaults.colors(
+            selectedIconColor = Gold,
+            selectedTextColor = Gold,
+            indicatorColor = Color.Transparent,
+            unselectedIconColor = Muted,
+            unselectedTextColor = Muted,
+        )
+    )
+}
+
+@Composable
+private fun RowScope.AddButton(onClick: () -> Unit) {
+    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(Gold)
+                .clickable(role = Role.Button, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add expense", tint = Deep)
+        }
+    }
+}
 
 @Composable
 fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit = {}) {
@@ -121,6 +170,16 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         BillReminderHelper.schedule(context)
     }
 
+    // Like the bottom nav's Activity tab: the same screen (filters kept), never a pile of copies;
+    // the request then opens its add dialog. The tab's restored stack can have a screen on top of
+    // the list (Categorize, from a notification), where the dialog would wait unseen until the user
+    // came back; so back to the list itself.
+    fun openQuickAdd() {
+        navController.navigateToTab(Screen.Expenses.route)
+        navController.popBackStack(Screen.Expenses.pattern, inclusive = false)
+        quickAddRequested = true
+    }
+
     LaunchedEffect(launchAction) {
         if (launchAction == null) return@LaunchedEffect
         // On a cold start this runs before NavHost has set its graph; navigating then crashed
@@ -128,15 +187,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         navController.currentBackStackEntryFlow.first()
         when (launchAction) {
             is LaunchAction.Categorize -> navController.navigate(Screen.Categorize.createRoute(launchAction.expenseId))
-            // Like the bottom nav's Expenses tab: the same screen (filters kept), never a pile of
-            // copies; the request then opens its add dialog. The tab's restored stack can have a
-            // screen on top of the list (Categorize, from a notification), where the dialog would
-            // wait unseen until the user came back; so back to the list itself.
-            LaunchAction.QuickAdd -> {
-                navController.navigateToTab(Screen.Expenses.route)
-                navController.popBackStack(Screen.Expenses.pattern, inclusive = false)
-                quickAddRequested = true
-            }
+            LaunchAction.QuickAdd -> openQuickAdd()
             LaunchAction.OpenSubscriptions -> navController.navigate(Screen.Subscriptions.route) {
                 popUpTo(navController.graph.findStartDestination().id)
             }
@@ -148,39 +199,15 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
         bottomBar = {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDest = navBackStackEntry?.destination
-            val showBottomBar = bottomNavItems.any {
-                currentDest?.route == it.pattern || currentDest?.route == it.route
-            }
+            val showBottomBar = bottomNavItems.any { (screen, _) -> currentDest?.route == screen.pattern }
             if (showBottomBar) {
-                NavigationBar(
-                    containerColor = Paper,
-                    tonalElevation = 0.dp
-                ) {
-                    bottomNavItems.forEach { screen ->
-                        val selected = currentDest?.hierarchy?.any {
-                            it.route == screen.pattern || it.route == screen.route
-                        } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = { navController.navigateToTab(screen.route) },
-                            icon = {
-                                when (screen) {
-                                    Screen.Dashboard -> Icon(Icons.Default.Home, screen.label)
-                                    Screen.Expenses -> Icon(Icons.AutoMirrored.Filled.List, screen.label)
-                                    Screen.Categories -> Icon(Icons.Default.Category, screen.label)
-                                    Screen.Statistics -> Icon(Icons.Default.BarChart, screen.label)
-                                    Screen.Settings -> Icon(Icons.Default.Settings, screen.label)
-                                    else -> {}
-                                }
-                            },
-                            label = { Text(screen.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Canvas,
-                                selectedTextColor = Ink,
-                                indicatorColor = Ink,
-                                unselectedIconColor = Muted,
-                                unselectedTextColor = Muted,
-                            )
+                NavigationBar(containerColor = Paper, tonalElevation = 0.dp) {
+                    bottomNavItems.forEachIndexed { index, (screen, icon) ->
+                        if (index == bottomNavItems.size / 2) AddButton(onClick = ::openQuickAdd)
+                        TabItem(
+                            screen, icon,
+                            selected = currentDest?.hierarchy?.any { it.route == screen.pattern } == true,
+                            onClick = { navController.navigateToTab(screen.route) }
                         )
                     }
                 }
@@ -201,8 +228,9 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                     onViewPending = { navController.navigateToTab(Screen.Expenses.route) },
                     onViewAllSpending = { navController.navigateToTab(Screen.Statistics.route) },
                     onViewSubscriptions = { navController.navigate(Screen.Subscriptions.route) },
+                    onOpenSettings = { navController.navigate(Screen.Settings.route) },
                     // The Auto-tracking card is the first thing in Settings.
-                    onEnableTracking = { navController.navigateToTab(Screen.Settings.route, restore = false) }
+                    onEnableTracking = { navController.navigate(Screen.Settings.route) }
                 )
             }
             composable(Screen.Expenses.pattern) {
@@ -226,7 +254,7 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                 val vm: CategoriesViewModel = viewModel(
                     factory = CategoriesViewModel.factory(categoryRepo, expenseRepo, incomeRepo)
                 )
-                CategoriesScreen(viewModel = vm)
+                CategoriesScreen(viewModel = vm, onBack = { navController.popBackStack() })
             }
             composable(Screen.Statistics.pattern) {
                 val vm: StatisticsViewModel = viewModel(
@@ -242,11 +270,20 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                     }
                 )
             }
-            composable(Screen.Settings.pattern) {
-                val vm: SettingsViewModel = viewModel(
-                    factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, incomeRepo, backupManager, prefs)
-                )
-                SettingsScreen(viewModel = vm, onOpenMessageRules = { navController.navigate(Screen.MessageRules.route) })
+            // Settings and Plan are two front pages over the same sub-pages and view model.
+            for ((screen, home) in listOf(Screen.Settings to SettingsHome.Settings, Screen.Plan to SettingsHome.Plan)) {
+                composable(screen.pattern) {
+                    val vm: SettingsViewModel = viewModel(
+                        factory = SettingsViewModel.factory(context.applicationContext, db, categoryRepo, expenseRepo, recurringRepo, billRepo, loanRepo, mappingRepo, incomeRepo, backupManager, prefs)
+                    )
+                    SettingsScreen(
+                        viewModel = vm, home = home,
+                        onBack = { navController.popBackStack() },
+                        onOpenMessageRules = { navController.navigate(Screen.MessageRules.route) },
+                        onOpenCategories = { navController.navigate(Screen.Categories.route) },
+                        onOpenSubscriptions = { navController.navigate(Screen.Subscriptions.route) },
+                    )
+                }
             }
             composable(Screen.Subscriptions.route) {
                 val vm: SubscriptionsViewModel = viewModel(

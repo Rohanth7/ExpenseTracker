@@ -66,8 +66,8 @@ class QuickAddLaunchTest {
 
     @Test fun reopeningFromRecentsDoesNotReplayIt() {
         ActivityScenario.launch<MainActivity>(quickAddIntent(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)).use {
-            // The Expenses tab's label shows once the app is up; the dialog must not follow.
-            compose.waitUntilAtLeastOneExists(hasText("Overview"), timeoutMillis = 30_000)
+            // The Home tab's label shows once the app is up; the dialog must not follow.
+            compose.waitUntilAtLeastOneExists(hasText("Home"), timeoutMillis = 30_000)
             compose.waitForIdle()
             Thread.sleep(2_000)  // give a wrongly replayed launch time to open the dialog
             compose.waitForIdle()
@@ -92,8 +92,8 @@ class QuickAddLaunchTest {
         // A plain intent, not launch(MainActivity::class) (MAIN/LAUNCHER): ActivityScenario only tracks
         // an activity whose intent still matches its launch intent, and onNewIntent replaces it.
         ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)).use { scenario ->
-            compose.waitUntilAtLeastOneExists(hasText("Expenses") and hasClickAction(), timeoutMillis = 30_000)
-            compose.onNode(hasText("Expenses") and hasClickAction()).performClick()
+            compose.waitUntilAtLeastOneExists(hasText("Activity") and hasClickAction(), timeoutMillis = 30_000)
+            compose.onNode(hasText("Activity") and hasClickAction()).performClick()
             scenario.onActivity { it.startActivity(categorize) }
             compose.waitUntilAtLeastOneExists(hasText("Categorize Expense"), timeoutMillis = 10_000)
             scenario.onActivity { it.startActivity(quickAdd) }

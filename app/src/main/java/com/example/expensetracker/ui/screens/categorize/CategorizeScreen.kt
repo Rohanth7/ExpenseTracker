@@ -312,7 +312,7 @@ private fun ColumnScope.LoanEmiModeContent(
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("No loans added yet", style = MaterialTheme.typography.bodyMedium)
-                Text("Add a loan in Settings → Loans & EMIs", style = MaterialTheme.typography.labelSmall,
+                Text("Add a loan in Plan → Loans & EMIs", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
         }
@@ -350,7 +350,7 @@ private fun ColumnScope.SavingsModeContent(
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("No savings goals added yet", style = MaterialTheme.typography.bodyMedium)
-                Text("Add a goal in the Overview screen", style = MaterialTheme.typography.labelSmall,
+                Text("Add a goal on the Home screen", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
         }

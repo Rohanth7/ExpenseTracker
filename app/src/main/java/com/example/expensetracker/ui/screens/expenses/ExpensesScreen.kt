@@ -139,20 +139,21 @@ fun ExpensesScreen(
     Scaffold(
         containerColor = Canvas,
         floatingActionButton = {
-            if (!isSelectionMode) {
+            // Spending is added from the bottom bar's Add button.
+            if (!isSelectionMode && showIncome) {
                 Row(
                     modifier = Modifier
                         .height(58.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(Gold)
-                        .clickable { addAsIncome = showIncome; showAddDialog = true }
+                        .clickable { addAsIncome = true; showAddDialog = true }
                         .padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // The text labels the button, so the icon needs no description of its own.
                     Icon(Icons.Default.Add, contentDescription = null, tint = Deep, modifier = Modifier.size(26.dp))
-                    Text(if (showIncome) "Add income" else "Add expense", color = Deep, fontWeight = FontWeight.SemiBold)
+                    Text("Add income", color = Deep, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -190,7 +191,7 @@ fun ExpensesScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Expenses",
+                            "Activity",
                             fontFamily = AnekLatin,
                             fontSize = 28.sp,
                             color = Ink,
@@ -1299,7 +1300,7 @@ private fun IncomeList(groups: List<DayGroup<Income>>, hasAny: Boolean, showDayH
     when {
         !hasAny -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No income yet.\nTap Add income, or add your salary as recurring income in Settings → Bills & Reminders.",
+                "No income yet.\nTap Add income, or add your salary as recurring income in Plan → Bills & Reminders.",
                 color = Muted,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
