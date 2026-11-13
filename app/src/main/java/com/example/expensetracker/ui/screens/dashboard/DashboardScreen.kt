@@ -1,60 +1,59 @@
 package com.example.expensetracker.ui.screens.dashboard
 
-import androidx.compose.ui.text.style.TextOverflow
-import com.example.expensetracker.ui.util.fmtINR
-import com.example.expensetracker.ui.util.rememberSaveableItem
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.expensetracker.data.budget.Budget
 import com.example.expensetracker.data.db.entity.SavingsGoal
-import com.example.expensetracker.ui.screens.dashboard.UpcomingBill
-import com.example.expensetracker.ui.components.PieChart
-import com.example.expensetracker.ui.components.PieSlice
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.theme.*
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import com.example.expensetracker.ui.util.parseColor
-import com.example.expensetracker.ui.util.formatRupees
-import com.example.expensetracker.ui.screens.subscriptions.formatShortDate
-import java.util.Calendar
-import kotlin.math.roundToInt
 import com.example.expensetracker.ui.util.AmountCalculator
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.formatLimitInput
-import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
-import com.example.expensetracker.ui.components.AppAlertDialog
-import com.example.expensetracker.ui.components.AppModalBottomSheet
+import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.util.rememberSaveableItem
 
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel,
     onViewPending: () -> Unit,
-    onViewAllSpending: () -> Unit,
     onEnableTracking: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onViewSubscriptions: () -> Unit = {}
@@ -68,479 +67,187 @@ fun DashboardScreen(
     var goalToDelete by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
+    val prefs = remember { PreferencesManager(context.applicationContext) }
+    var alertPercent by remember { mutableIntStateOf(prefs.budgetAlertThreshold) }
     // "As of now" figures move on when the screen comes back (past midnight, a new budget month,
     // a changed alert threshold).
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refresh()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refresh()
+                alertPercent = prefs.budgetAlertThreshold
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val spentFraction = if (state.monthlyIncome > 0)
-        (state.totalSpent / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat() else 0f
+    val isCurrentMonth = !state.canGoForward
+    val hasIncome = state.monthlyIncome > 0
+    val stillDue = state.billsStillDue + state.emiStillDue
+    val freeToSpend = state.monthlyIncome - state.totalSpent - stillDue
+    val startDay by MonthStartDay.flow(context).collectAsState()
+    val now = remember(state) { System.currentTimeMillis() }
+    val daysLeft = BudgetPeriod.daysLeft(now, startDay).coerceAtLeast(1)
+    val comingUp = remember(state.upcomingBills, state.activeLoans, now, startDay) {
+        if (isCurrentMonth) ComingUp.of(state.upcomingBills, state.activeLoans, now, BudgetPeriod.current(now, startDay)) else emptyList()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Canvas),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)
     ) {
-        // ── Permission Warning ──────────────────────────────────
+        item {
+            ScreenHeader(
+                title = "",
+                actions = {
+                    HeaderIcon(Icons.Outlined.Notifications, "Notifications", onClick = { showNotifCenter = true },
+                        badge = state.notifItems.any { it.isUrgent })
+                    HeaderIcon(Icons.Default.Tune, "Settings", onClick = onOpenSettings)
+                },
+                titleContent = {
+                    HeaderIcon(Icons.Default.ChevronLeft, "Previous month", onClick = { viewModel.goToPreviousMonth() }, alignStart = true)
+                    Text(state.monthLabel, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink, maxLines = 1)
+                    HeaderIcon(Icons.Default.ChevronRight, "Next month", onClick = { viewModel.goToNextMonth() }, enabled = state.canGoForward)
+                }
+            )
+        }
+
         // Only when neither source is on: someone using just one of them shouldn't be nagged.
         if (!tracking.status.sms && !tracking.status.notifications) {
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 12.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(PinkSoft.copy(alpha = 0.5f))
+                        .padding(bottom = 10.dp)
+                        .clip(CardShape)
+                        .background(PinkSoft)
                         .clickable(onClick = onEnableTracking)
-                        .padding(16.dp, 12.dp),
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.Info, null, tint = Pink, modifier = Modifier.size(20.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Auto-tracking is off",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Ink
-                        )
-                        Text(
-                            "Payments won't be logged automatically. Tap to turn it on.",
-                            fontSize = 11.sp,
-                            color = InkSoft
-                        )
+                        Text("Auto-tracking is off", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                        Text("Payments won't be logged automatically. Tap to turn it on.", fontSize = 13.sp, color = Muted)
                     }
-                    Text(
-                        "Enable",
-                        fontSize = 12.sp,
-                        color = Pink,
-                        fontWeight = FontWeight.Bold
-                    )
+                    TextAction("Enable", onEnableTracking, color = Pink)
                 }
             }
         }
 
-        // ── Masthead ────────────────────────────────────────────
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 12.dp, bottom = 14.dp)
-            ) {
-                Text(
-                    "HOME",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.5.sp,
-                    letterSpacing = 1.8.sp,
-                    color = Muted,
-                    fontWeight = FontWeight.Medium
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Month label + chevrons
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(Paper)
-                                .border(1.dp, Hairline, CircleShape)
-                                .clickable { viewModel.goToPreviousMonth() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.ChevronLeft, null, tint = Ink, modifier = Modifier.size(16.dp))
-                        }
-                        Text(
-                            state.monthLabel,
-                            fontFamily = AnekLatin,
-                            fontSize = 28.sp,
-                            color = Ink,
-                            lineHeight = 30.sp
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(Paper)
-                                .border(1.dp, Hairline, CircleShape)
-                                .graphicsLayer { alpha = if (state.canGoForward) 1f else 0.3f }
-                                .clickable(enabled = state.canGoForward) { viewModel.goToNextMonth() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.ChevronRight, null,
-                                tint = if (state.canGoForward) Ink else Muted,
-                                modifier = Modifier.size(16.dp)
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when {
+                    !isCurrentMonth -> {
+                        Spacer(Modifier.height(16.dp))
+                        Text("Spent in ${state.monthLabel}", fontSize = 13.sp, color = Muted)
+                        BigNumber("₹${fmtINR(state.totalSpent)}")
+                    }
+                    !hasIncome -> {
+                        Spacer(Modifier.height(16.dp))
+                        Text("Spent this month", fontSize = 13.sp, color = Muted)
+                        BigNumber("₹${fmtINR(state.totalSpent)}")
+                        TextAction("Set your monthly income", { showIncomeDialog = true })
+                    }
+                    else -> {
+                        val over = freeToSpend < 0
+                        Dial(leftFraction = if (over) 0f else (freeToSpend / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat())
+                        Spacer(Modifier.height(8.dp))
+                        Text(if (over) "Over this month" else "Free to spend", fontSize = 13.sp, color = Muted)
+                        BigNumber("₹${fmtINR(if (over) -freeToSpend else freeToSpend)}", color = if (over) Pink else Ink)
+                        if (over) {
+                            Text("$daysLeft ${if (daysLeft == 1) "day" else "days"} until the month resets", fontSize = 13.sp, color = Muted)
+                        } else {
+                            Text(
+                                buildAnnotatedString {
+                                    withStyle(SpanStyle(color = Gold, fontWeight = FontWeight.SemiBold)) { append("₹${fmtINR(kotlin.math.floor(state.safeToSpendToday))} a day") }
+                                    withStyle(SpanStyle(color = Muted)) { append(" · $daysLeft ${if (daysLeft == 1) "day" else "days"} left") }
+                                },
+                                fontSize = 13.sp
                             )
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Paper)
-                            .border(1.dp, Hairline, CircleShape)
-                            .clickable(onClick = onOpenSettings),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Ink, modifier = Modifier.size(18.dp))
-                    }
-                    // Notification bell
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(Paper)
-                            .border(1.dp, Hairline, CircleShape)
-                            .clickable { showNotifCenter = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = "Notifications",
-                            tint = Ink,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        if (state.notifItems.any { it.isUrgent }) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Pink)
-                                    .border(1.5.dp, Paper, CircleShape)
-                                    .align(Alignment.TopEnd)
-                            )
-                        }
-                    }
-                    }
                 }
             }
         }
 
-        // ── Hero card ───────────────────────────────────────────
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Deep)
-                    .padding(20.dp, 20.dp, 20.dp, 20.dp)
-            ) {
-                Text(
-                    if (!state.canGoForward) "SPENT THIS MONTH"
-                    else "SPENT IN ${state.monthLabel.split(" ").firstOrNull()?.uppercase() ?: state.monthLabel.uppercase()}",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.sp,
-                    letterSpacing = 1.8.sp,
-                    color = Ink.copy(alpha = 0.55f),
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(Modifier.height(18.dp))
-                MoneyDisplay(state.totalSpent, size = 64, color = Ink)
-
-                // Progress bar
-                Spacer(Modifier.height(18.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(Ink.copy(alpha = 0.10f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(spentFraction)
-                            .clip(RoundedCornerShape(100.dp))
-                            .background(if (state.overBudget) Pink else Gold)
-                    )
-                }
-
-                // Caption
-                Spacer(Modifier.height(10.dp))
-                if (state.monthlyIncome > 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { showIncomeDialog = true },
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "${(spentFraction * 100).roundToInt()}% of ₹${fmtINR(state.monthlyIncome)} income",
-                            fontFamily = AnekLatin,
-                            fontSize = 11.sp,
-                            color = Ink.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            "₹${fmtINR((state.monthlyIncome - state.totalSpent).coerceAtLeast(0.0))} left",
-                            fontFamily = AnekLatin,
-                            fontSize = 11.sp,
-                            color = Ink,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                } else {
-                    Text(
-                        "Set expected income →",
-                        fontFamily = AnekLatin,
-                        fontSize = 11.sp,
-                        color = GoldInk,
-                        modifier = Modifier.clickable { showIncomeDialog = true }
-                    )
-                }
-
-            }
-        }
-
-        // ── Pending strip ───────────────────────────────────────
         if (state.pendingCount > 0) {
             item {
-                Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                        .padding(top = 10.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(PinkSoft)
+                        .background(Pink)
                         .clickable(onClick = onViewPending)
-                        .padding(16.dp, 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Pink),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "${state.pendingCount}",
-                            fontFamily = AnekLatin,
-                            fontSize = 18.sp,
-                            color = Color.White
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            pendingBannerText(state.pendingCount),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Ink
-                        )
-                        Text(
-                            "Tap to review →",
-                            fontSize = 11.sp,
-                            color = InkSoft,
-                            modifier = Modifier.padding(top = 1.dp)
-                        )
-                    }
-                    Icon(Icons.Default.ChevronRight, null, tint = Ink, modifier = Modifier.size(18.dp))
+                    Text(
+                        "${state.pendingCount} ${pendingBannerText(state.pendingCount)}",
+                        fontSize = 15.sp, color = Color.White, modifier = Modifier.weight(1f)
+                    )
+                    Text("Sort →", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
             }
         }
 
-        // ── Spending breakdown ──────────────────────────────────
-        if (state.categorySummaries.isNotEmpty()) {
+        if (state.budgets.isNotEmpty()) {
             item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(
-                    title = "Spending breakdown",
-                    action = "View all →",
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    onActionClick = onViewAllSpending
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(horizontal = 18.dp, vertical = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier.size(196.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        PieChart(
-                            slices = state.categorySummaries.map { s ->
-                                PieSlice(color = parseColor(s.category.colorHex), value = s.spent.toFloat(), label = s.category.name)
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "TOTAL",
-                                fontFamily = AnekLatin,
-                                fontSize = 10.sp,
-                                color = Muted,
-                                letterSpacing = 1.2.sp
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            MoneyDisplay(state.totalSpent, size = 38, color = Ink)
-                        }
-                    }
-                    Spacer(Modifier.height(18.dp))
-                    state.categorySummaries.take(4).forEachIndexed { i, summary ->
-                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(end = 10.dp)
-                                    .size(12.dp)
-                                    .clip(CircleShape)
-                                    .background(parseColor(summary.category.colorHex))
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                                Text(
-                                    "${(if (state.totalSpent > 0) summary.spent / state.totalSpent * 100 else 0.0).roundToInt()}% of total",
-                                    fontFamily = AnekLatin,
-                                    fontSize = 10.sp,
-                                    color = Muted,
-                                    modifier = Modifier.padding(top = 1.dp)
-                                )
-                            }
-                            MoneyDisplay(summary.spent, size = 20, color = Ink)
-                        }
+                MCard(Modifier.padding(top = 10.dp), padding = RowCardPadding) {
+                    state.budgets.forEachIndexed { i, budget ->
+                        if (i > 0) RowDivider()
+                        BudgetRow(budget, alertPercent)
                     }
                 }
             }
         }
 
-        // ── Against budgets ─────────────────────────────────────
-        val budgeted = state.budgets
-        if (budgeted.isNotEmpty()) {
+        if (isCurrentMonth && hasIncome) {
             item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(
-                    title = "Against budgets",
-                    action = "View details →",
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    onActionClick = onViewAllSpending
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(18.dp, 18.dp, 18.dp, 12.dp)
-                ) {
-                    budgeted.forEachIndexed { i, summary ->
-                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        val pct = (summary.spent / summary.limit).coerceIn(0.0, 1.0).toFloat()
-                        val over = summary.spent > summary.limit
-                        val catColor = parseColor(summary.category.colorHex)
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = if (i == 0) 0.dp else 12.dp)
-                                .then(if (i == 0) Modifier.padding(bottom = 12.dp) else Modifier)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(end = 10.dp)
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(catColor)
-                                )
-                                // "Food › Coffee" for a subcategory's own limit
-                                Text(summary.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Text(
-                                    buildAnnotatedString {
-                                        append("₹${fmtINR(summary.spent)} ")
-                                        withStyle(SpanStyle(color = Muted.copy(alpha = 0.5f))) {
-                                            append("/ ₹${fmtINR(summary.limit)}")
-                                        }
-                                    },
-                                    fontFamily = AnekLatin,
-                                    fontSize = 11.sp,
-                                    color = if (over) Pink else Muted
-                                )
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(100.dp))
-                                    .background(HairlineSoft)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(pct)
-                                        .clip(RoundedCornerShape(100.dp))
-                                        .background(if (over) Pink else catColor)
-                                )
-                            }
-                        }
+                SectionLabel("Cash flow this month")
+                MCard {
+                    CashFlowRow("Income", fmtINR(state.monthlyIncome), valueColor = Mint, onClick = { showIncomeDialog = true })
+                    CashFlowRow("Spent so far", "− ${fmtINR(state.totalSpent)}")
+                    if (state.hasCommitments) CashFlowRow("Bills and EMI still due", "− ${fmtINR(stillDue)}")
+                    Spacer(Modifier.height(6.dp))
+                    RowDivider()
+                    Spacer(Modifier.height(6.dp))
+                    if (freeToSpend < 0) CashFlowRow("Over this month", fmtINR(-freeToSpend), valueColor = Pink, bold = true)
+                    else CashFlowRow("Free to spend", fmtINR(freeToSpend), valueColor = Gold, bold = true)
+                }
+            }
+        }
+
+        if (comingUp.isNotEmpty()) {
+            item {
+                SectionLabel("Coming up")
+                MCard(padding = RowCardPadding) {
+                    comingUp.forEachIndexed { i, item ->
+                        if (i > 0) RowDivider()
+                        val late = item.daysUntilDue < 0
+                        AccentRow(
+                            accent = if (item.emi != null || late) Pink else Gold,
+                            title = item.name,
+                            subtitle = ComingUp.subtitle(item),
+                            trailing = "₹${fmtINR(item.amount)}",
+                            subtitleColor = if (late) Pink else Muted
+                        )
                     }
                 }
             }
         }
 
-        // ── Cash Flow Forecast ──────────────────────────────────
-        if (!state.canGoForward && state.monthlyIncome > 0 && state.hasCommitments) {
-            item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(title = "Cash Flow Forecast", modifier = Modifier.padding(horizontal = 16.dp))
-                CashFlowForecastCard(
-                    income = state.monthlyIncome,
-                    totalSpent = state.totalSpent,
-                    billsStillDue = state.billsStillDue,
-                    emiStillDue = state.emiStillDue,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-        }
-
-        // ── Savings Goals ───────────────────────────────────────
-        item {
-            Spacer(Modifier.height(4.dp))
-            DsSectionLabel(
-                title = "Savings Goals",
-                action = "Add Goal +",
-                modifier = Modifier.padding(horizontal = 16.dp),
-                onActionClick = { showAddGoalDialog = true }
-            )
-        }
-
+        item { SectionLabel("Savings goals", action = "Add goal", onAction = { showAddGoalDialog = true }) }
         if (state.savingsGoals.isEmpty()) {
             item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("No goals yet. Save for your future!", color = Muted, fontSize = 13.sp)
+                MCard {
+                    Text(
+                        "No goals yet. Save for your future!", color = Muted, fontSize = 13.sp,
+                        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    )
                 }
             }
         } else {
@@ -550,122 +257,41 @@ fun DashboardScreen(
                     goal = goal,
                     onAdd = { goalToUpdate = goal },
                     onDelete = { goalToDelete = goal },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(top = if (i == 0) 0.dp else 10.dp)
                 )
             }
         }
 
-        // ── Upcoming Bills ──────────────────────────────────────
-        if (state.upcomingBills.isNotEmpty()) {
-            item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(title = "Upcoming Bills", modifier = Modifier.padding(horizontal = 16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    state.upcomingBills.forEachIndexed { index, upcoming ->
-                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        UpcomingBillRow(upcoming)
-                    }
-                }
-            }
-        }
-
-        // ── Subscriptions ───────────────────────────────────────
         if (state.subscriptions.isNotEmpty()) {
             item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(
-                    title = "Subscriptions", modifier = Modifier.padding(horizontal = 16.dp),
-                    action = "See all", onActionClick = onViewSubscriptions
-                )
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .clickable(onClick = onViewSubscriptions)
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    state.subscriptions.take(3).forEachIndexed { index, s ->
-                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(s.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1)
-                                Text("${s.cadence.label} · next around ${formatShortDate(s.nextExpected)}", fontSize = 11.5.sp, color = Muted)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                                if (s.priceRose) Text("↑ price up", fontSize = 10.5.sp, color = Pink,
+                SectionLabel("Subscriptions")
+                MCard(onClick = onViewSubscriptions) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            val yearly = state.subscriptions.sumOf { it.yearlyCost }
+                            Text("₹${fmtINR(Math.round(yearly / 12).toDouble())} a month", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                            Text("${state.subscriptions.size} active · ₹${fmtINR(Math.round(yearly).toDouble())} a year", fontSize = 13.sp, color = Muted)
+                            if (state.subscriptions.any { it.priceRose }) {
+                                Text("↑ price up", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Pink,
                                     modifier = Modifier.semantics { contentDescription = "Price up" })
                             }
                         }
-                    }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                    Text(
-                        "${formatRupees(state.subscriptions.sumOf { it.yearlyCost })} a year across ${state.subscriptions.size} " +
-                            if (state.subscriptions.size == 1) "subscription" else "subscriptions",
-                        fontSize = 12.sp, color = Muted, modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                }
-            }
-        }
-
-        // ── EMI Commitments ─────────────────────────────────────
-        if (state.activeLoans.isNotEmpty()) {
-            item {
-                Spacer(Modifier.height(4.dp))
-                DsSectionLabel(title = "EMI Commitments", modifier = Modifier.padding(horizontal = 16.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Paper)
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Total monthly EMI",
-                            fontFamily = AnekLatin,
-                            fontSize = 11.sp,
-                            color = Muted
-                        )
-                        MoneyDisplay(state.totalMonthlyEmi, size = 20, color = Pink)
-                    }
-                    state.activeLoans.forEachIndexed { index, loanStatus ->
-                        if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                        LoanStatusRow(loanStatus)
+                        Icon(Icons.Default.ChevronRight, null, tint = Ink, modifier = Modifier.size(20.dp))
                     }
                 }
             }
         }
 
-        // ── Empty state ─────────────────────────────────────────
         if (state.categorySummaries.isEmpty() && state.pendingCount == 0) {
             item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No expenses this month.\nTransactions from SMS will appear here.",
-                        color = Muted,
-                        textAlign = TextAlign.Center,
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp
-                    )
-                }
+                Text(
+                    "No expenses this month.\nTransactions from SMS will appear here.",
+                    color = Muted,
+                    textAlign = TextAlign.Center,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.fillMaxWidth().padding(32.dp)
+                )
             }
         }
     }
@@ -732,6 +358,48 @@ internal fun pendingBannerText(count: Int): String =
 internal fun goalAchieved(goal: SavingsGoal): String =
     "${if (goal.targetAmount > 0) (goal.currentAmount / goal.targetAmount * 100).toInt() else 0}% achieved"
 
+/** A half circle whose gold end is the share of the month's income still free to spend. Its centre is left for the mascot. */
+@Composable
+private fun Dial(leftFraction: Float) {
+    Canvas(Modifier.size(220.dp, 117.dp)) {
+        val stroke = 14.dp.toPx()
+        val topLeft = Offset(stroke / 2, stroke / 2)
+        val arc = Size(size.width - stroke, size.width - stroke)
+        drawArc(Hairline, 180f, 180f, false, topLeft, arc, style = Stroke(stroke, cap = StrokeCap.Round))
+        val sweep = 180f * leftFraction
+        if (sweep > 0f) drawArc(Gold, 360f - sweep, sweep, false, topLeft, arc, style = Stroke(stroke, cap = StrokeCap.Round))
+    }
+}
+
+@Composable
+private fun BudgetRow(budget: Budget, alertPercent: Int) {
+    val tone = budgetTone(budget.spent, budget.limit, alertPercent)
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ToneDot(tone)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // "Food › Coffee" for a subcategory's own limit
+                Text(budget.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${fmtINR(budget.spent)} of ${fmtINR(budget.limit)}", fontSize = 13.sp, color = Muted)
+            }
+            Spacer(Modifier.height(6.dp))
+            ProgressBar((budget.spent / budget.limit).toFloat(), tone)
+        }
+    }
+}
+
+@Composable
+private fun CashFlowRow(label: String, value: String, valueColor: Color = Ink, bold: Boolean = false, onClick: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 15.sp, fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal, color = Ink)
+        Text(value, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = valueColor)
+    }
+}
+
 @Composable
 private fun SavingsGoalCard(
     goal: SavingsGoal,
@@ -739,61 +407,17 @@ private fun SavingsGoalCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val progress = (goal.currentAmount / goal.targetAmount).coerceIn(0.0, 1.0).toFloat()
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Paper)
-            .padding(18.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(goal.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Ink)
-                Text(
-                    "₹${fmtINR(goal.currentAmount)} / ₹${fmtINR(goal.targetAmount)}",
-                    fontSize = 11.sp,
-                    color = Muted,
-                    fontFamily = AnekLatin
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onAdd, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Add, null, tint = Gold, modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Delete, "Delete goal ${goal.name}", tint = Muted, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(100.dp))
-                .background(HairlineSoft)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(progress)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(Gold)
+    MCard(modifier, onClick = onAdd) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(goal.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text("${fmtINR(goal.currentAmount)} of ${fmtINR(goal.targetAmount)}", fontSize = 13.sp, color = Muted)
+            Icon(
+                Icons.Outlined.DeleteOutline, "Delete goal ${goal.name}", tint = Muted,
+                modifier = Modifier.padding(start = 10.dp).size(20.dp).clickable(onClick = onDelete)
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            goalAchieved(goal),
-            fontSize = 10.sp,
-            color = GoldInk,
-            fontFamily = AnekLatin
-        )
+        ProgressBar((goal.currentAmount / goal.targetAmount).toFloat(), Mint)
     }
 }
 
@@ -816,7 +440,7 @@ internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) ->
                     label = { Text("What are you saving for?") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                    shape = FieldShape, colors = fieldColors()
                 )
                 OutlinedTextField(
                     value = target,
@@ -827,7 +451,7 @@ internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) ->
                     isError = targetText.invalid,
                     supportingText = targetText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                    shape = FieldShape, colors = fieldColors()
                 )
             }
         },
@@ -867,18 +491,13 @@ private fun DepositDialog(
                     isError = amountText.invalid,
                     supportingText = amountText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gold,
-                        focusedTextColor = Ink,
-                        unfocusedTextColor = Ink
-                    )
+                    shape = FieldShape, colors = fieldColors()
                 )
                 if (surplus > 0) {
                     Text(
                         "Monthly surplus: ₹${fmtINR(surplus)}",
-                        fontSize = 11.sp,
-                        color = Muted,
-                        fontFamily = AnekLatin
+                        fontSize = 13.sp,
+                        color = Muted
                     )
                 }
             }
@@ -889,172 +508,6 @@ private fun DepositDialog(
             }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
-}
-
-@Composable
-private fun CashFlowForecastCard(
-    income: Double,
-    totalSpent: Double,
-    billsStillDue: Double,
-    emiStillDue: Double,
-    modifier: Modifier = Modifier
-) {
-    val freeAmount = income - totalSpent - billsStillDue - emiStillDue
-    val isOver = freeAmount < 0
-
-    // Bar fractions — each clamped so the cumulative total never exceeds 1.0
-    val spentFrac  = (totalSpent / income).coerceIn(0.0, 1.0).toFloat()
-    val afterSpent = (1f - spentFrac).coerceAtLeast(0f)
-    val billsFrac  = (billsStillDue / income).toFloat().coerceIn(0f, afterSpent)
-    val afterBills = (afterSpent - billsFrac).coerceAtLeast(0f)
-    val emiFrac    = (emiStillDue / income).toFloat().coerceIn(0f, afterBills)
-    val freeFrac   = (1f - spentFrac - billsFrac - emiFrac).coerceAtLeast(0f)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Paper)
-            .padding(18.dp)
-    ) {
-        Text(
-            "₹${fmtINR(income)} monthly income",
-            fontSize = 11.sp,
-            fontFamily = AnekLatin,
-            color = Muted
-        )
-        Spacer(Modifier.height(10.dp))
-
-        // Stacked bar — segments use weight() so widths are proportional without BoxWithConstraints
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(100.dp))
-                .background(HairlineSoft)
-        ) {
-            Row(Modifier.fillMaxSize()) {
-                if (spentFrac > 0f)  Box(Modifier.fillMaxHeight().weight(spentFrac).background(Pink))
-                if (billsFrac > 0f)  Box(Modifier.fillMaxHeight().weight(billsFrac).background(Sky))
-                if (emiFrac > 0f)    Box(Modifier.fillMaxHeight().weight(emiFrac).background(Muted))
-                if (freeFrac > 0f)   Box(Modifier.fillMaxHeight().weight(freeFrac).background(Gold))
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-
-        ForecastRow(dotColor = Pink, label = "Spent so far", amount = totalSpent)
-        if (billsStillDue > 0) {
-            Spacer(Modifier.height(8.dp))
-            ForecastRow(dotColor = Sky, label = "Bills still due", amount = billsStillDue)
-        }
-        if (emiStillDue > 0) {
-            Spacer(Modifier.height(8.dp))
-            ForecastRow(dotColor = Muted, label = "EMI still due", amount = emiStillDue)
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                if (isOver) "Over-committed" else "Free to spend",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (isOver) Pink else Ink
-            )
-            Text(
-                if (isOver) "–₹${fmtINR(-freeAmount)}" else "₹${fmtINR(freeAmount)}",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = AnekLatin,
-                color = if (isOver) Pink else Gold
-            )
-        }
-    }
-}
-
-@Composable
-private fun ForecastRow(dotColor: Color, label: String, amount: Double) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
-            Text(label, fontSize = 12.sp, color = Muted)
-        }
-        Text(
-            "₹${fmtINR(amount)}",
-            fontSize = 12.sp,
-            fontFamily = AnekLatin,
-            color = Ink
-        )
-    }
-}
-
-@Composable
-fun DsSectionLabel(title: String, modifier: Modifier = Modifier, action: String? = null, onActionClick: (() -> Unit)? = null) {
-    Row(
-        modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            title.uppercase(),
-            fontFamily = AnekLatin,
-            fontSize = 10.5.sp,
-            letterSpacing = 1.8.sp,
-            color = Muted,
-            fontWeight = FontWeight.Medium
-        )
-        if (action != null) {
-            Text(
-                action,
-                fontSize = 12.sp,
-                color = GoldInk,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.then(if (onActionClick != null) Modifier.clickable { onActionClick() } else Modifier)
-            )
-        }
-    }
-}
-
-@Composable
-fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = Modifier) {
-    val text = fmtINR(amount)
-    // One line, always: an amount with paise ("1,00,100.74") is longer than the card is wide at
-    // full size, so the text steps down until it fits.
-    var scale by remember(text, size) { mutableStateOf(1f) }
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(
-                fontSize = (size * 0.55 * scale).sp,
-                fontStyle = FontStyle.Normal,
-                color = color.copy(alpha = 0.55f),
-                fontFamily = AnekLatin
-            )) { append("₹") }
-            withStyle(SpanStyle(
-                fontSize = (size * scale).sp,
-                fontFamily = AnekLatin,
-                fontWeight = FontWeight.Normal,
-                color = color,
-                letterSpacing = (-0.5).sp
-            )) { append(text) }
-        },
-        maxLines = 1,
-        softWrap = false,
-        onTextLayout = { if (it.didOverflowWidth && scale > 0.4f) scale *= 0.92f },
-        modifier = modifier
     )
 }
 
@@ -1078,12 +531,13 @@ private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDism
                     singleLine = true,
                     isError = income.invalid,
                     supportingText = income.supportingText,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = FieldShape, colors = fieldColors()
                 )
                 Text(
                     if (monthWithIncome != null) "Not used for $monthWithIncome: it has income logged or on its way, so the forecast uses that."
                     else "Used until you log income. Add your salary as recurring income in Plan → Bills & Reminders.",
-                    fontSize = 12.sp, color = Muted
+                    fontSize = 13.sp, color = Muted
                 )
             }
         },
@@ -1097,231 +551,36 @@ private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDism
 }
 
 @Composable
-private fun UpcomingBillRow(upcoming: UpcomingBill) {
-    val dueText = when (upcoming.daysUntilDue) {
-        -1 -> "Yesterday"
-        0 -> "Today"
-        1 -> "Tomorrow"
-        else -> "In ${upcoming.daysUntilDue} days"
-    }
-    val isOverdue = upcoming.daysUntilDue < 0
-    val isDueToday = upcoming.daysUntilDue == 0
-    val accentColor = when {
-        isOverdue -> Pink
-        isDueToday -> Sky
-        else -> Muted
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(accentColor.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "${upcoming.dueDay}",
-                fontFamily = AnekLatin,
-                fontSize = 16.sp,
-                color = accentColor,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(upcoming.bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(dueText, fontFamily = AnekLatin, fontSize = 10.5.sp, color = accentColor)
-        }
-        MoneyDisplay(upcoming.bill.amount, size = 18, color = if (isOverdue) Pink else Ink)
-    }
-}
-
-@Composable
-private fun LoanStatusRow(loanStatus: LoanStatus) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(loanStatus.loan.emoji, fontSize = 18.sp)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(loanStatus.loan.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                Text(
-                    "${loanStatus.paidMonths}/${loanStatus.loan.tenureMonths} months paid",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.sp,
-                    color = Muted
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                MoneyDisplay(loanStatus.loan.monthlyEmi, size = 16, color = Ink)
-                Text(
-                    "${loanStatus.remainingMonths} mo left",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.sp,
-                    color = Pink
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(100.dp))
-                .background(HairlineSoft)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(loanStatus.progressFraction)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(Gold)
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    AppModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Canvas,
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 12.dp, bottom = 8.dp)
-                    .size(36.dp, 4.dp)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(Hairline)
-            )
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 32.dp)
-        ) {
-            Text(
-                "NOTIFICATIONS",
-                fontFamily = AnekLatin,
-                fontSize = 10.5.sp,
-                letterSpacing = 1.8.sp,
-                color = Muted,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                "Activity",
-                fontFamily = AnekLatin,
-                fontSize = 26.sp,
-                color = Ink,
-                lineHeight = 28.sp
-            )
-            Spacer(Modifier.height(20.dp))
-
-            if (items.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Paper)
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("You're all caught up!", fontSize = 13.sp, color = Muted)
-                }
-            } else {
-                // Group by type and render each section
-                val captures = items.filter { it.type == NotifType.CAPTURE }
-                val budgets  = items.filter { it.type == NotifType.BUDGET }
-                val bills    = items.filter { it.type == NotifType.BILL }
-
-                if (captures.isNotEmpty()) {
-                    NotifSection(label = "RECENT CAPTURES") {
-                        captures.forEachIndexed { i, item -> NotifRow(item, isLast = i == captures.lastIndex) }
-                    }
-                }
-                if (budgets.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    NotifSection(label = "BUDGET ALERTS") {
-                        budgets.forEachIndexed { i, item -> NotifRow(item, isLast = i == budgets.lastIndex) }
-                    }
-                }
-                if (bills.isNotEmpty()) {
-                    Spacer(Modifier.height(16.dp))
-                    NotifSection(label = "UPCOMING BILLS") {
-                        bills.forEachIndexed { i, item -> NotifRow(item, isLast = i == bills.lastIndex) }
-                    }
-                }
+    MSheet(onDismiss) {
+        SheetTitle("Needs your attention")
+        if (items.isEmpty()) {
+            MCard {
+                Text("You're all caught up!", fontSize = 13.sp, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
             }
+        } else {
+            NotifSection("Recent captures", items.filter { it.type == NotifType.CAPTURE }, first = true)
+            NotifSection("Budget alerts", items.filter { it.type == NotifType.BUDGET })
+            NotifSection("Upcoming bills", items.filter { it.type == NotifType.BILL })
         }
     }
 }
 
 @Composable
-private fun NotifSection(label: String, content: @Composable () -> Unit) {
-    Text(
-        label,
-        fontFamily = AnekLatin,
-        fontSize = 9.sp,
-        letterSpacing = 1.4.sp,
-        color = Muted,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Paper)
-            .padding(horizontal = 14.dp, vertical = 4.dp)
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun NotifRow(item: NotifItem, isLast: Boolean = false) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (item.isUrgent) PinkSoft else Canvas),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(item.emoji, fontSize = 18.sp)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(item.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text(item.subtitle, fontSize = 11.sp, color = if (item.isUrgent) Pink else Muted, modifier = Modifier.padding(top = 1.dp))
-        }
-        if (item.isUrgent) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(Pink)
+private fun NotifSection(label: String, items: List<NotifItem>, first: Boolean = false) {
+    if (items.isEmpty()) return
+    if (first) Text(label.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, color = Muted, modifier = Modifier.padding(bottom = 8.dp))
+    else SectionLabel(label)
+    MCard(padding = RowCardPadding) {
+        items.forEachIndexed { i, item ->
+            if (i > 0) RowDivider()
+            AccentRow(
+                accent = if (item.isUrgent) Pink else Muted,
+                title = item.title,
+                subtitle = item.subtitle,
+                trailing = "",
+                subtitleColor = if (item.isUrgent) Pink else Muted
             )
         }
     }
-    if (!isLast) Box(Modifier.fillMaxWidth().height(0.5.dp).background(HairlineSoft))
 }
-
