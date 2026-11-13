@@ -17,13 +17,13 @@
         <FrameLayout
             android:layout_width="18dp"
             android:layout_height="18dp"
-            android:background="@drawable/bg_jade_square">
+            android:background="@drawable/bg_gold_square">
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:text="₹"
                 android:gravity="center"
-                android:textColor="#FF171511"
+                android:textColor="#FF11153A"
                 android:textSize="13sp"
                 android:textStyle="bold|italic"
                 android:fontFamily="serif" />
@@ -34,7 +34,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
             android:text="TRACKER"
-            android:textColor="#8CF4EFE1"
+            android:textColor="#8CF4EEDD"
             android:textSize="8sp"
             android:textStyle="bold"
             android:fontFamily="monospace" />
@@ -48,7 +48,7 @@
             android:id="@+id/header_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#A09B8E"
+            android:textColor="#8E94C6"
             android:textSize="9sp"
             android:textStyle="bold"
             android:fontFamily="monospace" />
@@ -64,7 +64,7 @@
             android:layout_marginEnd="-8dp"
             android:padding="7dp"
             android:src="@android:drawable/ic_input_add"
-            android:tint="#7DC9A5"
+            android:tint="#F6A723"
             android:contentDescription="Add expense" />
 
     </LinearLayout>
@@ -92,7 +92,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:textColor="#F2EBD9"
+                android:textColor="#F4EEDD"
                 android:textSize="22sp"
                 android:textStyle="italic"
                 android:fontFamily="serif" />
@@ -111,7 +111,7 @@
                 android:id="@+id/spent_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#A09B8E"
+                android:textColor="#8E94C6"
                 android:textSize="9sp"
                 android:textStyle="bold"
                 android:fontFamily="monospace" />
@@ -127,7 +127,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="₹"
-                    android:textColor="#8CF2EBD9"
+                    android:textColor="#8CF4EEDD"
                     android:textSize="18sp"
                     android:fontFamily="serif" />
 
@@ -136,7 +136,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
-                    android:textColor="#F2EBD9"
+                    android:textColor="#F4EEDD"
                     android:textSize="36sp"
                     android:textStyle="italic"
                     android:fontFamily="serif" />
@@ -148,7 +148,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:textColor="#A09B8E"
+                android:textColor="#8E94C6"
                 android:textSize="10sp"
                 android:fontFamily="monospace" />
 
@@ -178,7 +178,7 @@
                     android:layout_marginStart="6dp"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    android:textColor="#A09B8E"
+                    android:textColor="#8E94C6"
                     android:textSize="9sp"
                     android:fontFamily="monospace"
                     android:visibility="gone" />

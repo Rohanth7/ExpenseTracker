@@ -4,12 +4,12 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Rupee symbol (₹) in Jade green, centered in the 72dp safe zone (18–90dp) -->
+    <!-- Rupee symbol (₹) in Gold green, centered in the 72dp safe zone (18–90dp) -->
 
     <!-- Top horizontal bar -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#7DC9A5"
+        android:strokeColor="#F6A723"
         android:strokeWidth="7.5"
         android:strokeLineCap="round"
         android:pathData="M30,34 L78,34" />
@@ -17,7 +17,7 @@
     <!-- Second horizontal bar (slightly shorter) -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#7DC9A5"
+        android:strokeColor="#F6A723"
         android:strokeWidth="7.5"
         android:strokeLineCap="round"
         android:pathData="M30,49 L69,49" />
@@ -25,7 +25,7 @@
     <!-- Left vertical stroke -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#7DC9A5"
+        android:strokeColor="#F6A723"
         android:strokeWidth="7.5"
         android:strokeLineCap="round"
         android:pathData="M30,34 L30,82" />
@@ -33,7 +33,7 @@
     <!-- Diagonal stroke from below 2nd bar to bottom-right -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#7DC9A5"
+        android:strokeColor="#F6A723"
         android:strokeWidth="7.5"
         android:strokeLineCap="round"
         android:pathData="M30,54 L78,82" />

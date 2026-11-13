@@ -29,7 +29,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -145,7 +144,7 @@ fun ExpensesScreen(
                     modifier = Modifier
                         .height(58.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Jade)
+                        .background(Gold)
                         .clickable { addAsIncome = showIncome; showAddDialog = true }
                         .padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -184,7 +183,7 @@ fun ExpensesScreen(
                     Column {
                         Text(
                             "LEDGER",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.5.sp,
                             letterSpacing = 1.8.sp,
                             color = Muted,
@@ -192,8 +191,7 @@ fun ExpensesScreen(
                         )
                         Text(
                             "Expenses",
-                            fontFamily = FontFamily.Serif,
-                            fontStyle = FontStyle.Italic,
+                            fontFamily = AnekLatin,
                             fontSize = 28.sp,
                             color = Ink,
                             lineHeight = 30.sp
@@ -204,16 +202,16 @@ fun ExpensesScreen(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 "THIS WEEK",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.6.sp,
                                 color = Muted
                             )
                             Text(
                                 buildAnnotatedString {
-                                    val color = if (showIncome) Jade else Ink
-                                    withStyle(SpanStyle(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Normal, fontSize = 13.sp, color = color.copy(alpha = 0.55f))) { append(if (showIncome) "+₹" else "₹") }
-                                    withStyle(SpanStyle(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 22.sp, color = color)) { append(fmtINR(shownWeekTotal)) }
+                                    val color = if (showIncome) Gold else Ink
+                                    withStyle(SpanStyle(fontFamily = AnekLatin, fontStyle = FontStyle.Normal, fontSize = 13.sp, color = color.copy(alpha = 0.55f))) { append(if (showIncome) "+₹" else "₹") }
+                                    withStyle(SpanStyle(fontFamily = AnekLatin, fontSize = 22.sp, color = color)) { append(fmtINR(shownWeekTotal)) }
                                 }
                             )
                         }
@@ -253,7 +251,7 @@ fun ExpensesScreen(
                     Icon(
                         Icons.Default.FilterList,
                         if (sortByAmount) "Sort by date" else "Sort by amount",
-                        tint = if (sortByAmount) Jade else Muted,
+                        tint = if (sortByAmount) Gold else Muted,
                         modifier = Modifier.size(16.dp).clickable {
                             viewModel.toggleSortOrder()
                             val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
@@ -263,7 +261,7 @@ fun ExpensesScreen(
                     Icon(
                         Icons.Default.Tune,
                         "Filters",
-                        tint = if (minAmount != null || maxAmount != null || dateRange != null) Jade else Muted,
+                        tint = if (minAmount != null || maxAmount != null || dateRange != null) Gold else Muted,
                         modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
                     )
                 }
@@ -272,13 +270,13 @@ fun ExpensesScreen(
                 dateRange?.let { (from, to) ->
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp)
-                            .clip(RoundedCornerShape(100.dp)).background(JadeSoft)
+                            .clip(RoundedCornerShape(100.dp)).background(GoldSoft)
                             .clickable { viewModel.clearDateRange() }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(Icons.Default.CalendarToday, null, tint = Jade, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.CalendarToday, null, tint = Gold, modifier = Modifier.size(13.dp))
                         Text(BudgetPeriod.dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
                         Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(13.dp))
                     }
@@ -383,7 +381,7 @@ fun ExpensesScreen(
                                     ) {
                                         Text(
                                             "${dayGroup.dayLabel}, ${dayGroup.dateLabel}".uppercase(),
-                                            fontFamily = FontFamily.Monospace,
+                                            fontFamily = AnekLatin,
                                             fontSize = 10.5.sp,
                                             letterSpacing = 1.6.sp,
                                             color = Muted,
@@ -391,7 +389,7 @@ fun ExpensesScreen(
                                         )
                                         Text(
                                             "₹${fmtINR(dayGroup.total)}",
-                                            fontFamily = FontFamily.Monospace,
+                                            fontFamily = AnekLatin,
                                             fontSize = 11.sp,
                                             color = Muted
                                         )
@@ -478,7 +476,7 @@ fun ExpensesScreen(
                 TextButton(onClick = {
                     viewModel.deleteIncome(income)
                     incomeToDelete = null
-                }) { Text("Delete", color = Coral) }
+                }) { Text("Delete", color = Pink) }
             },
             dismissButton = {
                 TextButton(onClick = { incomeToDelete = null }) { Text("Cancel", color = Muted) }
@@ -516,7 +514,7 @@ fun ExpensesScreen(
                 TextButton(onClick = {
                     viewModel.deleteExpense(expense)
                     expenseToDelete = null
-                }) { Text("Delete", color = Coral) }
+                }) { Text("Delete", color = Pink) }
             },
             dismissButton = {
                 TextButton(onClick = { expenseToDelete = null }) { Text("Cancel", color = Muted) }
@@ -540,7 +538,7 @@ fun ExpensesScreen(
                 TextButton(onClick = {
                     viewModel.bulkDelete()
                     confirmBulkDelete = false
-                }) { Text("Delete", color = Coral) }
+                }) { Text("Delete", color = Pink) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmBulkDelete = false }) { Text("Cancel", color = Muted) }
@@ -616,7 +614,7 @@ private fun AdvancedFiltersDialog(
                         isError = min.invalid,
                         supportingText = min.supportingText,
                         modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
                     OutlinedTextField(
                         value = maxText,
@@ -626,7 +624,7 @@ private fun AdvancedFiltersDialog(
                         isError = max.invalid || inverted,
                         supportingText = if (inverted) {{ Text("Less than min") }} else max.supportingText,
                         modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
                     )
                 }
             }
@@ -638,12 +636,12 @@ private fun AdvancedFiltersDialog(
                 // "This month" and "Last month" are budget months, like the Overview.
                 onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 },
                     if (preset == ExportPreset.ALL) null else DateFilter(preset, custom.takeIf { preset == ExportPreset.CUSTOM }))
-            }) { Text("Apply", color = if (valid) Jade else Muted) }
+            }) { Text("Apply", color = if (valid) Gold else Muted) }
         },
         dismissButton = {
             TextButton(onClick = {
                 minText = ""; maxText = ""; onConfirm(null, null, null)
-            }) { Text("Clear", color = Coral) }
+            }) { Text("Clear", color = Pink) }
         }
     )
 }
@@ -661,7 +659,7 @@ private fun BulkActionsToolbar(
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .height(56.dp)
             .clip(RoundedCornerShape(100.dp))
-            .background(Jade)
+            .background(Gold)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -734,7 +732,7 @@ private fun BulkCategorizeDialog(
         },
         confirmButton = {
             TextButton(onClick = { onConfirm(selectedCategoryId) }) {
-                Text("Confirm", color = Jade)
+                Text("Confirm", color = Gold)
             }
         },
         dismissButton = {
@@ -768,8 +766,8 @@ private fun TagChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(100.dp))
-            .background(if (selected) JadeSoft else Paper)
-            .border(1.dp, if (selected) JadeInk.copy(alpha = 0.4f) else Hairline, RoundedCornerShape(100.dp))
+            .background(if (selected) GoldSoft else Paper)
+            .border(1.dp, if (selected) GoldInk.copy(alpha = 0.4f) else Hairline, RoundedCornerShape(100.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
@@ -777,9 +775,9 @@ private fun TagChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
             "#$label",
             fontSize = 12.5.sp,
             fontWeight = FontWeight.Medium,
-            color = if (selected) JadeInk else Muted,
+            color = if (selected) GoldInk else Muted,
             letterSpacing = 0.1.sp,
-            fontFamily = FontFamily.Monospace
+            fontFamily = AnekLatin
         )
     }
 }
@@ -792,7 +790,7 @@ private fun BasicSearchField(value: String, onValueChange: (String) -> Unit, mod
         modifier = modifier,
         textStyle = androidx.compose.ui.text.TextStyle(color = Ink, fontSize = 13.5.sp),
         singleLine = true,
-        cursorBrush = androidx.compose.ui.graphics.SolidColor(Jade),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(Gold),
         decorationBox = { innerTextField ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) {
@@ -818,15 +816,15 @@ private fun ExpenseRowItem(
 ) {
     val isPending = expense.categoryId == -1L
     val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(expense.date))
-    val catColor = if (isPending) Coral else if (category != null) parseColor(category.colorHex) else Muted
+    val catColor = if (isPending) Pink else if (category != null) parseColor(category.colorHex) else Muted
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 when {
-                    selected -> Jade.copy(alpha = 0.15f)
-                    isPending -> CoralSoft
+                    selected -> Gold.copy(alpha = 0.15f)
+                    isPending -> PinkSoft
                     else -> Color.Transparent
                 }
             )
@@ -844,7 +842,7 @@ private fun ExpenseRowItem(
                 .size(38.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
-                    if (selected) Jade 
+                    if (selected) Gold 
                     else catColor.copy(alpha = if (isPending) 1f else 0.13f)
                 ),
             contentAlignment = Alignment.Center
@@ -854,8 +852,7 @@ private fun ExpenseRowItem(
             } else if (isPending) {
                 Text(
                     "?",
-                    fontFamily = FontFamily.Serif,
-                    fontStyle = FontStyle.Italic,
+                    fontFamily = AnekLatin,
                     fontSize = 18.sp,
                     color = Color.White
                 )
@@ -879,7 +876,7 @@ private fun ExpenseRowItem(
                 Text(
                     "Tap to categorize →",
                     fontSize = 11.sp,
-                    color = Coral,
+                    color = Pink,
                     fontWeight = FontWeight.SemiBold
                 )
             } else {
@@ -887,11 +884,11 @@ private fun ExpenseRowItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(timeStr, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = Muted)
+                    Text(timeStr, fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
                     Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
                     Text(
                         (expense.source ?: "MANUAL").uppercase(),
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 9.5.sp,
                         color = Muted,
                         letterSpacing = 0.6.sp
@@ -918,19 +915,19 @@ private fun ExpenseRowItem(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(JadeSoft)
+                                    .background(GoldSoft)
                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                             ) {
                                 Text(
                                     "#$tag",
                                     fontSize = 9.5.sp,
-                                    color = JadeInk,
-                                    fontFamily = FontFamily.Monospace
+                                    color = GoldInk,
+                                    fontFamily = AnekLatin
                                 )
                             }
                         }
                         if (parsedTags.size > 3) {
-                            Text("+${parsedTags.size - 3}", fontSize = 9.5.sp, color = Muted, fontFamily = FontFamily.Monospace)
+                            Text("+${parsedTags.size - 3}", fontSize = 9.5.sp, color = Muted, fontFamily = AnekLatin)
                         }
                     }
                 }
@@ -941,8 +938,8 @@ private fun ExpenseRowItem(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 13.sp, fontStyle = FontStyle.Normal, color = (if (isPending) Coral else Ink).copy(alpha = 0.55f), fontFamily = FontFamily.Serif)) { append("₹") }
-                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = if (isPending) Coral else Ink)) { append(fmtINR(expense.amount)) }
+                    withStyle(SpanStyle(fontSize = 13.sp, fontStyle = FontStyle.Normal, color = (if (isPending) Pink else Ink).copy(alpha = 0.55f), fontFamily = AnekLatin)) { append("₹") }
+                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = AnekLatin, color = if (isPending) Pink else Ink)) { append(fmtINR(expense.amount)) }
                 }
             )
             if (!isSelectionMode) {
@@ -1083,7 +1080,7 @@ private fun AddExpenseDialog(
                     if (isIncome) return@TextButton onConfirmIncome(amt, description.trim(), date, tags.trim())
                     onConfirm(amt, description.trim(), selectedCategoryId, date, tags.trim(), selectedPaymentMethod)
                 }
-            ) { Text("Add", color = Jade) }
+            ) { Text("Add", color = Gold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -1189,7 +1186,7 @@ private fun EditExpenseDialog(
             TextButton(onClick = {
                 val amt = amount.validated() ?: return@TextButton
                 onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
-            }) { Text("Save", color = Jade) }
+            }) { Text("Save", color = Gold) }
         },
         dismissButton = {
             // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
@@ -1201,7 +1198,7 @@ private fun EditExpenseDialog(
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton
                     onDuplicate(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod, edited)
-                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Jade) }
+                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Gold) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
             }
         }
@@ -1254,7 +1251,7 @@ private fun EditIncomeDialog(
             TextButton(onClick = {
                 val amt = amount.validated() ?: return@TextButton
                 onConfirm(amt, description.trim(), formDate, tags.trim())
-            }) { Text("Save", color = Jade) }
+            }) { Text("Save", color = Gold) }
         },
         dismissButton = {
             val edited = remember(amount.value.text, description, tags, formDate) {
@@ -1264,7 +1261,7 @@ private fun EditIncomeDialog(
                 TextButton(onClick = {
                     val amt = amount.validated() ?: return@TextButton
                     onDuplicate(amt, description.trim(), formDate, tags.trim(), edited)
-                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Jade) }
+                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Gold) }
                 TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
             }
         }
@@ -1324,9 +1321,9 @@ private fun IncomeList(groups: List<DayGroup<Income>>, hasAny: Boolean, showDayH
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("${dayGroup.dayLabel}, ${dayGroup.dateLabel}".uppercase(), fontFamily = FontFamily.Monospace,
+                            Text("${dayGroup.dayLabel}, ${dayGroup.dateLabel}".uppercase(), fontFamily = AnekLatin,
                                 fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = Muted, fontWeight = FontWeight.Medium)
-                            Text("+₹${fmtINR(dayGroup.total)}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Jade)
+                            Text("+₹${fmtINR(dayGroup.total)}", fontFamily = AnekLatin, fontSize = 11.sp, color = Gold)
                         }
                     }
                 }
@@ -1354,7 +1351,7 @@ private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Un
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Jade.copy(alpha = 0.13f)),
+            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Gold.copy(alpha = 0.13f)),
             contentAlignment = Alignment.Center
         ) { Text(if (income.source == "Recurring") "🔁" else "💰", fontSize = 18.sp) }
         Column(modifier = Modifier.weight(1f)) {
@@ -1362,21 +1359,21 @@ private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Un
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(timeStr, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = Muted)
+                Text(timeStr, fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
                 Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
-                Text(income.source.uppercase(), fontFamily = FontFamily.Monospace, fontSize = 9.5.sp, color = Muted, letterSpacing = 0.6.sp)
+                Text(income.source.uppercase(), fontFamily = AnekLatin, fontSize = 9.5.sp, color = Muted, letterSpacing = 0.6.sp)
             }
             val parsedTags = Tags.parse(income.tags)
             if (parsedTags.isNotEmpty()) {
-                Text(parsedTags.take(3).joinToString(" ") { "#$it" }, fontSize = 9.5.sp, color = JadeInk, fontFamily = FontFamily.Monospace,
+                Text(parsedTags.take(3).joinToString(" ") { "#$it" }, fontSize = 9.5.sp, color = GoldInk, fontFamily = AnekLatin,
                     modifier = Modifier.padding(top = 3.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 13.sp, color = Jade.copy(alpha = 0.7f), fontFamily = FontFamily.Serif)) { append("+₹") }
-                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, color = Jade)) { append(fmtINR(income.amount)) }
+                    withStyle(SpanStyle(fontSize = 13.sp, color = Gold.copy(alpha = 0.7f), fontFamily = AnekLatin)) { append("+₹") }
+                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = AnekLatin, color = Gold)) { append(fmtINR(income.amount)) }
                 }
             )
             Row {

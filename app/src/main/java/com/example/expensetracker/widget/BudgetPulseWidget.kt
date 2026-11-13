@@ -161,9 +161,9 @@ private fun buildViews(
         PillState.OverBudget -> "Over budget"
     }
     val pillBgRes = when (pillState) {
-        PillState.OnTrack -> R.drawable.bg_pill_jade
-        PillState.WatchPace -> R.drawable.bg_pill_amber
-        PillState.OverBudget -> R.drawable.bg_pill_coral
+        PillState.OnTrack -> R.drawable.bg_pill_gold
+        PillState.WatchPace -> R.drawable.bg_pill_orange
+        PillState.OverBudget -> R.drawable.bg_pill_pink
     }
     val pillTextColor = when (pillState) {
         PillState.OnTrack -> Color.parseColor("#C9EBD7")

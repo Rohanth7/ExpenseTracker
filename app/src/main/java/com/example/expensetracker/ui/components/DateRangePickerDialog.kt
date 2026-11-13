@@ -9,7 +9,7 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.expensetracker.ui.theme.Jade
+import com.example.expensetracker.ui.theme.Gold
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.toUtcMidnight
@@ -40,7 +40,7 @@ fun DateRangePickerDialog(title: String, initial: Pair<Long, Long>?, onDismiss: 
             val end = state.selectedEndDateMillis ?: start
             TextButton(enabled = start != null, onClick = {
                 onPick(utcMidnightToLocalDayStart(start!!) to utcMidnightToLocalDayEnd(end!!))
-            }) { Text("OK", color = Jade) }
+            }) { Text("OK", color = Gold) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     ) {

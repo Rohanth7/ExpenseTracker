@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -96,13 +95,13 @@ fun DashboardScreen(
                         .padding(horizontal = 16.dp)
                         .padding(top = 12.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(CoralSoft.copy(alpha = 0.5f))
+                        .background(PinkSoft.copy(alpha = 0.5f))
                         .clickable(onClick = onEnableTracking)
                         .padding(16.dp, 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.Info, null, tint = Coral, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Info, null, tint = Pink, modifier = Modifier.size(20.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             "Auto-tracking is off",
@@ -119,7 +118,7 @@ fun DashboardScreen(
                     Text(
                         "Enable",
                         fontSize = 12.sp,
-                        color = Coral,
+                        color = Pink,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -136,7 +135,7 @@ fun DashboardScreen(
             ) {
                 Text(
                     "OVERVIEW",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.5.sp,
                     letterSpacing = 1.8.sp,
                     color = Muted,
@@ -165,8 +164,7 @@ fun DashboardScreen(
                         }
                         Text(
                             state.monthLabel,
-                            fontFamily = FontFamily.Serif,
-                            fontStyle = FontStyle.Italic,
+                            fontFamily = AnekLatin,
                             fontSize = 28.sp,
                             color = Ink,
                             lineHeight = 30.sp
@@ -209,7 +207,7 @@ fun DashboardScreen(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(Coral)
+                                    .background(Pink)
                                     .border(1.5.dp, Paper, CircleShape)
                                     .align(Alignment.TopEnd)
                             )
@@ -232,7 +230,7 @@ fun DashboardScreen(
                 Text(
                     if (!state.canGoForward) "SPENT THIS MONTH"
                     else "SPENT IN ${state.monthLabel.split(" ").firstOrNull()?.uppercase() ?: state.monthLabel.uppercase()}",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.sp,
                     letterSpacing = 1.8.sp,
                     color = Ink.copy(alpha = 0.55f),
@@ -256,7 +254,7 @@ fun DashboardScreen(
                             .fillMaxHeight()
                             .fillMaxWidth(spentFraction)
                             .clip(RoundedCornerShape(100.dp))
-                            .background(if (state.overBudget) Coral else Jade)
+                            .background(if (state.overBudget) Pink else Gold)
                     )
                 }
 
@@ -269,13 +267,13 @@ fun DashboardScreen(
                     ) {
                         Text(
                             "${(spentFraction * 100).roundToInt()}% of ₹${fmtINR(state.monthlyIncome)} income",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 11.sp,
                             color = Ink.copy(alpha = 0.7f)
                         )
                         Text(
                             "₹${fmtINR((state.monthlyIncome - state.totalSpent).coerceAtLeast(0.0))} left",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 11.sp,
                             color = Ink,
                             fontWeight = FontWeight.SemiBold
@@ -284,9 +282,9 @@ fun DashboardScreen(
                 } else {
                     Text(
                         "Set expected income →",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 11.sp,
-                        color = JadeInk,
+                        color = GoldInk,
                         modifier = Modifier.clickable { showIncomeDialog = true }
                     )
                 }
@@ -303,7 +301,7 @@ fun DashboardScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(CoralSoft)
+                        .background(PinkSoft)
                         .clickable(onClick = onViewPending)
                         .padding(16.dp, 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -313,13 +311,12 @@ fun DashboardScreen(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(Coral),
+                            .background(Pink),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             "${state.pendingCount}",
-                            fontFamily = FontFamily.Serif,
-                            fontStyle = FontStyle.Italic,
+                            fontFamily = AnekLatin,
                             fontSize = 18.sp,
                             color = Color.White
                         )
@@ -375,7 +372,7 @@ fun DashboardScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "TOTAL",
-                                fontFamily = FontFamily.Monospace,
+                                fontFamily = AnekLatin,
                                 fontSize = 10.sp,
                                 color = Muted,
                                 letterSpacing = 1.2.sp
@@ -402,7 +399,7 @@ fun DashboardScreen(
                                 Text(summary.category.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                                 Text(
                                     "${(if (state.totalSpent > 0) summary.spent / state.totalSpent * 100 else 0.0).roundToInt()}% of total",
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = AnekLatin,
                                     fontSize = 10.sp,
                                     color = Muted,
                                     modifier = Modifier.padding(top = 1.dp)
@@ -465,9 +462,9 @@ fun DashboardScreen(
                                             append("/ ₹${fmtINR(summary.limit)}")
                                         }
                                     },
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = AnekLatin,
                                     fontSize = 11.sp,
-                                    color = if (over) Coral else Muted
+                                    color = if (over) Pink else Muted
                                 )
                             }
                             Spacer(Modifier.height(8.dp))
@@ -483,7 +480,7 @@ fun DashboardScreen(
                                         .fillMaxHeight()
                                         .fillMaxWidth(pct)
                                         .clip(RoundedCornerShape(100.dp))
-                                        .background(if (over) Coral else catColor)
+                                        .background(if (over) Pink else catColor)
                                 )
                             }
                         }
@@ -591,7 +588,7 @@ fun DashboardScreen(
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(formatRupees(s.amount), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                                if (s.priceRose) Text("↑ price up", fontSize = 10.5.sp, color = Coral,
+                                if (s.priceRose) Text("↑ price up", fontSize = 10.5.sp, color = Pink,
                                     modifier = Modifier.semantics { contentDescription = "Price up" })
                             }
                         }
@@ -626,11 +623,11 @@ fun DashboardScreen(
                     ) {
                         Text(
                             "Total monthly EMI",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 11.sp,
                             color = Muted
                         )
-                        MoneyDisplay(state.totalMonthlyEmi, size = 20, color = Coral)
+                        MoneyDisplay(state.totalMonthlyEmi, size = 20, color = Pink)
                     }
                     state.activeLoans.forEachIndexed { index, loanStatus ->
                         if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
@@ -693,7 +690,7 @@ fun DashboardScreen(
                 Text(if (goal.currentAmount > 0) "\"${goal.name}\" and the ₹${fmtINR(goal.currentAmount)} saved in it will be removed."
                      else "\"${goal.name}\" will be removed.")
             },
-            confirmButton = { TextButton(onClick = { viewModel.deleteSavingsGoal(goal); goalToDelete = null }) { Text("Delete", color = Coral) } },
+            confirmButton = { TextButton(onClick = { viewModel.deleteSavingsGoal(goal); goalToDelete = null }) { Text("Delete", color = Pink) } },
             dismissButton = { TextButton(onClick = { goalToDelete = null }) { Text("Cancel", color = Muted) } })
     }
 
@@ -748,12 +745,12 @@ private fun SavingsGoalCard(
                     "₹${fmtINR(goal.currentAmount)} / ₹${fmtINR(goal.targetAmount)}",
                     fontSize = 11.sp,
                     color = Muted,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = AnekLatin
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButton(onClick = onAdd, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Add, null, tint = Jade, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Add, null, tint = Gold, modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(Icons.Default.Delete, "Delete goal ${goal.name}", tint = Muted, modifier = Modifier.size(16.dp))
@@ -773,15 +770,15 @@ private fun SavingsGoalCard(
                     .fillMaxHeight()
                     .fillMaxWidth(progress)
                     .clip(RoundedCornerShape(100.dp))
-                    .background(Jade)
+                    .background(Gold)
             )
         }
         Spacer(Modifier.height(8.dp))
         Text(
             goalAchieved(goal),
             fontSize = 10.sp,
-            color = JadeInk,
-            fontFamily = FontFamily.Monospace
+            color = GoldInk,
+            fontFamily = AnekLatin
         )
     }
 }
@@ -805,7 +802,7 @@ internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) ->
                     label = { Text("What are you saving for?") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
                 )
                 OutlinedTextField(
                     value = target,
@@ -816,7 +813,7 @@ internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) ->
                     isError = targetText.invalid,
                     supportingText = targetText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Jade, focusedTextColor = Ink, unfocusedTextColor = Ink)
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
                 )
             }
         },
@@ -824,7 +821,7 @@ internal fun AddGoalDialog(onDismiss: () -> Unit, onConfirm: (String, Double) ->
             TextButton(onClick = {
                 val amt = targetText.value ?: return@TextButton
                 onConfirm(name.trim(), amt)
-            }, enabled = canCreate) { Text("Create", color = if (canCreate) Jade else Muted) }
+            }, enabled = canCreate) { Text("Create", color = if (canCreate) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -857,7 +854,7 @@ private fun DepositDialog(
                     supportingText = amountText.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Jade,
+                        focusedBorderColor = Gold,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink
                     )
@@ -867,7 +864,7 @@ private fun DepositDialog(
                         "Monthly surplus: ₹${fmtINR(surplus)}",
                         fontSize = 11.sp,
                         color = Muted,
-                        fontFamily = FontFamily.Monospace
+                        fontFamily = AnekLatin
                     )
                 }
             }
@@ -875,7 +872,7 @@ private fun DepositDialog(
         confirmButton = {
             TextButton(onClick = {
                 amountText.value?.let(onConfirm)
-            }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Jade else Muted) }
+            }, enabled = amountText.value != null) { Text("Add", color = if (amountText.value != null) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -910,7 +907,7 @@ private fun CashFlowForecastCard(
         Text(
             "₹${fmtINR(income)} monthly income",
             fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = AnekLatin,
             color = Muted
         )
         Spacer(Modifier.height(10.dp))
@@ -924,18 +921,18 @@ private fun CashFlowForecastCard(
                 .background(HairlineSoft)
         ) {
             Row(Modifier.fillMaxSize()) {
-                if (spentFrac > 0f)  Box(Modifier.fillMaxHeight().weight(spentFrac).background(Coral))
-                if (billsFrac > 0f)  Box(Modifier.fillMaxHeight().weight(billsFrac).background(Amber))
+                if (spentFrac > 0f)  Box(Modifier.fillMaxHeight().weight(spentFrac).background(Pink))
+                if (billsFrac > 0f)  Box(Modifier.fillMaxHeight().weight(billsFrac).background(Sky))
                 if (emiFrac > 0f)    Box(Modifier.fillMaxHeight().weight(emiFrac).background(Muted))
-                if (freeFrac > 0f)   Box(Modifier.fillMaxHeight().weight(freeFrac).background(Jade))
+                if (freeFrac > 0f)   Box(Modifier.fillMaxHeight().weight(freeFrac).background(Gold))
             }
         }
         Spacer(Modifier.height(16.dp))
 
-        ForecastRow(dotColor = Coral, label = "Spent so far", amount = totalSpent)
+        ForecastRow(dotColor = Pink, label = "Spent so far", amount = totalSpent)
         if (billsStillDue > 0) {
             Spacer(Modifier.height(8.dp))
-            ForecastRow(dotColor = Amber, label = "Bills still due", amount = billsStillDue)
+            ForecastRow(dotColor = Sky, label = "Bills still due", amount = billsStillDue)
         }
         if (emiStillDue > 0) {
             Spacer(Modifier.height(8.dp))
@@ -955,14 +952,14 @@ private fun CashFlowForecastCard(
                 if (isOver) "Over-committed" else "Free to spend",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (isOver) Coral else Ink
+                color = if (isOver) Pink else Ink
             )
             Text(
                 if (isOver) "–₹${fmtINR(-freeAmount)}" else "₹${fmtINR(freeAmount)}",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = if (isOver) Coral else Jade
+                fontFamily = AnekLatin,
+                color = if (isOver) Pink else Gold
             )
         }
     }
@@ -985,7 +982,7 @@ private fun ForecastRow(dotColor: Color, label: String, amount: Double) {
         Text(
             "₹${fmtINR(amount)}",
             fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = AnekLatin,
             color = Ink
         )
     }
@@ -1000,7 +997,7 @@ fun DsSectionLabel(title: String, modifier: Modifier = Modifier, action: String?
     ) {
         Text(
             title.uppercase(),
-            fontFamily = FontFamily.Monospace,
+            fontFamily = AnekLatin,
             fontSize = 10.5.sp,
             letterSpacing = 1.8.sp,
             color = Muted,
@@ -1010,7 +1007,7 @@ fun DsSectionLabel(title: String, modifier: Modifier = Modifier, action: String?
             Text(
                 action,
                 fontSize = 12.sp,
-                color = JadeInk,
+                color = GoldInk,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.then(if (onActionClick != null) Modifier.clickable { onActionClick() } else Modifier)
             )
@@ -1030,12 +1027,11 @@ fun MoneyDisplay(amount: Double, size: Int, color: Color, modifier: Modifier = M
                 fontSize = (size * 0.55 * scale).sp,
                 fontStyle = FontStyle.Normal,
                 color = color.copy(alpha = 0.55f),
-                fontFamily = FontFamily.Serif
+                fontFamily = AnekLatin
             )) { append("₹") }
             withStyle(SpanStyle(
                 fontSize = (size * scale).sp,
-                fontFamily = FontFamily.Serif,
-                fontStyle = FontStyle.Italic,
+                fontFamily = AnekLatin,
                 fontWeight = FontWeight.Normal,
                 color = color,
                 letterSpacing = (-0.5).sp
@@ -1080,7 +1076,7 @@ private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDism
         confirmButton = {
             TextButton(onClick = {
                 income.value?.let(onConfirm)
-            }, enabled = income.value != null) { Text("Save", color = if (income.value != null) Jade else Muted) }
+            }, enabled = income.value != null) { Text("Save", color = if (income.value != null) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )
@@ -1097,8 +1093,8 @@ private fun UpcomingBillRow(upcoming: UpcomingBill) {
     val isOverdue = upcoming.daysUntilDue < 0
     val isDueToday = upcoming.daysUntilDue == 0
     val accentColor = when {
-        isOverdue -> Coral
-        isDueToday -> Amber
+        isOverdue -> Pink
+        isDueToday -> Sky
         else -> Muted
     }
 
@@ -1118,8 +1114,7 @@ private fun UpcomingBillRow(upcoming: UpcomingBill) {
         ) {
             Text(
                 "${upcoming.dueDay}",
-                fontFamily = FontFamily.Serif,
-                fontStyle = FontStyle.Italic,
+                fontFamily = AnekLatin,
                 fontSize = 16.sp,
                 color = accentColor,
                 fontWeight = FontWeight.Bold
@@ -1127,9 +1122,9 @@ private fun UpcomingBillRow(upcoming: UpcomingBill) {
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(upcoming.bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(dueText, fontFamily = FontFamily.Monospace, fontSize = 10.5.sp, color = accentColor)
+            Text(dueText, fontFamily = AnekLatin, fontSize = 10.5.sp, color = accentColor)
         }
-        MoneyDisplay(upcoming.bill.amount, size = 18, color = if (isOverdue) Coral else Ink)
+        MoneyDisplay(upcoming.bill.amount, size = 18, color = if (isOverdue) Pink else Ink)
     }
 }
 
@@ -1146,7 +1141,7 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
                 Text(loanStatus.loan.name, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
                 Text(
                     "${loanStatus.paidMonths}/${loanStatus.loan.tenureMonths} months paid",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.sp,
                     color = Muted
                 )
@@ -1155,9 +1150,9 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
                 MoneyDisplay(loanStatus.loan.monthlyEmi, size = 16, color = Ink)
                 Text(
                     "${loanStatus.remainingMonths} mo left",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.sp,
-                    color = Coral
+                    color = Pink
                 )
             }
         }
@@ -1174,7 +1169,7 @@ private fun LoanStatusRow(loanStatus: LoanStatus) {
                     .fillMaxHeight()
                     .fillMaxWidth(loanStatus.progressFraction)
                     .clip(RoundedCornerShape(100.dp))
-                    .background(Jade)
+                    .background(Gold)
             )
         }
     }
@@ -1207,7 +1202,7 @@ private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Uni
         ) {
             Text(
                 "NOTIFICATIONS",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 10.5.sp,
                 letterSpacing = 1.8.sp,
                 color = Muted,
@@ -1215,8 +1210,7 @@ private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Uni
             )
             Text(
                 "Activity",
-                fontFamily = FontFamily.Serif,
-                fontStyle = FontStyle.Italic,
+                fontFamily = AnekLatin,
                 fontSize = 26.sp,
                 color = Ink,
                 lineHeight = 28.sp
@@ -1266,7 +1260,7 @@ private fun NotificationBottomSheet(items: List<NotifItem>, onDismiss: () -> Uni
 private fun NotifSection(label: String, content: @Composable () -> Unit) {
     Text(
         label,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = AnekLatin,
         fontSize = 9.sp,
         letterSpacing = 1.4.sp,
         color = Muted,
@@ -1296,21 +1290,21 @@ private fun NotifRow(item: NotifItem, isLast: Boolean = false) {
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (item.isUrgent) CoralSoft else Canvas),
+                .background(if (item.isUrgent) PinkSoft else Canvas),
             contentAlignment = Alignment.Center
         ) {
             Text(item.emoji, fontSize = 18.sp)
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(item.title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text(item.subtitle, fontSize = 11.sp, color = if (item.isUrgent) Coral else Muted, modifier = Modifier.padding(top = 1.dp))
+            Text(item.subtitle, fontSize = 11.sp, color = if (item.isUrgent) Pink else Muted, modifier = Modifier.padding(top = 1.dp))
         }
         if (item.isUrgent) {
             Box(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(Coral)
+                    .background(Pink)
             )
         }
     }

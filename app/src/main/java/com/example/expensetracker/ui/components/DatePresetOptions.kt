@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.ui.theme.Ink
-import com.example.expensetracker.ui.theme.Jade
+import com.example.expensetracker.ui.theme.Gold
 import com.example.expensetracker.ui.theme.Muted
 
 /**
@@ -44,7 +44,7 @@ fun DatePresetOptions(
             }
             Row(Modifier.fillMaxWidth().clickable(onClick = select), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = preset == p, onClick = select,
-                    colors = RadioButtonDefaults.colors(selectedColor = Jade, unselectedColor = Muted))
+                    colors = RadioButtonDefaults.colors(selectedColor = Gold, unselectedColor = Muted))
                 Text(when {
                     p == ExportPreset.ALL -> allLabel
                     p == ExportPreset.CUSTOM && custom != null -> BudgetPeriod.dayRangeLabel(custom.first, custom.second)

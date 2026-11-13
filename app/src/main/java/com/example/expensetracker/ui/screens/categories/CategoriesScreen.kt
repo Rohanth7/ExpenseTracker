@@ -23,8 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -69,7 +67,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
             Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
                 Text(
                     text = "BUCKETS",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.5.sp,
                     letterSpacing = 1.8.sp,
                     color = Muted
@@ -81,16 +79,15 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                 ) {
                     Text(
                         text = "Categories",
-                        fontFamily = FontFamily.Serif,
+                        fontFamily = AnekLatin,
                         fontSize = 28.sp,
-                        fontStyle = FontStyle.Italic,
                         color = Ink,
                         lineHeight = 30.sp
                     )
                     val subCount = categories.count { it.parentId != null }
                     Text(
                         text = if (subCount > 0) "${categories.count { it.parentId == null }} + $subCount sub" else "${categories.size} active",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 11.sp,
                         color = Muted,
                         modifier = Modifier.padding(bottom = 4.dp)
@@ -118,7 +115,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                             ) {
                                 Text(
                                     text = "No categories yet.\nTap + to create one.",
-                                    fontFamily = FontFamily.Monospace,
+                                    fontFamily = AnekLatin,
                                     fontSize = 12.sp,
                                     color = Muted,
                                     textAlign = TextAlign.Center,
@@ -156,7 +153,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                     Spacer(Modifier.height(20.dp))
                     Text(
                         text = "AVAILABLE PALETTE",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 10.sp,
                         letterSpacing = 1.6.sp,
                         color = Muted,
@@ -224,7 +221,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                         Spacer(Modifier.height(20.dp))
                         Text(
                             text = "TAGS",
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = AnekLatin,
                             fontSize = 10.sp,
                             letterSpacing = 1.6.sp,
                             color = Muted,
@@ -262,7 +259,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                 .padding(end = 22.dp, bottom = 92.dp)
                 .size(58.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Jade)
+                .background(Gold)
                 .clickable { editTarget = null; editingExisting = false; showDialog = true },
             contentAlignment = Alignment.Center
         ) {
@@ -291,7 +288,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
             text = { Text(deleteMsg) },
             confirmButton = {
                 TextButton(onClick = { viewModel.deleteCategory(cat); categoryToDelete = null }) {
-                    Text("Delete", color = Coral)
+                    Text("Delete", color = Pink)
                 }
             },
             dismissButton = {
@@ -310,7 +307,7 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
             text = { Text("Remove \"#$name\" from all expenses?") },
             confirmButton = {
                 TextButton(onClick = { viewModel.deleteTag(name); tagToDelete = null }) {
-                    Text("Delete", color = Coral)
+                    Text("Delete", color = Pink)
                 }
             },
             dismissButton = {
@@ -396,14 +393,14 @@ private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> 
                 if (category.monthlyLimit > 0) {
                     Text(
                         text = "limit ₹${fmtINR(category.monthlyLimit)}/mo",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 10.5.sp,
                         color = Muted
                     )
                 } else {
                     Text(
                         text = "no limit set",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = AnekLatin,
                         fontSize = 10.5.sp,
                         color = Muted.copy(alpha = 0.7f)
                     )
@@ -418,7 +415,7 @@ private fun CategoryRow(category: Category, onEdit: () -> Unit, onDelete: () -> 
                     .clickable(onClick = onAddSubcategory),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add subcategory", tint = Jade, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Add, contentDescription = "Add subcategory", tint = Gold, modifier = Modifier.size(16.dp))
             }
             Box(
                 modifier = Modifier
@@ -478,7 +475,7 @@ private fun SubcategoryRow(category: Category, onEdit: () -> Unit, onDelete: () 
             if (category.monthlyLimit > 0) {
                 Text(
                     text = "limit ₹${fmtINR(category.monthlyLimit)}/mo",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = AnekLatin,
                     fontSize = 10.sp,
                     color = Muted
                 )
@@ -524,14 +521,14 @@ private fun TagRow(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(JadeSoft)
+                .background(GoldSoft)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
                 "#$name",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 12.sp,
-                color = JadeInk,
+                color = GoldInk,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -539,14 +536,13 @@ private fun TagRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 "₹${fmtINR(totalSpent)}",
-                fontFamily = FontFamily.Serif,
-                fontStyle = FontStyle.Italic,
+                fontFamily = AnekLatin,
                 fontSize = 15.sp,
                 color = Ink
             )
             Text(
                 "$count expense${if (count != 1) "s" else ""}",
-                fontFamily = FontFamily.Monospace,
+                fontFamily = AnekLatin,
                 fontSize = 10.sp,
                 color = Muted
             )
@@ -599,19 +595,19 @@ private fun RenameTagDialog(
                 supportingText = if (hasComma) ({ Text("A tag name can't have a comma") }) else null,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Jade,
-                    focusedLabelColor = Jade,
+                    focusedBorderColor = Gold,
+                    focusedLabelColor = Gold,
                     unfocusedBorderColor = Hairline,
                     unfocusedLabelColor = Muted,
                     focusedTextColor = Ink,
                     unfocusedTextColor = Ink,
-                    cursorColor = Jade
+                    cursorColor = Gold
                 )
             )
         },
         confirmButton = {
             TextButton(onClick = { cleanName?.let(onConfirm) }, enabled = cleanName != null) {
-                Text("Rename", color = if (cleanName != null) Jade else Muted)
+                Text("Rename", color = if (cleanName != null) Gold else Muted)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
@@ -664,13 +660,13 @@ internal fun CategoryDialog(
                     supportingText = if (name.isNotBlank() && nameError != null) ({ Text(nameError) }) else null,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Jade,
-                        focusedLabelColor = Jade,
+                        focusedBorderColor = Gold,
+                        focusedLabelColor = Gold,
                         unfocusedBorderColor = Hairline,
                         unfocusedLabelColor = Muted,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
-                        cursorColor = Jade
+                        cursorColor = Gold
                     )
                 )
                 Text("Icon", style = MaterialTheme.typography.labelMedium, color = Muted)
@@ -680,7 +676,7 @@ internal fun CategoryDialog(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(if (emoji == selectedEmoji) JadeDeep else Color.Transparent)
+                                .background(if (emoji == selectedEmoji) GoldDeep else Color.Transparent)
                                 .clickable { selectedEmoji = emoji },
                             contentAlignment = Alignment.Center
                         ) {
@@ -712,13 +708,13 @@ internal fun CategoryDialog(
                     supportingText = limit.supportingText,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Jade,
-                        focusedLabelColor = Jade,
+                        focusedBorderColor = Gold,
+                        focusedLabelColor = Gold,
                         unfocusedBorderColor = Hairline,
                         unfocusedLabelColor = Muted,
                         focusedTextColor = Ink,
                         unfocusedTextColor = Ink,
-                        cursorColor = Jade
+                        cursorColor = Gold
                     )
                 )
             }
@@ -727,7 +723,7 @@ internal fun CategoryDialog(
             TextButton(onClick = {
                 if (!canSave || parsedLimit == null) return@TextButton
                 onConfirm(name.trim(), selectedEmoji, selectedColor, parsedLimit)
-            }, enabled = canSave) { Text("Save", color = if (canSave) Jade else Muted) }
+            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
     )

@@ -26,7 +26,7 @@ import com.example.expensetracker.ui.components.AppAlertDialog
 import com.example.expensetracker.ui.components.LocalAppLocked
 import com.example.expensetracker.ui.screens.lock.LockedScreen
 import com.example.expensetracker.ui.theme.Ink
-import com.example.expensetracker.ui.theme.Jade
+import com.example.expensetracker.ui.theme.Gold
 import com.example.expensetracker.ui.theme.Muted
 import com.example.expensetracker.ui.theme.Paper
 import androidx.lifecycle.ViewModelProvider
@@ -144,7 +144,7 @@ class MainActivity : FragmentActivity() {
                             text = { Text("This phone no longer has a screen lock, so MyMoney can't ask for one. " +
                                 "Set up a PIN, pattern or fingerprint in Android settings, then turn the lock " +
                                 "back on in Settings → Preferences.") },
-                            confirmButton = { TextButton(onClick = { showLockTurnedOff = false }) { Text("OK", color = Jade) } }
+                            confirmButton = { TextButton(onClick = { showLockTurnedOff = false }) { Text("OK", color = Gold) } }
                         )
                     }
                 }
