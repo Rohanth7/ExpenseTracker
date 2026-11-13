@@ -1,117 +1,85 @@
 package com.example.expensetracker.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.expensetracker.ui.theme.Gold
+import com.example.expensetracker.ui.theme.Muted
 
-data class BarData(
-    val label: String,
-    val emoji: String,
-    val color: Color,
-    val value: Double,
-    val limit: Double = 0.0
-)
+data class BarData(val label: String, val value: Double)
 
+// The approved design's colour for a bar that isn't the highlighted one; Color.kt has no token for it.
+private val IdleBar = Color(0xFF4A52A8)
+
+/**
+ * Bars sharing the width, scaled to the tallest, with the one at [highlight] in Gold. Twelve month
+ * names don't fit under their bars, so only the first, middle and last labels are written; a bar
+ * that can be tapped is described by its own label.
+ */
 @Composable
 fun BarChart(
     bars: List<BarData>,
+    highlight: Int?,
     modifier: Modifier = Modifier,
-    chartHeight: Dp = 160.dp
+    chartHeight: Dp = 120.dp,
+    onBarClick: ((Int) -> Unit)? = null
 ) {
     if (bars.isEmpty()) return
+    val max = bars.maxOf { it.value }.coerceAtLeast(1.0)
 
-    val maxValue = bars.maxOf { maxOf(it.value, it.limit) }.coerceAtLeast(1.0)
-
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        bars.forEach { bar ->
-            BarItem(bar = bar, maxValue = maxValue, chartHeight = chartHeight)
-        }
-    }
-}
-
-@Composable
-private fun BarItem(bar: BarData, maxValue: Double, chartHeight: Dp) {
-    val barFraction = (bar.value / maxValue).coerceIn(0.0, 1.0).toFloat()
-    val limitFraction = if (bar.limit > 0) (bar.limit / maxValue).coerceIn(0.0, 1.0).toFloat() else 0f
-    val isOverLimit = bar.limit > 0 && bar.value > bar.limit
-    val barColor = if (isOverLimit) MaterialTheme.colorScheme.error else bar.color
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(48.dp)
-    ) {
-        Text(
-            text = "₹${"%.0f".format(bar.value)}",
-            fontSize = 8.sp,
-            maxLines = 1,
-            color = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(Modifier.height(2.dp))
-
-        Box(
-            modifier = Modifier
-                .width(32.dp)
-                .height(chartHeight)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(chartHeight),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Filled bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(barFraction)
-                    .align(Alignment.BottomCenter)
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(barColor)
-            )
-
-            // Dashed limit line
-            if (bar.limit > 0) {
+            bars.forEachIndexed { i, bar ->
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .drawWithContent {
-                            drawContent()
-                            val y = size.height * (1f - limitFraction)
-                            drawLine(
-                                color = Color.Red.copy(alpha = 0.8f),
-                                start = Offset(0f, y),
-                                end = Offset(size.width, y),
-                                strokeWidth = 2.dp.toPx(),
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
-                            )
-                        }
-                )
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .then(
+                            if (onBarClick == null) Modifier
+                            else Modifier.semantics { contentDescription = bar.label }.clickable { onBarClick(i) }
+                        ),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    if (bar.value > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 2.dp)
+                                .fillMaxHeight((bar.value / max).toFloat().coerceIn(0f, 1f))
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (i == highlight) Gold else IdleBar)
+                        )
+                    }
+                }
             }
         }
-
-        Spacer(Modifier.height(4.dp))
-        Text(bar.emoji, fontSize = 16.sp)
-        Text(
-            text = bar.label,
-            fontSize = 8.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf(0, (bars.size - 1) / 2, bars.lastIndex).distinct().forEach {
+                Text(bars[it].label, fontSize = 13.sp, color = Muted)
+            }
+        }
     }
 }

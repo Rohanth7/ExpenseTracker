@@ -1,10 +1,7 @@
 package com.example.expensetracker.ui.screens.statistics
 
-import com.example.expensetracker.ui.util.fmtINR
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,52 +13,26 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
-import androidx.compose.material3.Icon
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.theme.*
-import com.example.expensetracker.ui.components.DateRangePickerDialog
-import com.example.expensetracker.ui.util.categoryIcon
-import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.util.fmtINR
 import kotlin.math.abs
-import com.example.expensetracker.ui.components.AppAlertDialog
-import com.example.expensetracker.ui.components.AppModalBottomSheet
-
-@Composable
-private fun MoneyDisplay(amount: Double, size: Int = 32, color: Color = Ink) {
-    Text(
-        text = buildAnnotatedString {
-            withStyle(
-                SpanStyle(
-                    fontSize = (size * 0.65f).sp,
-                    fontFamily = AnekLatin,
-                    color = color.copy(alpha = 0.55f)
-                )
-            ) { append("₹") }
-            withStyle(
-                SpanStyle(
-                    fontSize = size.sp,
-                    fontFamily = AnekLatin,
-                    color = color
-                )
-            ) { append(fmtINR(amount)) }
-        }
-    )
-}
 
 @Composable
 fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) -> Unit) {
@@ -69,433 +40,160 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
     val viewMode by viewModel.viewMode.collectAsState()
     // Collected (and so worked out) only while the Range view is shown
     val range = if (viewMode == ViewMode.RANGE) viewModel.rangeState.collectAsState().value else null
+    val selectedRange by viewModel.selectedRange.collectAsState()
     var showRangeSheet by rememberSaveable { mutableStateOf(false) }
-    val headerLabel = when (viewMode) {
+    val periodLabel = when (viewMode) {
         ViewMode.MONTHLY -> state.month.label
         ViewMode.RANGE -> range?.label.orEmpty()
         ViewMode.ANNUAL -> state.yearLabel
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Canvas)) {
-        // Header
-        Column(modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
-            Text(
-                text = "INSIGHTS",
-                fontFamily = AnekLatin,
-                fontSize = 10.5.sp,
-                letterSpacing = 1.8.sp,
-                color = Muted
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Text(
-                    text = headerLabel,
-                    fontFamily = AnekLatin,
-                    // Date spans ("25 Sep – 24 Oct") are longer than "Oct 2026"
-                    fontSize = if (headerLabel.length > 10) 26.sp else 36.sp,
-                    color = Ink,
-                    lineHeight = 36.sp,
-                    modifier = Modifier.weight(1f, fill = false)
-                        .then(if (viewMode == ViewMode.RANGE) Modifier.clickable { showRangeSheet = true } else Modifier)
-                )
-                if (viewMode != ViewMode.RANGE) Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(bottom = 4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Paper)
-                            .border(1.dp, Hairline, CircleShape)
-                            .clickable {
-                                if (viewMode == ViewMode.MONTHLY) viewModel.goToPreviousMonthStats()
-                                else viewModel.goToPreviousYear()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = Ink, modifier = Modifier.size(16.dp))
+    Column(modifier = Modifier.fillMaxSize().background(Canvas).padding(horizontal = ScreenPadding)) {
+        ScreenHeader(
+            title = "Insights",
+            actions = {
+                when (viewMode) {
+                    ViewMode.MONTHLY -> {
+                        HeaderIcon(Icons.Default.ChevronLeft, "Previous month", onClick = { viewModel.goToPreviousMonthStats() })
+                        HeaderIcon(Icons.Default.ChevronRight, "Next month", onClick = { viewModel.goToNextMonthStats() }, enabled = state.canGoForwardMonth)
                     }
-                    val canGoForward = if (viewMode == ViewMode.MONTHLY) state.canGoForwardMonth else state.canGoForward
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Paper)
-                            .border(1.dp, Hairline, CircleShape)
-                            .graphicsLayer { alpha = if (canGoForward) 1f else 0.4f }
-                            .clickable(enabled = canGoForward) {
-                                if (viewMode == ViewMode.MONTHLY) viewModel.goToNextMonthStats()
-                                else viewModel.goToNextYear()
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = if (canGoForward) Ink else Muted, modifier = Modifier.size(16.dp))
+                    ViewMode.ANNUAL -> {
+                        HeaderIcon(Icons.Default.ChevronLeft, "Previous year", onClick = { viewModel.goToPreviousYear() })
+                        HeaderIcon(Icons.Default.ChevronRight, "Next year", onClick = { viewModel.goToNextYear() }, enabled = state.canGoForward)
                     }
+                    ViewMode.RANGE -> {}
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            ViewModeToggle(viewMode = viewMode, onModeChange = { mode ->
+        )
+        SegTabs(
+            options = ViewMode.entries.map { when (it) { ViewMode.MONTHLY -> "Month"; ViewMode.ANNUAL -> "Year"; ViewMode.RANGE -> "Range" } },
+            selectedIndex = viewMode.ordinal,
+            onSelect = { index ->
+                val mode = ViewMode.entries[index]
                 if (mode == ViewMode.RANGE) showRangeSheet = true else viewModel.setViewMode(mode)
-            })
-        }
+            }
+        )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             val view = when (viewMode) {
                 ViewMode.MONTHLY -> state.month
                 ViewMode.RANGE -> range  // null for the moment it takes to work out
                 ViewMode.ANNUAL -> null
             }
             if (view != null) {
-                view.stats.income?.let { summary -> item { IncomeSpentSavedRow(summary) } }
                 if (view.stats.total == 0.0) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No expenses for ${view.label}.", fontFamily = AnekLatin, fontSize = 12.sp, color = Muted)
-                        }
-                    }
+                    view.stats.income?.let { summary -> item { IncomeSpentSavedCard(summary, Modifier.padding(top = 4.dp)) } }
+                    item { EmptyText("No expenses for ${view.label}.") }
                 } else {
                     item {
-                        MonthlyTotalCard(monthTotal = view.stats.total, monthVsLastPct = view.stats.vsPreviousPct.takeIf { view.comparedWith != null },
-                            comparedWith = view.comparedWith, onViewAll = { onMonthClick(view.start, view.end) })
+                        // "Last 3 months" and "All time" are written as titles; a span of dates reads the same either way
+                        val named = viewMode == ViewMode.RANGE && selectedRange !is StatsRange.Custom
+                        PeriodTotal(
+                            period = if (named) view.label.replaceFirstChar { it.lowercase() } else view.label,
+                            total = view.stats.total,
+                            onPeriodClick = if (viewMode == ViewMode.RANGE) ({ showRangeSheet = true }) else null
+                        ) {
+                            val pct = view.stats.vsPreviousPct
+                            if (pct != null && view.comparedWith != null) {
+                                Text(
+                                    text = when {
+                                        pct < 0 -> "${abs(pct)}% less than ${view.comparedWith}"
+                                        pct > 0 -> "$pct% more than ${view.comparedWith}"
+                                        else -> "vs ${view.comparedWith}"
+                                    },
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = when { pct < 0 -> Mint; pct > 0 -> Pink; else -> Muted }
+                                )
+                            }
+                            TextAction("View all expenses →", { onMonthClick(view.start, view.end) })
+                        }
                     }
+                    view.stats.income?.let { summary -> item { IncomeSpentSavedCard(summary, Modifier.padding(top = 10.dp)) } }
                     if (view.stats.categories.isNotEmpty()) {
                         item {
-                            Text("ALL CATEGORIES", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
-                        }
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .background(Paper)
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                            ) {
-                                view.stats.categories.forEachIndexed { index, stat ->
-                                    if (index > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                    CategoryAccordionRow(stat = stat, grandTotal = view.stats.total, onTap = { viewModel.selectCategory(stat.category.id) })
-                                }
-                            }
+                            SectionLabel("All categories")
+                            // A monthly limit only means something against one budget month
+                            CategoriesCard(view.stats.categories, showLimits = viewMode == ViewMode.MONTHLY, onTap = { viewModel.selectCategory(it) })
                         }
                     }
                     if (view.stats.paymentSplit.total > 0) {
                         item {
-                            Text("HOW YOU PAY", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                            SectionLabel("How you pay")
+                            PaymentSplitCard(view.stats.paymentSplit)
                         }
-                        item { PaymentSplitCard(split = view.stats.paymentSplit) }
                     }
                     if (view.stats.detectionSplit.total > 0) {
                         item {
-                            Text("HOW IT WAS TRACKED", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+                            SectionLabel("How it was tracked")
+                            DetectionSplitCard(view.stats.detectionSplit)
                         }
-                        item { DetectionSplitCard(split = view.stats.detectionSplit) }
                     }
                     view.stats.insight?.let { insight ->
-                        item {
-                            Spacer(Modifier.height(4.dp))
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(Paper)
-                                    .padding(16.dp, 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(14.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(GoldSoft),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(insight.emoji, fontSize = 22.sp)
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("INSIGHT", fontFamily = AnekLatin, fontSize = 8.5.sp, letterSpacing = 1.4.sp, color = Muted)
-                                    Text(insight.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink, modifier = Modifier.padding(top = 1.dp))
-                                    Text(insight.detail, fontSize = 11.sp, color = InkSoft, lineHeight = 15.sp, modifier = Modifier.padding(top = 2.dp))
-                                }
-                            }
-                        }
+                        item { InsightCard(insight.label, insight.detail, Modifier.padding(top = 10.dp)) }
                     }
                 }
             } else if (viewMode != ViewMode.ANNUAL) {
                 // The Range view's numbers are still being worked out
             } else if (state.totalThisYear == 0.0) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No expenses recorded for ${state.yearLabel}.",
-                            fontFamily = AnekLatin,
-                            fontSize = 12.sp,
-                            color = Muted
-                        )
-                    }
-                }
+                item { EmptyText("No expenses recorded for ${state.yearLabel}.") }
             } else {
-                // Two stat tiles
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Total YTD
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Deep)
-                                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)
-                        ) {
-                            Text(
-                                text = "TOTAL YTD",
-                                fontFamily = AnekLatin,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.6.sp,
-                                color = Ink.copy(alpha = 0.55f)
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            MoneyDisplay(state.totalThisYear, size = 30, color = Ink)
-                            Spacer(Modifier.height(6.dp))
-                            val monthsRecorded = state.monthStats.count { it.total > 0 }
-                            Text(
-                                text = "over $monthsRecorded months",
-                                fontFamily = AnekLatin,
-                                fontSize = 10.5.sp,
-                                color = Ink.copy(alpha = 0.6f)
-                            )
-                        }
-                        // Monthly avg
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Paper)
-                                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)
-                        ) {
-                            Text(
-                                text = "MONTHLY AVG",
-                                fontFamily = AnekLatin,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.6.sp,
-                                color = Muted
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            MoneyDisplay(state.avgPerMonth, size = 30, color = Ink)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "per active month",
-                                fontFamily = AnekLatin,
-                                fontSize = 10.5.sp,
-                                color = Muted
-                            )
-                        }
+                    PeriodTotal(period = state.yearLabel, total = state.totalThisYear) {
+                        val monthsRecorded = state.monthStats.count { it.total > 0 }
+                        Text("over $monthsRecorded months · ₹${fmtINR(state.avgPerMonth)} per active month", fontSize = 13.sp, color = Muted)
                     }
                 }
 
-                // Busiest month
+                item {
+                    MCard(Modifier.padding(top = 10.dp)) {
+                        BarChart(
+                            bars = state.monthStats.map { BarData(it.label, it.total) },
+                            highlight = state.monthStats.indexOfFirst { it.label == state.busiestMonth },
+                            onBarClick = { index -> state.monthStats[index].let { onMonthClick(it.start, it.end) } }
+                        )
+                    }
+                }
+
                 if (state.busiestMonth.isNotEmpty()) {
                     item {
                         val busiestTotal = state.monthStats.find { it.label == state.busiestMonth }?.total ?: 0.0
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(SkySoft)
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Paper),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "★",
-                                    fontFamily = AnekLatin,
-                                    fontSize = 22.sp,
-                                    color = Sky
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "BUSIEST MONTH",
-                                    fontFamily = AnekLatin,
-                                    fontSize = 9.5.sp,
-                                    letterSpacing = 1.6.sp,
-                                    color = Muted
-                                )
-                                Text(
-                                    text = "${state.busiestMonth} ${state.yearLabel} · ₹${fmtINR(busiestTotal)}",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Ink,
-                                    modifier = Modifier.padding(top = 2.dp)
-                                )
-                            }
+                        MCard(Modifier.padding(top = 10.dp)) {
+                            Text("${state.busiestMonth} was your busiest month", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                            Text("₹${fmtINR(busiestTotal)} spent", fontSize = 13.sp, color = Muted)
                         }
                     }
                 }
 
-                // Monthly breakdown section label
-                item {
-                    Text(
-                        text = "MONTHLY BREAKDOWN",
-                        fontFamily = AnekLatin,
-                        fontSize = 10.sp,
-                        letterSpacing = 1.6.sp,
-                        color = Muted,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                    )
-                }
-
-                // Bar chart card
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(Paper)
-                            .padding(start = 14.dp, end = 14.dp, top = 18.dp, bottom = 14.dp)
-                    ) {
-                        MonthlyBarChart(
-                            monthStats = state.monthStats,
-                            busiestLabel = state.busiestMonth,
-                            onMonthClick = onMonthClick
-                        )
-                    }
-                }
-
-                // Top categories section label
                 if (state.topCategories.isNotEmpty()) {
                     item {
-                        Text(
-                            text = "ALL CATEGORIES",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Muted,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
-                    }
-
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(22.dp))
-                                .background(Paper)
-                                .padding(horizontal = 16.dp, vertical = 6.dp)
-                        ) {
-                            state.topCategories.forEachIndexed { index, stat ->
-                                if (index > 0) {
-                                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                                }
-                                CategoryAccordionRow(
-                                    stat = stat,
-                                    grandTotal = state.totalThisYear,
-                                    onTap = { viewModel.selectCategory(stat.category.id) }
-                                )
-                            }
-                        }
+                        SectionLabel("All categories")
+                        CategoriesCard(state.topCategories, showLimits = false, onTap = { viewModel.selectCategory(it) })
                     }
                 }
 
-                // Cash vs Digital split
                 if (state.paymentSplit.total > 0) {
                     item {
-                        Text(
-                            text = "HOW YOU PAY",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Muted,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
-                    }
-                    item {
-                        PaymentSplitCard(split = state.paymentSplit)
+                        SectionLabel("How you pay")
+                        PaymentSplitCard(state.paymentSplit)
                     }
                 }
 
                 if (state.detectionSplit.total > 0) {
                     item {
-                        Text(
-                            text = "HOW IT WAS TRACKED",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Muted,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
-                    }
-                    item {
-                        DetectionSplitCard(split = state.detectionSplit)
+                        SectionLabel("How it was tracked")
+                        DetectionSplitCard(state.detectionSplit)
                     }
                 }
 
-                // Auto-tracking card
                 if (state.autoTrackStats.allTimeCount > 0) {
                     item {
-                        Text(
-                            text = "AUTO-TRACKING",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.sp,
-                            letterSpacing = 1.6.sp,
-                            color = Muted,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
-                        )
-                    }
-                    item {
-                        AutoTrackingCard(stats = state.autoTrackStats, yearLabel = state.yearLabel)
+                        SectionLabel("Auto-tracking")
+                        AutoTrackingCard(state.autoTrackStats, state.yearLabel, state.monthStats.map { it.label })
                     }
                 }
 
-                // Insight card
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(GoldSoft)
-                            .padding(horizontal = 18.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text("✦", fontSize = 18.sp, color = Gold)
-                        Column {
-                            Text(
-                                text = state.insightTitle,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = GoldInk
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = state.insightBody,
-                                fontSize = 11.5.sp,
-                                color = InkSoft,
-                                lineHeight = 17.sp
-                            )
-                        }
-                    }
-                }
+                item { InsightCard(state.insightTitle, state.insightBody, Modifier.padding(top = 10.dp)) }
             }
         }
     }
@@ -506,35 +204,38 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
             ViewMode.MONTHLY -> state.month.stats.categories
             ViewMode.RANGE -> range?.stats?.categories.orEmpty()
             ViewMode.ANNUAL -> state.topCategories
-        }
-        val subcats = shown.find { it.category.id == category.id }?.subcategories.orEmpty()
-        val subTotal = subcats.sumOf { it.amount }
-        CategoryDetailDialog(
+        }.find { it.category.id == category.id }
+        val trend = state.selectedCategoryTrend.orEmpty()
+        // The budget row follows an earlier month when that is the one on screen
+        val earlierMonth = viewMode == ViewMode.MONTHLY && state.canGoForwardMonth
+        CategoryDetailSheet(
             category = category,
-            trend = state.selectedCategoryTrend ?: emptyList(),
-            subcategoryBreakdown = subcats.map { SubcategoryBreakdown(it.category, it.amount, (it.amount / subTotal).toFloat().coerceIn(0f, 1f)) },
-            periodLabel = headerLabel,
+            budgetLabel = if (earlierMonth) state.month.label else "This month",
+            budgetSpent = if (earlierMonth) shown?.total ?: 0.0 else trend.lastOrNull()?.amount ?: 0.0,
+            trend = trend,
+            subcategories = shown?.subcategories.orEmpty(),
+            periodLabel = periodLabel,
             onDismiss = { viewModel.selectCategory(null) }
         )
     }
 
     if (showRangeSheet) RangeSheet(
-        current = viewModel.selectedRange.collectAsState().value.takeIf { viewMode == ViewMode.RANGE },
+        current = selectedRange.takeIf { viewMode == ViewMode.RANGE },
         onDismiss = { showRangeSheet = false },
         onPick = { viewModel.setRange(it); showRangeSheet = false }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (StatsRange) -> Unit) {
     var showPicker by rememberSaveable { mutableStateOf(false) }
-    AppModalBottomSheet(onDismissRequest = onDismiss, containerColor = Paper) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
-            Text("SHOW", fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+    MSheet(onDismiss) {
+        SheetTitle("Show")
+        MCard(padding = RowCardPadding) {
             listOf(StatsRange.LastMonths(3) to "Last 3 months", StatsRange.LastMonths(6) to "Last 6 months", StatsRange.AllTime to "All time")
                 .forEach { (range, label) ->
                     RangeOption(label, selected = current == range) { onPick(range) }
+                    RowDivider()
                 }
             RangeOption("Choose dates", selected = current is StatsRange.Custom) { showPicker = true }
         }
@@ -550,163 +251,156 @@ private fun RangeSheet(current: StatsRange?, onDismiss: () -> Unit, onPick: (Sta
 
 @Composable
 private fun RangeOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 15.sp, color = Ink, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = Gold, modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
-private fun ViewModeToggle(viewMode: ViewMode, onModeChange: (ViewMode) -> Unit) {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(Paper)
-            .border(1.dp, Hairline, RoundedCornerShape(100.dp))
-            .padding(3.dp)
-    ) {
-        ViewMode.entries.forEach { mode ->
-            val selected = viewMode == mode
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(if (selected) Ink else Color.Transparent)
-                    .clickable { onModeChange(mode) }
-                    .padding(horizontal = 18.dp, vertical = 7.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = when (mode) { ViewMode.MONTHLY -> "Monthly"; ViewMode.ANNUAL -> "Annual"; ViewMode.RANGE -> "Range" },
-                    fontSize = 12.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) Canvas else Muted
-                )
-            }
-        }
-    }
-}
-
-/** "Income ₹X · Spent ₹Y · Saved ₹Z"; saved is coral when more went out than came in. */
-@Composable
-private fun IncomeSpentSavedRow(summary: IncomeSummary) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Deep).padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        @Composable fun part(label: String, value: String, color: Color) = Column {
-            Text(label, fontFamily = AnekLatin, fontSize = 9.sp, letterSpacing = 1.6.sp, color = Ink.copy(alpha = 0.55f))
-            Spacer(Modifier.height(2.dp))
-            Text(value, fontFamily = AnekLatin, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = color)
-        }
-        part("INCOME", "₹${fmtINR(summary.income)}", Gold)
-        part("SPENT", "₹${fmtINR(summary.spent)}", Ink)
-        val saved = summary.saved
-        part("SAVED", "${if (saved < 0) "−" else ""}₹${fmtINR(kotlin.math.abs(saved))}", if (saved < 0) Pink else Gold)
+        Text(label, fontSize = 15.sp, color = Ink, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = Gold, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** "Spent in November" over the total, with [below] for what goes under the number. */
+@Composable
+private fun PeriodTotal(period: String, total: Double, onPeriodClick: (() -> Unit)? = null, below: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+        Text(
+            "Spent in $period", fontSize = 13.sp, color = Muted,
+            modifier = if (onPeriodClick != null) Modifier.clickable(onClick = onPeriodClick) else Modifier
+        )
+        BigNumber("₹${fmtINR(total)}", size = 36)
+        below()
     }
 }
 
 @Composable
-private fun MonthlyTotalCard(monthTotal: Double, monthVsLastPct: Int?, comparedWith: String?, onViewAll: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Deep)
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column {
-                Text(
-                    text = "TOTAL SPENT",
-                    fontFamily = AnekLatin,
-                    fontSize = 9.sp,
-                    letterSpacing = 1.6.sp,
-                    color = Ink.copy(alpha = 0.55f)
-                )
-                Spacer(Modifier.height(4.dp))
-                MoneyDisplay(monthTotal, size = 38, color = Ink)
+private fun EmptyText(text: String) {
+    Text(text, fontSize = 13.sp, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp))
+}
+
+private data class Stat(val label: String, val value: String, val color: Color = Ink)
+
+/** Equal columns, each a label over its value. */
+@Composable
+private fun StatColumns(vararg stats: Stat) {
+    Row(Modifier.fillMaxWidth()) {
+        stats.forEach { stat ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stat.label, fontSize = 13.sp, color = Muted, maxLines = 1)
+                Text(stat.value, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = stat.color, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (monthVsLastPct != null && monthVsLastPct != 0) {
-                val isUp = monthVsLastPct > 0
+        }
+    }
+}
+
+/** Income, spent and saved; saved is pink when more went out than came in. */
+@Composable
+private fun IncomeSpentSavedCard(summary: IncomeSummary, modifier: Modifier = Modifier) {
+    val saved = summary.saved
+    MCard(modifier) {
+        StatColumns(
+            Stat("Income", fmtINR(summary.income)),
+            Stat("Spent", fmtINR(summary.spent)),
+            Stat("Saved", "${if (saved < 0) "−" else ""}${fmtINR(abs(saved))}", if (saved < 0) Pink else Mint)
+        )
+    }
+}
+
+/** A name with its amount, over a bar; pink with "over limit" after the name when [over]. */
+@Composable
+private fun BarRow(
+    name: String, amount: Double, fraction: Float,
+    over: Boolean = false, onClick: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).padding(end = 8.dp)) {
+                Text(name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (over) Text("over limit", fontSize = 15.sp, color = Pink, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
+            }
+            Text(fmtINR(amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (over) Pink else Ink, maxLines = 1)
+            trailing()
+        }
+        Spacer(Modifier.height(6.dp))
+        ProgressBar(fraction, if (over) Pink else Gold)
+    }
+}
+
+private val BarRowCardPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+
+@Composable
+private fun CategoriesCard(stats: List<CategoryYearlyStat>, showLimits: Boolean, onTap: (Long) -> Unit) {
+    val largest = stats.maxOf { it.total }
+    val anyExpands = stats.any { it.subcategories.isNotEmpty() }
+    MCard(padding = BarRowCardPadding) {
+        stats.forEach { stat ->
+            val limit = stat.category.monthlyLimit
+            CategoryRow(
+                stat = stat,
+                fraction = (stat.total / largest).toFloat(),
+                over = showLimits && limit > 0 && stat.total > limit,
+                // Keeps the amounts in one column when only some rows have subcategories to show
+                reserveExpand = anyExpands,
+                onTap = { onTap(stat.category.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryRow(stat: CategoryYearlyStat, fraction: Float, over: Boolean, reserveExpand: Boolean, onTap: () -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        BarRow(stat.category.name, stat.total, fraction, over, onTap) {
+            if (stat.subcategories.isNotEmpty()) {
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(if (isUp) Pink.copy(alpha = 0.18f) else Gold.copy(alpha = 0.18f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                    Modifier.size(32.dp).clip(CircleShape).clickable { expanded = !expanded },
+                    contentAlignment = Alignment.CenterEnd
                 ) {
-                    Text(
-                        text = "${if (isUp) "▲" else "▼"} ${abs(monthVsLastPct)}%",
-                        fontFamily = AnekLatin,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isUp) Pink else Gold
-                    )
+                    Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null, tint = Muted, modifier = Modifier.size(20.dp))
                 }
+            } else if (reserveExpand) {
+                Spacer(Modifier.size(32.dp))
             }
         }
-        if (monthVsLastPct != null) {
-            Spacer(Modifier.height(5.dp))
-            Text(
-                text = "vs $comparedWith",
-                fontFamily = AnekLatin,
-                fontSize = 10.sp,
-                color = Ink.copy(alpha = 0.5f)
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(Ink.copy(alpha = 0.12f))
-                .clickable { onViewAll() }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = "View all expenses →",
-                fontFamily = AnekLatin,
-                fontSize = 10.sp,
-                color = Ink.copy(alpha = 0.85f)
-            )
+        AnimatedVisibility(visible = expanded) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                stat.subcategories.forEach { sub ->
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(
+                            "${sub.category.emoji} ${sub.category.name}", fontSize = 13.sp, color = Muted,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 8.dp)
+                        )
+                        Text(fmtINR(sub.amount), fontSize = 13.sp, color = Muted, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }
 
+private data class SplitPart(val color: Color, val amount: Double, val legend: String)
+
+/** One stacked bar of [parts] by amount, and a legend line for each under it. */
 @Composable
-private fun PaymentSplitCard(split: PaymentSplit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Paper)
-            .padding(18.dp)
-    ) {
-        // Segmented bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(10.dp)
-                .clip(RoundedCornerShape(100.dp))
-        ) {
-            split.shares.forEach { share ->
-                Box(Modifier.fillMaxHeight().weight(split.fraction(share.amount).coerceAtLeast(0.001f)).background(paymentColor(share.label)))
-            }
-            if (split.total <= 0) Box(Modifier.fillMaxHeight().weight(1f).background(HairlineSoft))
+private fun SplitCard(parts: List<SplitPart>) {
+    MCard {
+        Row(Modifier.fillMaxWidth().height(10.dp).clip(CircleShape)) {
+            parts.forEach { Box(Modifier.fillMaxHeight().weight(it.amount.toFloat()).background(it.color)) }
         }
-        Spacer(Modifier.height(16.dp))
-        // Three to a row: five methods side by side don't fit a phone once amounts have paise.
-        split.shares.chunked(3).forEachIndexed { row, shares ->
-            if (row > 0) Spacer(Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                shares.forEach { share ->
-                    PaymentSplitLegend(label = share.label, amount = share.amount, pct = share.percent, color = paymentColor(share.label), modifier = Modifier.weight(1f))
+        Spacer(Modifier.height(10.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            parts.forEach {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ToneDot(it.color)
+                    Text(it.legend, fontSize = 13.sp, color = Muted, modifier = Modifier.padding(start = 6.dp))
                 }
-                // Keeps a short last row's columns the same width as the row above
-                repeat(3 - shares.size) { if (split.shares.size > 3) Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -715,557 +409,120 @@ private fun PaymentSplitCard(split: PaymentSplit) {
 private fun paymentColor(label: String): Color = when (label) {
     PaymentSplit.UPI -> Gold
     PaymentSplit.CREDIT_CARD -> Sky
-    PaymentSplit.DEBIT_CARD -> InkSoft
-    PaymentSplit.CASH -> Pink
-    else -> Muted
+    PaymentSplit.DEBIT_CARD -> Mint
+    PaymentSplit.CASH -> Muted
+    else -> Hairline
 }
 
 @Composable
-private fun PaymentSplitLegend(label: String, amount: Double, pct: Int, color: Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
-            Text(label, fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(amount)) }
-            }
-        )
-        Text("$pct%", fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
-    }
+private fun PaymentSplitCard(split: PaymentSplit) {
+    SplitCard(split.shares.map { share ->
+        SplitPart(paymentColor(share.label), share.amount, "${share.label} ${share.percent}% · ₹${fmtINR(share.amount)}")
+    })
 }
 
 @Composable
 private fun DetectionSplitCard(split: DetectionSplit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Paper)
-            .padding(18.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(10.dp)
-                .clip(RoundedCornerShape(100.dp))
-        ) {
-            val autoFrac = split.fraction(split.autoAmount)
-            val manFrac = split.fraction(split.manualAmount)
-            val recFrac = split.fraction(split.recurringAmount)
-            if (autoFrac > 0) Box(Modifier.fillMaxHeight().weight(autoFrac).background(Gold))
-            if (manFrac > 0) Box(Modifier.fillMaxHeight().weight(manFrac).background(Sky))
-            if (recFrac > 0) Box(Modifier.fillMaxHeight().weight(recFrac).background(Pink))
-            val remainder = 1f - autoFrac - manFrac - recFrac
-            if (remainder > 0.001f) Box(Modifier.fillMaxHeight().weight(remainder).background(HairlineSoft))
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (split.autoAmount > 0) {
-                DetectionLegend(
-                    label = "Auto-Detected",
-                    amount = split.autoAmount,
-                    count = split.autoCount,
-                    pct = (split.fraction(split.autoAmount) * 100).toInt(),
-                    color = Gold,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (split.manualAmount > 0) {
-                DetectionLegend(
-                    label = "Manually Added",
-                    amount = split.manualAmount,
-                    count = split.manualCount,
-                    pct = (split.fraction(split.manualAmount) * 100).toInt(),
-                    color = Sky,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (split.recurringAmount > 0) {
-                DetectionLegend(
-                    label = "Recurring",
-                    amount = split.recurringAmount,
-                    count = split.recurringCount,
-                    pct = (split.fraction(split.recurringAmount) * 100).toInt(),
-                    color = Pink,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
+    fun part(label: String, color: Color, amount: Double, count: Int): SplitPart {
+        val pct = (split.fraction(amount) * 100).toInt()
+        return SplitPart(color, amount, "$label $pct% · ₹${fmtINR(amount)} · $count txn")
     }
-}
-
-@Composable
-private fun DetectionLegend(label: String, amount: Double, count: Int, pct: Int, color: Color, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
-            Text(label, fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 17.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(amount)) }
-            }
-        )
-        Text("$count txn · $pct%", fontSize = 10.sp, color = Muted, fontFamily = AnekLatin)
-    }
-}
-
-@Composable
-private fun CategoryDetailDialog(
-    category: com.example.expensetracker.data.db.entity.Category,
-    trend: List<CategoryTrend>,
-    subcategoryBreakdown: List<SubcategoryBreakdown>?,
-    periodLabel: String,
-    onDismiss: () -> Unit
-) {
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = {
-            val catColor = parseColor(category.colorHex)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(catColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    if (category.parentId == null) {
-                        Icon(categoryIcon(category.name), contentDescription = null, tint = catColor, modifier = Modifier.size(18.dp))
-                    } else {
-                        Text(category.emoji, fontSize = 18.sp)
-                    }
-                }
-                Text(category.name, color = Ink, style = MaterialTheme.typography.titleLarge)
-            }
-        },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                Text("LAST 6 MONTHS TREND", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
-                Spacer(Modifier.height(20.dp))
-                CategoryTrendChart(trend = trend, color = parseColor(category.colorHex))
-                if (!subcategoryBreakdown.isNullOrEmpty()) {
-                    Spacer(Modifier.height(24.dp))
-                    Text("BY SUBCATEGORY · ${periodLabel.uppercase()}", style = MaterialTheme.typography.labelSmall, color = Muted, letterSpacing = 1.2.sp)
-                    Spacer(Modifier.height(14.dp))
-                    SubcategoryBreakdownChart(subcategoryBreakdown)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close", color = Gold) }
-        }
+    SplitCard(
+        listOf(
+            part("Auto-Detected", Gold, split.autoAmount, split.autoCount),
+            part("Manually Added", Muted, split.manualAmount, split.manualCount),
+            part("Recurring", Hairline, split.recurringAmount, split.recurringCount)
+        ).filter { it.amount > 0 }
     )
 }
 
 @Composable
-private fun CategoryTrendChart(trend: List<CategoryTrend>, color: Color) {
-    if (trend.isEmpty()) return
-    val max = trend.maxOfOrNull { it.amount }?.coerceAtLeast(1.0) ?: 1.0
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().height(120.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            trend.forEach { item ->
-                val fraction = (item.amount / max).toFloat().coerceIn(0f, 1f)
-                Column(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Fixed 22dp area for value label — keeps all bars aligned regardless of label presence
-                    Box(
-                        modifier = Modifier.height(22.dp).fillMaxWidth(),
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        if (item.amount > 0) {
-                            Text(
-                                "₹${fmtINR(item.amount)}",
-                                fontSize = 7.sp, color = Ink,
-                                fontFamily = AnekLatin,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(3.dp))
-                    // Bar slot — takes remaining height, bar grows from bottom
-                    Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        // Track
-                        Box(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(3.dp)).background(HairlineSoft))
-                        // Filled bar
-                        if (fraction > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(fraction)
-                                    .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                                    .background(color)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            trend.forEach { item ->
-                Text(
-                    text = item.label,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    fontSize = 9.sp, color = Muted,
-                    fontFamily = AnekLatin
-                )
+private fun InsightCard(title: String, body: String, modifier: Modifier = Modifier) {
+    MCard(modifier) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.width(3.dp).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(Gold))
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                Text(body, fontSize = 13.sp, color = Muted)
             }
         }
     }
 }
 
 @Composable
-private fun MonthlyBarChart(monthStats: List<MonthStat>, busiestLabel: String, onMonthClick: (Long, Long) -> Unit) {
-    val max = monthStats.maxOfOrNull { it.total }?.coerceAtLeast(1.0) ?: 1.0
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        monthStats.forEach { month ->
-            val isBusiest = month.label == busiestLabel
-            val fraction = (month.total / max).toFloat().coerceIn(0f, 1f)
-            val barHeight: Dp = if (month.total > 0) (130f * fraction).coerceAtLeast(2f).dp else 0.dp
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onMonthClick(month.start, month.end) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(barHeight)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(
-                            when {
-                                isBusiest -> Ink
-                                month.total > 0 -> Ink.copy(alpha = 0.18f)
-                                else -> Ink.copy(alpha = 0.05f)
-                            }
-                        )
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = month.label,
-                    fontFamily = AnekLatin,
-                    fontSize = 9.sp,
-                    color = if (isBusiest) Ink else Muted,
-                    fontWeight = if (isBusiest) FontWeight.SemiBold else FontWeight.Normal
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubcategoryBreakdownChart(breakdown: List<SubcategoryBreakdown>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(10.dp)
-            .clip(RoundedCornerShape(100.dp))
-    ) {
-        breakdown.forEach { item ->
-            if (item.fraction > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .weight(item.fraction)
-                        .background(parseColor(item.category.colorHex))
-                )
-            }
-        }
-    }
-    Spacer(Modifier.height(14.dp))
-    breakdown.forEach { item ->
-        val pct = (item.fraction * 100).toInt()
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(parseColor(item.category.colorHex))
-            )
-            Text(
-                text = "${item.category.emoji} ${item.category.name}",
-                fontSize = 12.sp,
-                color = Ink,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 10.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                    withStyle(SpanStyle(fontSize = 14.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(item.amount)) }
-                }
-            )
-            Text(
-                text = "$pct%",
-                fontSize = 10.sp,
-                color = Muted,
-                fontFamily = AnekLatin,
-                modifier = Modifier.width(28.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(Paper)
-            .padding(18.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(GoldSoft),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("📡", fontSize = 24.sp)
-            }
-            Column {
-                Text(
-                    text = "${stats.rate}%",
-                    fontFamily = AnekLatin,
-                    fontSize = 34.sp,
-                    color = Ink,
-                    lineHeight = 36.sp
-                )
-                Text(
-                    text = "auto-captured in $yearLabel",
-                    fontFamily = AnekLatin,
-                    fontSize = 10.sp,
-                    color = Muted
-                )
-                Text(
-                    text = "${stats.autoCount} of ${stats.totalCount} expenses",
-                    fontSize = 11.sp,
-                    color = InkSoft,
-                    modifier = Modifier.padding(top = 1.dp)
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(100.dp))
-                .background(HairlineSoft)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(stats.rate / 100f)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(Gold)
-            )
-        }
+private fun AutoTrackingCard(stats: AutoTrackStats, yearLabel: String, monthLabels: List<String>) {
+    MCard {
+        Text("${stats.rate}%", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text("auto-captured in $yearLabel", fontSize = 13.sp, color = Muted)
+        Text("${stats.autoCount} of ${stats.totalCount} expenses", fontSize = 13.sp, color = Muted)
+        Spacer(Modifier.height(10.dp))
+        ProgressBar(stats.rate / 100f)
         if (stats.monthlyAutoCounts.any { it > 0 }) {
-            Spacer(Modifier.height(18.dp))
-            Text(
-                text = "BY MONTH",
-                fontFamily = AnekLatin,
-                fontSize = 8.5.sp,
-                letterSpacing = 1.4.sp,
-                color = Muted
-            )
+            Spacer(Modifier.height(14.dp))
+            Text("By month", fontSize = 13.sp, color = Muted)
             Spacer(Modifier.height(8.dp))
-            val maxCount = stats.monthlyAutoCounts.maxOrNull()?.coerceAtLeast(1) ?: 1
-            val monthLabels = listOf("J","F","M","A","M","J","J","A","S","O","N","D")
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    stats.monthlyAutoCounts.forEachIndexed { i, count ->
-                        val frac = (count.toFloat() / maxCount).coerceIn(0f, 1f)
-                        Column(
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                                contentAlignment = Alignment.BottomCenter
-                            ) {
-                                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(2.dp)).background(HairlineSoft))
-                                if (count > 0) Box(
-                                    Modifier.fillMaxWidth().fillMaxHeight(frac)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(Gold.copy(alpha = (0.4f + 0.6f * frac).coerceIn(0f, 1f)))
-                                )
-                            }
+            BarChart(
+                bars = monthLabels.zip(stats.monthlyAutoCounts) { label, count -> BarData(label, count.toDouble()) },
+                highlight = null,
+                chartHeight = 52.dp
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        RowDivider()
+        Spacer(Modifier.height(12.dp))
+        StatColumns(
+            Stat("Today", stats.todayCount.toString()),
+            Stat("This Month", stats.thisMonthCount.toString()),
+            Stat("All Time", stats.allTimeCount.toString())
+        )
+    }
+}
+
+@Composable
+private fun CategoryDetailSheet(
+    category: Category,
+    budgetLabel: String,
+    budgetSpent: Double,
+    trend: List<CategoryTrend>,
+    subcategories: List<SubcategoryRow>,
+    periodLabel: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val alertPercent = remember { PreferencesManager(context.applicationContext).budgetAlertThreshold }
+    MSheet(onDismiss) {
+        SheetTitle(category.name)
+        val limit = category.monthlyLimit
+        if (limit > 0) {
+            val tone = budgetTone(budgetSpent, limit, alertPercent)
+            MCard(padding = RowCardPadding) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ToneDot(tone)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(budgetLabel, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text("${fmtINR(budgetSpent)} of ${fmtINR(limit)}", fontSize = 13.sp, color = Muted)
                         }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    monthLabels.forEach { label ->
-                        Text(
-                            text = label,
-                            modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Center,
-                            fontSize = 8.sp,
-                            color = Muted,
-                            fontFamily = AnekLatin
-                        )
+                        Spacer(Modifier.height(6.dp))
+                        ProgressBar((budgetSpent / limit).toFloat(), tone)
                     }
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-        Spacer(Modifier.height(14.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            AutoStatPill("Today", stats.todayCount.toString())
-            AutoStatPill("This Month", stats.thisMonthCount.toString())
-            AutoStatPill("All Time", stats.allTimeCount.toString())
-        }
-    }
-}
-
-@Composable
-private fun AutoStatPill(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            fontFamily = AnekLatin,
-            fontSize = 24.sp,
-            color = Ink
-        )
-        Text(
-            text = label,
-            fontFamily = AnekLatin,
-            fontSize = 9.sp,
-            color = Muted
-        )
-    }
-}
-
-@Composable
-private fun CategoryAccordionRow(stat: CategoryYearlyStat, grandTotal: Double, onTap: () -> Unit) {
-    val color = parseColor(stat.category.colorHex)
-    val fraction = if (grandTotal > 0) (stat.total / grandTotal).coerceIn(0.0, 1.0).toFloat() else 0f
-    val pct = (fraction * 100).toInt()
-    val hasSubcats = stat.subcategories.isNotEmpty()
-    var expanded by rememberSaveable { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onTap).padding(top = 12.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(
-                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(color.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(categoryIcon(stat.category.name), contentDescription = null, tint = color, modifier = Modifier.size(17.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(stat.category.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                Spacer(Modifier.height(6.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(100.dp)).background(HairlineSoft)) {
-                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fraction).clip(RoundedCornerShape(100.dp)).background(color))
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(SpanStyle(fontSize = 11.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.55f))) { append("₹") }
-                        withStyle(SpanStyle(fontSize = 18.sp, fontFamily = AnekLatin, color = Ink)) { append(fmtINR(stat.total)) }
-                    }
-                )
-                Text("$pct%", fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
-            }
-            if (hasSubcats) {
-                IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null, tint = Muted, modifier = Modifier.size(16.dp)
-                    )
-                }
-            } else {
-                Spacer(Modifier.width(32.dp))
+        if (trend.isNotEmpty()) {
+            SectionLabel("Last 6 months")
+            MCard {
+                BarChart(bars = trend.map { BarData(it.label, it.amount) }, highlight = trend.lastIndex, chartHeight = 100.dp)
             }
         }
-
-        AnimatedVisibility(visible = expanded) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(start = 42.dp, end = 8.dp, bottom = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                stat.subcategories.forEach { sub ->
-                    SubcategoryInlineRow(sub = sub, parentTotal = stat.total)
+        if (subcategories.isNotEmpty()) {
+            SectionLabel("By subcategory · $periodLabel")
+            val largest = subcategories.maxOf { it.amount }
+            MCard(padding = BarRowCardPadding) {
+                subcategories.forEach { sub ->
+                    BarRow("${sub.category.emoji} ${sub.category.name}", sub.amount, (sub.amount / largest).toFloat())
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SubcategoryInlineRow(sub: SubcategoryRow, parentTotal: Double) {
-    val barFraction = if (parentTotal > 0) (sub.amount / parentTotal).toFloat().coerceIn(0f, 1f) else 0f
-    val subColor = parseColor(sub.category.colorHex)
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(sub.category.emoji, fontSize = 14.sp, modifier = Modifier.width(20.dp), textAlign = TextAlign.Center)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(sub.category.name, fontSize = 12.sp, color = InkSoft)
-            Spacer(Modifier.height(3.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(100.dp)).background(HairlineSoft)) {
-                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(barFraction).clip(RoundedCornerShape(100.dp)).background(subColor.copy(alpha = 0.7f)))
-            }
-        }
-        Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(fontSize = 9.sp, fontFamily = AnekLatin, color = Ink.copy(alpha = 0.5f))) { append("₹") }
-                withStyle(SpanStyle(fontSize = 13.sp, fontFamily = AnekLatin, color = InkSoft)) { append(fmtINR(sub.amount)) }
-            }
-        )
     }
 }
