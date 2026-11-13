@@ -56,6 +56,7 @@ fun DashboardScreen(
     onViewPending: () -> Unit,
     onViewAllSpending: () -> Unit,
     onEnableTracking: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onViewSubscriptions: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -134,7 +135,7 @@ fun DashboardScreen(
                     .padding(top = 12.dp, bottom = 14.dp)
             ) {
                 Text(
-                    "OVERVIEW",
+                    "HOME",
                     fontFamily = AnekLatin,
                     fontSize = 10.5.sp,
                     letterSpacing = 1.8.sp,
@@ -186,6 +187,18 @@ fun DashboardScreen(
                             )
                         }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Paper)
+                            .border(1.dp, Hairline, CircleShape)
+                            .clickable(onClick = onOpenSettings),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Ink, modifier = Modifier.size(18.dp))
+                    }
                     // Notification bell
                     Box(
                         modifier = Modifier
@@ -212,6 +225,7 @@ fun DashboardScreen(
                                     .align(Alignment.TopEnd)
                             )
                         }
+                    }
                     }
                 }
             }
@@ -1068,7 +1082,7 @@ private fun IncomeDialog(currentIncome: Double, monthWithIncome: String?, onDism
                 )
                 Text(
                     if (monthWithIncome != null) "Not used for $monthWithIncome: it has income logged or on its way, so the forecast uses that."
-                    else "Used until you log income. Add your salary as recurring income in Settings → Bills & Reminders.",
+                    else "Used until you log income. Add your salary as recurring income in Plan → Bills & Reminders.",
                     fontSize = 12.sp, color = Muted
                 )
             }

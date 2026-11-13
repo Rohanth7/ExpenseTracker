@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -49,7 +50,7 @@ private val PRESET_COLORS = listOf(
 )
 
 @Composable
-fun CategoriesScreen(viewModel: CategoriesViewModel) {
+fun CategoriesScreen(viewModel: CategoriesViewModel, onBack: () -> Unit = {}) {
     val categories by viewModel.categories.collectAsState()
     val groupedCategories by viewModel.groupedCategories.collectAsState()
     val tagSummaries by viewModel.allTagSummaries.collectAsState()
@@ -77,13 +78,19 @@ fun CategoriesScreen(viewModel: CategoriesViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    Text(
-                        text = "Categories",
-                        fontFamily = AnekLatin,
-                        fontSize = 28.sp,
-                        color = Ink,
-                        lineHeight = 30.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack, modifier = Modifier.offset(x = (-12).dp)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
+                        }
+                        Text(
+                            text = "Categories",
+                            fontFamily = AnekLatin,
+                            fontSize = 28.sp,
+                            color = Ink,
+                            lineHeight = 30.sp,
+                            modifier = Modifier.offset(x = (-12).dp)
+                        )
+                    }
                     val subCount = categories.count { it.parentId != null }
                     Text(
                         text = if (subCount > 0) "${categories.count { it.parentId == null }} + $subCount sub" else "${categories.size} active",

@@ -168,8 +168,8 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                     StepBody(
                         eyebrow = "LAST STEP",
                         title = "What's your monthly income?",
-                        body = "This is optional. It lets the Overview show how much is still free to spend this month. " +
-                            "You can change it any time from the Overview screen.",
+                        body = "This is optional. It lets Home show how much is still free to spend this month. " +
+                            "You can change it any time from the Home screen.",
                         points = when {
                             restored == null -> listOf(starterNote)
                             restored.hadCategories -> listOf("Restored from your backup: ${restored.summary}.")

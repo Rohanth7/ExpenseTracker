@@ -77,8 +77,18 @@ import com.example.expensetracker.ui.components.LocalAppLocked
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
 private enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
 
+/** Which front page the screen opens on: the Plan tab, or Settings (reached from Home). */
+enum class SettingsHome { Settings, Plan }
+
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit = {}) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    home: SettingsHome = SettingsHome.Settings,
+    onBack: () -> Unit = {},
+    onOpenMessageRules: () -> Unit = {},
+    onOpenCategories: () -> Unit = {},
+    onOpenSubscriptions: () -> Unit = {},
+) {
     val ruleCount = com.example.expensetracker.sms.ParsingRuleStore.get(LocalContext.current).rules.collectAsState().value.size
     val categories by viewModel.categories.collectAsState()
     val bills by viewModel.bills.collectAsState()
@@ -170,8 +180,13 @@ fun SettingsScreen(viewModel: SettingsViewModel, onOpenMessageRules: () -> Unit 
 
     Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         when (currentPage) {
-            null -> SettingsMainMenu(
+            null -> if (home == SettingsHome.Plan) PlanMenu(
                 bills = bills, loans = loans, categories = categories,
+                onOpenSubscriptions = onOpenSubscriptions,
+                modifier = Modifier.padding(padding),
+                onNavigate = { currentPage = it }
+            ) else SettingsMainMenu(
+                categories = categories, onBack = onBack, onOpenCategories = onOpenCategories,
                 driveConnected = driveConnected, driveAccountEmail = driveAccountEmail,
                 tracking = tracking.status,
                 onFixSms = { smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS) },
@@ -333,13 +348,59 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
     )
 }
 
+// ── Plan ────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun PlanMenu(
+    bills: List<Bill>,
+    loans: List<Loan>,
+    categories: List<Category>,
+    onOpenSubscriptions: () -> Unit,
+    modifier: Modifier = Modifier,
+    onNavigate: (SettingsPage) -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        item {
+            Text("LIMITS, BILLS AND LOANS", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
+            Text("Plan", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
+            Spacer(Modifier.height(24.dp))
+        }
+        item {
+            MenuCard {
+                MenuRow(icon = Icons.Default.Receipt, iconBg = GoldSoft, iconTint = GoldInk, title = "Bills & Reminders",
+                    subtitle = if (bills.isEmpty()) "No bills set up" else "${bills.size} bill${if (bills.size != 1) "s" else ""} · ${bills.count { it.isEnabled }} active",
+                    onClick = { onNavigate(SettingsPage.Bills) })
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                MenuRow(icon = Icons.Default.AccountBalance, iconBg = Canvas, iconTint = Ink, title = "Loans & EMIs",
+                    subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
+                    onClick = { onNavigate(SettingsPage.Loans) })
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                val budgetedCount = categories.count { it.monthlyLimit > 0 }
+                MenuRow(
+                    icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
+                    title = "Category Budgets",
+                    subtitle = if (budgetedCount == 0) "No limits set" else "$budgetedCount ${if (budgetedCount != 1) "categories" else "category"} with limits",
+                    onClick = { onNavigate(SettingsPage.CategoryBudgets) }
+                )
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
+                MenuRow(icon = Icons.Default.Autorenew, iconBg = Canvas, iconTint = Ink, title = "Subscriptions",
+                    subtitle = "Repeating payments found in your spending",
+                    onClick = onOpenSubscriptions)
+            }
+        }
+    }
+}
+
 // ── Main Menu ───────────────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsMainMenu(
-    bills: List<Bill>,
-    loans: List<Loan>,
     categories: List<Category>,
+    onBack: () -> Unit,
+    onOpenCategories: () -> Unit,
     driveConnected: Boolean,
     driveAccountEmail: String,
     tracking: TrackingStatus,
@@ -355,9 +416,8 @@ private fun SettingsMainMenu(
         contentPadding = PaddingValues(16.dp)
     ) {
         item {
-            Text("SYSTEM", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
-            Text("Settings", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
-            Spacer(Modifier.height(24.dp))
+            SubPageHeader("Settings", onBack)
+            Spacer(Modifier.height(16.dp))
         }
         item {
             SectionLabel("AUTO-TRACKING")
@@ -384,27 +444,6 @@ private fun SettingsMainMenu(
             Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("TRACKING")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Receipt, iconBg = GoldSoft, iconTint = GoldInk, title = "Bills & Reminders",
-                    subtitle = if (bills.isEmpty()) "No bills set up" else "${bills.size} bill${if (bills.size != 1) "s" else ""} · ${bills.count { it.isEnabled }} active",
-                    onClick = { onNavigate(SettingsPage.Bills) })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.AccountBalance, iconBg = Canvas, iconTint = Ink, title = "Loans & EMIs",
-                    subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
-                    onClick = { onNavigate(SettingsPage.Loans) })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                val budgetedCount = categories.count { it.monthlyLimit > 0 }
-                MenuRow(
-                    icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
-                    title = "Category Budgets",
-                    subtitle = if (budgetedCount == 0) "No limits set" else "$budgetedCount ${if (budgetedCount != 1) "categories" else "category"} with limits",
-                    onClick = { onNavigate(SettingsPage.CategoryBudgets) }
-                )
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
             SectionLabel("CLOUD")
             MenuCard {
                 MenuRow(icon = Icons.Default.Cloud,
@@ -419,6 +458,10 @@ private fun SettingsMainMenu(
         item {
             SectionLabel("CUSTOMISE")
             MenuCard {
+                MenuRow(icon = Icons.Default.Category, iconBg = Canvas, iconTint = Ink, title = "Categories & tags",
+                    subtitle = "${categories.size} ${if (categories.size != 1) "categories" else "category"}",
+                    onClick = onOpenCategories)
+                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
                 MenuRow(icon = Icons.Default.Tune, iconBg = Canvas, iconTint = Ink, title = "Preferences",
                     subtitle = "Alerts, privacy, widget, week start",
                     onClick = { onNavigate(SettingsPage.Preferences) })
