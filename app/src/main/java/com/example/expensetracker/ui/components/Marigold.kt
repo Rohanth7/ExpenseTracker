@@ -243,6 +243,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         color = if (selected) Deep else Ink,
         maxLines = 1,
+        textAlign = TextAlign.Center,
         modifier = modifier
             .clip(CircleShape)
             .then(if (selected) Modifier.background(Gold) else Modifier.border(1.dp, Hairline, CircleShape))

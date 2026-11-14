@@ -1,11 +1,7 @@
 package com.example.expensetracker.ui.screens.expenses
 
-import com.example.expensetracker.ui.util.fmtINR
-import com.example.expensetracker.ui.util.rememberSaveableItem
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -13,57 +9,51 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.expensetracker.data.budget.Budgets
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Expense
 import com.example.expensetracker.data.db.entity.Income
+import com.example.expensetracker.data.export.DateFilter
+import com.example.expensetracker.data.export.ExportPreset
+import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
-import com.example.expensetracker.data.export.ExportPreset
-import com.example.expensetracker.data.export.DateFilter
-import com.example.expensetracker.data.period.BudgetPeriod
-import com.example.expensetracker.ui.components.DatePresetOptions
 import com.example.expensetracker.ui.util.PastOrTodayDates
 import com.example.expensetracker.ui.util.buildTimestamp
-import com.example.expensetracker.ui.util.rememberAmountInputState
-import com.example.expensetracker.ui.util.toUtcMidnight
+import com.example.expensetracker.ui.util.fmtINR
+import com.example.expensetracker.ui.util.formatLimitInput
 import com.example.expensetracker.ui.util.parseColor
+import com.example.expensetracker.ui.util.parseLimitInput
+import com.example.expensetracker.ui.util.rememberAmountInputState
+import com.example.expensetracker.ui.util.rememberAmountText
+import com.example.expensetracker.ui.util.rememberSaveableItem
+import com.example.expensetracker.ui.util.toUtcMidnight
 import java.text.SimpleDateFormat
 import java.util.*
-import com.example.expensetracker.ui.util.formatLimitInput
-import com.example.expensetracker.ui.util.parseLimitInput
-import com.example.expensetracker.ui.util.rememberAmountText
-import com.example.expensetracker.ui.components.AppAlertDialog
-import com.example.expensetracker.ui.components.AppDatePickerDialog
 
 private data class DayGroup<T>(
     /** Unique per list (the date, with its year), for LazyColumn keys. */
     val key: String,
-    val dayLabel: String,
-    val dateLabel: String,
+    /** "TODAY", "YESTERDAY" or "TUE 10 NOV". */
+    val label: String,
     val items: List<T>,
     val total: Double
 )
@@ -135,7 +125,6 @@ fun ExpensesScreen(
     val incomeGroups = remember(incomes, sortByAmount) { groupByDay(incomes, sortByAmount, { it.date }, { it.amount }) }
     val weekIncome by viewModel.weekIncome.collectAsState()
 
-
     Scaffold(
         containerColor = Canvas,
         floatingActionButton = {
@@ -143,8 +132,8 @@ fun ExpensesScreen(
             if (!isSelectionMode && showIncome) {
                 Row(
                     modifier = Modifier
-                        .height(58.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .height(56.dp)
+                        .clip(ButtonShape)
                         .background(Gold)
                         .clickable { addAsIncome = true; showAddDialog = true }
                         .padding(horizontal = 18.dp),
@@ -152,8 +141,8 @@ fun ExpensesScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // The text labels the button, so the icon needs no description of its own.
-                    Icon(Icons.Default.Add, contentDescription = null, tint = Deep, modifier = Modifier.size(26.dp))
-                    Text("Add income", color = Deep, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Deep, modifier = Modifier.size(24.dp))
+                    Text("Add income", fontSize = 15.sp, color = Deep, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -172,155 +161,98 @@ fun ExpensesScreen(
                     onCategorize = { showBulkCategorize = true }
                 )
             } else {
-                // ── Header ─────────────────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 12.dp, bottom = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column {
-                        Text(
-                            "LEDGER",
-                            fontFamily = AnekLatin,
-                            fontSize = 10.5.sp,
-                            letterSpacing = 1.8.sp,
-                            color = Muted,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            "Activity",
-                            fontFamily = AnekLatin,
-                            fontSize = 28.sp,
-                            color = Ink,
-                            lineHeight = 30.sp
-                        )
-                    }
-                    val shownWeekTotal = if (showIncome) weekIncome else weekTotal
-                    if (shownWeekTotal > 0) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                "THIS WEEK",
-                                fontFamily = AnekLatin,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.6.sp,
-                                color = Muted
-                            )
-                            Text(
-                                buildAnnotatedString {
-                                    val color = if (showIncome) Gold else Ink
-                                    withStyle(SpanStyle(fontFamily = AnekLatin, fontStyle = FontStyle.Normal, fontSize = 13.sp, color = color.copy(alpha = 0.55f))) { append(if (showIncome) "+₹" else "₹") }
-                                    withStyle(SpanStyle(fontFamily = AnekLatin, fontSize = 22.sp, color = color)) { append(fmtINR(shownWeekTotal)) }
-                                }
-                            )
-                        }
-                    }
-                }
+                Column(Modifier.padding(horizontal = ScreenPadding)) {
+                    ScreenHeader("Activity")
+                    SegTabs(listOf("Spending", "Income"), if (showIncome) 1 else 0, onSelect = { viewModel.setShowIncome(it == 1) })
 
-                // ── Spending | Income ───────────────────────────────
-                TwoWayToggle("Spending", "Income", rightSelected = showIncome, onSelect = { viewModel.setShowIncome(it) },
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp))
-
-                // ── Search bar ──────────────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 10.dp)
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(100.dp))
-                        .background(Paper)
-                        .border(1.dp, Hairline, RoundedCornerShape(100.dp))
-                        .padding(horizontal = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Default.Search, null, tint = Muted, modifier = Modifier.size(16.dp))
-                    BasicSearchField(
-                        value = searchQuery,
-                        onValueChange = { viewModel.setSearchQuery(it) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    // The ✕ belongs to the search text and clears only that. Dates have their own
-                    // chip below, amount limits the filters dialog's Clear, and the category and
-                    // tag chips are untouched. Sort stays reachable while anything is filtered.
-                    if (searchQuery.isNotEmpty()) {
-                        Icon(Icons.Default.Close, "Clear search", tint = Muted, modifier = Modifier.size(14.dp).clickable { viewModel.setSearchQuery("") })
-                    }
-                    Icon(
-                        Icons.Default.FilterList,
-                        if (sortByAmount) "Sort by date" else "Sort by amount",
-                        tint = if (sortByAmount) Gold else Muted,
-                        modifier = Modifier.size(16.dp).clickable {
-                            viewModel.toggleSortOrder()
-                            val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
-                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    Icon(
-                        Icons.Default.Tune,
-                        "Filters",
-                        tint = if (minAmount != null || maxAmount != null || dateRange != null) Gold else Muted,
-                        modifier = Modifier.size(16.dp).clickable { showAdvancedFilters = true }
-                    )
-                }
-
-                // ── Active date filter (from the filters dialog or a Statistics "View all") ──
-                dateRange?.let { (from, to) ->
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 10.dp)
-                            .clip(RoundedCornerShape(100.dp)).background(GoldSoft)
-                            .clickable { viewModel.clearDateRange() }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp, bottom = 10.dp)
+                            .clip(FieldShape)
+                            .background(Field)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Default.CalendarToday, null, tint = Gold, modifier = Modifier.size(13.dp))
-                        Text(BudgetPeriod.dayRangeLabel(from, to), fontSize = 12.sp, color = Ink)
-                        Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(13.dp))
+                        Icon(Icons.Default.Search, null, tint = Muted, modifier = Modifier.size(20.dp))
+                        BasicSearchField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        // The ✕ belongs to the search text and clears only that. Dates have their own
+                        // chip below, amount limits the filters sheet's Clear, and the category and
+                        // tag chips are untouched. Sort stays reachable while anything is filtered.
+                        if (searchQuery.isNotEmpty()) {
+                            Icon(Icons.Default.Close, "Clear search", tint = Muted, modifier = Modifier.size(18.dp).clickable { viewModel.setSearchQuery("") })
+                        }
+                        Icon(
+                            Icons.Default.FilterList,
+                            if (sortByAmount) "Sort by date" else "Sort by amount",
+                            tint = if (sortByAmount) Gold else Muted,
+                            modifier = Modifier.size(20.dp).clickable {
+                                viewModel.toggleSortOrder()
+                                val msg = if (!sortByAmount) "Sorting by Highest Amount" else "Sorting by Date"
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        Icon(
+                            Icons.Default.Tune,
+                            "Filters",
+                            tint = if (minAmount != null || maxAmount != null || dateRange != null) Gold else Muted,
+                            modifier = Modifier.size(20.dp).clickable { showAdvancedFilters = true }
+                        )
+                    }
+
+                    // Active date filter (from the filters sheet or an Insights "View all")
+                    dateRange?.let { (from, to) ->
+                        Row(
+                            modifier = Modifier.padding(bottom = 10.dp)
+                                .clip(CircleShape).background(Field)
+                                .clickable { viewModel.clearDateRange() }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.CalendarToday, null, tint = Gold, modifier = Modifier.size(14.dp))
+                            Text(BudgetPeriod.dayRangeLabel(from, to), fontSize = 13.sp, color = Ink)
+                            Icon(Icons.Default.Close, contentDescription = "Clear dates", tint = Muted, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
 
-                // ── Filter chips ────────────────────────────────────
                 val parentCategories = remember(categories) { categories.filter { it.parentId == null } }
                 // Category and tag chips are spending's (income has no category, and tag rename/delete
                 // covers expenses only), so they're hidden for income; search matches income tags.
                 if (!showIncome && (parentCategories.isNotEmpty() || allTagSummaries.isNotEmpty())) {
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        contentPadding = PaddingValues(horizontal = ScreenPadding),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 10.dp)
                     ) {
                         if (parentCategories.isNotEmpty()) {
                             item {
-                                ChipPill(
-                                    label = "All",
+                                Chip(
+                                    "All",
                                     selected = (categoryFilter == -1L || categoryFilter == null) && tagFilter == null,
                                     onClick = { viewModel.setCategoryFilter(-1L); viewModel.setTagFilter(null) }
                                 )
                             }
                             items(parentCategories) { cat ->
-                                ChipPill(
-                                    label = cat.name,
+                                Chip(
+                                    cat.name,
                                     selected = categoryFilter == cat.id && tagFilter == null,
                                     onClick = { viewModel.setCategoryFilter(cat.id); viewModel.setTagFilter(null) }
                                 )
                             }
                         }
                         if (allTagSummaries.isNotEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .width(1.dp)
-                                        .height(28.dp)
-                                        .background(Hairline)
-                                )
-                            }
+                            item { Box(Modifier.width(1.dp).height(28.dp).background(Hairline)) }
                             items(allTagSummaries) { tag ->
-                                TagChipPill(
-                                    label = tag.name,
+                                Chip(
+                                    "#${tag.name}",
                                     // "Food" and "food" are one tag, so one chip, lit for either
                                     selected = Tags.same(tagFilter, tag.name),
                                     onClick = {
@@ -336,9 +268,21 @@ fun ExpensesScreen(
                         }
                     }
                 }
+
+                val shownWeekTotal = if (showIncome) weekIncome else weekTotal
+                if (shownWeekTotal > 0) {
+                    MCard(Modifier.padding(horizontal = ScreenPadding).padding(bottom = 4.dp), padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("This week", fontSize = 13.sp, color = Muted, modifier = Modifier.weight(1f))
+                            Text(
+                                if (showIncome) "+₹${fmtINR(shownWeekTotal)}" else "₹${fmtINR(shownWeekTotal)}",
+                                fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = if (showIncome) Mint else Ink
+                            )
+                        }
+                    }
+                }
             }
 
-            // ── Expense list ────────────────────────────────────
             when {
                 showIncome -> IncomeList(
                     groups = incomeGroups,
@@ -347,70 +291,26 @@ fun ExpensesScreen(
                     onEdit = { editingIncome = it },
                     onDelete = { incomeToDelete = it }
                 )
-                !hasAnyExpenses -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "No expenses yet.\nSMS transactions will appear here automatically.",
-                            color = Muted,
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                    }
-                }
-                expenses.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No expenses match your search.", color = Muted, fontSize = 13.sp)
-                    }
-                }
+                !hasAnyExpenses -> EmptyText("No expenses yet.\nSMS transactions will appear here automatically.")
+                expenses.isEmpty() -> EmptyText("No expenses match your search.")
                 else -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 80.dp)
+                        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 80.dp)
                     ) {
-                        grouped.forEachIndexed { groupIdx, dayGroup ->
+                        grouped.forEach { dayGroup ->
                             if (!sortByAmount) {
-                                item(key = "header_${dayGroup.key}") {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp)
-                                            .padding(top = if (groupIdx == 0) 0.dp else 16.dp, bottom = 8.dp)
-                                            .padding(horizontal = 4.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            "${dayGroup.dayLabel}, ${dayGroup.dateLabel}".uppercase(),
-                                            fontFamily = AnekLatin,
-                                            fontSize = 10.5.sp,
-                                            letterSpacing = 1.6.sp,
-                                            color = Muted,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Text(
-                                            "₹${fmtINR(dayGroup.total)}",
-                                            fontFamily = AnekLatin,
-                                            fontSize = 11.sp,
-                                            color = Muted
-                                        )
-                                    }
-                                }
+                                item(key = "header_${dayGroup.key}") { DayHeader(dayGroup.label, "₹${fmtINR(dayGroup.total)}", Muted) }
                             }
                             item(key = "card_${dayGroup.key}") {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp)
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(Paper)
-                                ) {
+                                Column {
                                     dayGroup.items.forEachIndexed { i, expense ->
                                         val category = categories.find { it.id == expense.categoryId }
-                                        if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
+                                        if (i > 0) RowDivider()
                                         ExpenseRowItem(
                                             expense = expense,
                                             category = category,
+                                            parent = category?.parentId?.let { id -> categories.find { it.id == id } },
                                             selected = expense.id in selectedIds,
                                             onEdit = { editingExpense = expense },
                                             onDelete = { expenseToDelete = expense },
@@ -429,7 +329,7 @@ fun ExpensesScreen(
     }
 
     if (showAddDialog) {
-        AddExpenseDialog(
+        AddExpenseSheet(
             categories = categories,
             lastUsedCategoryId = lastManualCategoryId,
             startAsIncome = addAsIncome,
@@ -449,7 +349,7 @@ fun ExpensesScreen(
     }
 
     editingIncome?.let { income ->
-        EditIncomeDialog(
+        EditIncomeSheet(
             income = income,
             onDismiss = { editingIncome = null },
             onConfirm = { amount, description, date, tags ->
@@ -486,7 +386,7 @@ fun ExpensesScreen(
     }
 
     editingExpense?.let { expense ->
-        EditExpenseDialog(
+        EditExpenseSheet(
             expense = expense,
             categories = categories,
             onDismiss = { editingExpense = null },
@@ -548,7 +448,7 @@ fun ExpensesScreen(
     }
 
     if (showBulkCategorize) {
-        BulkCategorizeDialog(
+        BulkCategorizeSheet(
             categories = categories,
             onDismiss = { showBulkCategorize = false },
             onConfirm = { catId ->
@@ -559,7 +459,7 @@ fun ExpensesScreen(
     }
 
     if (showAdvancedFilters) {
-        AdvancedFiltersDialog(
+        AdvancedFiltersSheet(
             minAmount = minAmount,
             maxAmount = maxAmount,
             dateFilter = dateFilter,
@@ -575,7 +475,26 @@ fun ExpensesScreen(
 }
 
 @Composable
-private fun AdvancedFiltersDialog(
+private fun EmptyText(text: String) {
+    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
+        Text(text, color = Muted, fontSize = 13.sp, lineHeight = 20.sp, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun DayHeader(label: String, total: String, totalColor: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, color = Muted)
+        Text(total, fontSize = 13.sp, color = totalColor)
+    }
+}
+
+@Composable
+private fun AdvancedFiltersSheet(
     minAmount: Double?,
     maxAmount: Double?,
     dateFilter: DateFilter?,
@@ -594,57 +513,58 @@ private fun AdvancedFiltersDialog(
     // Dates: ALL means no date filter. A preset stays a preset ("This month" moves on with the month).
     var preset by rememberSaveable { mutableStateOf(dateFilter?.preset ?: ExportPreset.ALL) }
     var custom by rememberSaveable { mutableStateOf(dateFilter?.custom) }
+    val valid = minValue != null && maxValue != null && !inverted &&
+        (preset != ExportPreset.CUSTOM || custom != null)
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text("Advanced Filters", color = Ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text("Dates", style = MaterialTheme.typography.labelSmall, color = Muted)
-                DatePresetOptions(preset, custom, pickerTitle = "Dates to show", allLabel = "Any time") { p, c ->
-                    preset = p; custom = c
-                }
-                Text("Amount Range", style = MaterialTheme.typography.labelSmall, color = Muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = minText,
-                        onValueChange = { minText = it },
-                        label = { Text("Min (₹)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = min.invalid,
-                        supportingText = min.supportingText,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
-                    )
-                    OutlinedTextField(
-                        value = maxText,
-                        onValueChange = { maxText = it },
-                        label = { Text("Max (₹)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        isError = max.invalid || inverted,
-                        supportingText = if (inverted) {{ Text("Less than min") }} else max.supportingText,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedTextColor = Ink, unfocusedTextColor = Ink)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            val valid = minValue != null && maxValue != null && !inverted &&
-                (preset != ExportPreset.CUSTOM || custom != null)
-            TextButton(enabled = valid, onClick = {
-                // "This month" and "Last month" are budget months, like the Overview.
-                onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 },
-                    if (preset == ExportPreset.ALL) null else DateFilter(preset, custom.takeIf { preset == ExportPreset.CUSTOM }))
-            }) { Text("Apply", color = if (valid) Gold else Muted) }
-        },
-        dismissButton = {
-            TextButton(onClick = {
-                minText = ""; maxText = ""; onConfirm(null, null, null)
-            }) { Text("Clear", color = Pink) }
+    MSheet(onDismiss) {
+        SheetTitle("Advanced Filters")
+        FieldLabel("Dates")
+        DatePresetOptions(preset, custom, pickerTitle = "Dates to show", allLabel = "Any time") { p, c ->
+            preset = p; custom = c
         }
-    )
+        Spacer(Modifier.height(10.dp))
+        FieldLabel("Amount Range")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = minText,
+                onValueChange = { minText = it },
+                label = { Text("Min (₹)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                isError = min.invalid,
+                supportingText = min.supportingText,
+                modifier = Modifier.weight(1f),
+                shape = FieldShape, colors = fieldColors()
+            )
+            OutlinedTextField(
+                value = maxText,
+                onValueChange = { maxText = it },
+                label = { Text("Max (₹)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                isError = max.invalid || inverted,
+                supportingText = if (inverted) {{ Text("Less than min") }} else max.supportingText,
+                modifier = Modifier.weight(1f),
+                shape = FieldShape, colors = fieldColors()
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        PrimaryButton("Apply", enabled = valid, onClick = {
+            // "This month" and "Last month" are budget months, like the Overview.
+            onConfirm(minValue?.takeIf { it > 0 }, maxValue?.takeIf { it > 0 },
+                if (preset == ExportPreset.ALL) null else DateFilter(preset, custom.takeIf { preset == ExportPreset.CUSTOM }))
+        })
+        UnderButtonAction("Clear", Pink) { minText = ""; maxText = ""; onConfirm(null, null, null) }
+    }
+}
+
+@Composable
+private fun FieldLabel(text: String) {
+    Text(text, fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 6.dp))
+}
+
+/** A text action centred under a sheet's buttons: Pink for a destructive one. */
+@Composable
+private fun ColumnScope.UnderButtonAction(text: String, color: Color, onClick: () -> Unit) {
+    TextAction(text, onClick, color = color, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 10.dp))
 }
 
 @Composable
@@ -657,20 +577,21 @@ private fun BulkActionsToolbar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = ScreenPadding, vertical = 12.dp)
             .height(56.dp)
-            .clip(RoundedCornerShape(100.dp))
+            .clip(ButtonShape)
             .background(Gold)
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         IconButton(onClick = onClear) {
             Icon(Icons.Default.Close, "Clear selection", tint = Deep)
         }
         Text(
             text = "$selectedCount selected",
-            style = MaterialTheme.typography.titleMedium,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
             color = Deep,
             modifier = Modifier.weight(1f)
         )
@@ -683,103 +604,23 @@ private fun BulkActionsToolbar(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BulkCategorizeDialog(
+private fun BulkCategorizeSheet(
     categories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (Long) -> Unit
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
     var selectedCategoryId by rememberSaveable { mutableStateOf(categories.firstOrNull()?.id ?: -1L) }
-    val selectedCategory = categories.find { it.id == selectedCategoryId }
-    val bulkParents = remember(categories) { categories.filter { it.parentId == null } }
-    val bulkChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text("Move to Category", color = Ink) },
-        text = {
-            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                OutlinedTextField(
-                    value = categoryDisplayText(selectedCategory, categories),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Category") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                )
-                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    bulkParents.forEach { parent ->
-                        DropdownMenuItem(
-                            text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
-                            onClick = { selectedCategoryId = parent.id; expanded = false }
-                        )
-                        bulkChildrenMap[parent.id]?.forEach { child ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row {
-                                        Spacer(Modifier.width(16.dp))
-                                        Text("↳ ${child.emoji} ${child.name}")
-                                    }
-                                },
-                                onClick = { selectedCategoryId = child.id; expanded = false }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selectedCategoryId) }) {
-                Text("Confirm", color = Gold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
-        }
-    )
-}
-
-@Composable
-private fun ChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(if (selected) Ink else Paper)
-            .border(1.dp, if (selected) Color.Transparent else Hairline, RoundedCornerShape(100.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp)
-    ) {
-        Text(
-            label,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (selected) Canvas else InkSoft,
-            letterSpacing = 0.1.sp
+    MSheet(onDismiss) {
+        SheetTitle("Move to Category")
+        CategoryDropdown(
+            text = categoryDisplayText(categories.find { it.id == selectedCategoryId }, categories),
+            categories = categories,
+            pendingLabel = null,
+            onSelect = { selectedCategoryId = it }
         )
-    }
-}
-
-@Composable
-private fun TagChipPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(if (selected) GoldSoft else Paper)
-            .border(1.dp, if (selected) GoldInk.copy(alpha = 0.4f) else Hairline, RoundedCornerShape(100.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            "#$label",
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (selected) GoldInk else Muted,
-            letterSpacing = 0.1.sp,
-            fontFamily = AnekLatin
-        )
+        ButtonPair("Cancel", onDismiss, "Confirm", { onConfirm(selectedCategoryId) })
     }
 }
 
@@ -789,13 +630,13 @@ private fun BasicSearchField(value: String, onValueChange: (String) -> Unit, mod
         value = value,
         onValueChange = onValueChange,
         modifier = modifier,
-        textStyle = androidx.compose.ui.text.TextStyle(color = Ink, fontSize = 13.5.sp),
+        textStyle = LocalTextStyle.current.copy(color = Ink, fontSize = 15.sp),
         singleLine = true,
         cursorBrush = androidx.compose.ui.graphics.SolidColor(Gold),
         decorationBox = { innerTextField ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) {
-                    Text("Search merchants, notes…", color = Whisper, fontSize = 13.5.sp)
+                    Text("Search merchants, notes…", color = Whisper, fontSize = 15.sp)
                 }
                 innerTextField()
             }
@@ -803,11 +644,17 @@ private fun BasicSearchField(value: String, onValueChange: (String) -> Unit, mod
     )
 }
 
+/** "Food › Coffee · UPI · #work": the category, how it was paid, and the first tag. */
+internal fun expenseSubtitle(categoryName: String?, paymentMethod: String, tags: String): String =
+    listOfNotNull(categoryName, paymentMethod.takeIf { it.isNotBlank() }, Tags.parse(tags).firstOrNull()?.let { "#$it" })
+        .joinToString(" · ")
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ExpenseRowItem(
     expense: Expense,
     category: Category?,
+    parent: Category?,
     selected: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -816,148 +663,45 @@ private fun ExpenseRowItem(
     isSelectionMode: Boolean
 ) {
     val isPending = expense.categoryId == -1L
-    val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(expense.date))
-    val catColor = if (isPending) Pink else if (category != null) parseColor(category.colorHex) else Muted
-
-    Row(
+    AccentRow(
+        accent = when {
+            selected -> Gold
+            isPending -> Pink
+            category != null -> parseColor(category.colorHex)
+            else -> Muted
+        },
+        title = expense.description.ifBlank { "No description" }.take(40),
+        subtitle = if (isPending) "Needs a category"
+            else expenseSubtitle(category?.let { Budgets.name(it, parent) }, expense.paymentMethod, expense.tags),
+        trailing = "",
+        subtitleColor = if (isPending) Pink else Muted,
         modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                when {
-                    selected -> Gold.copy(alpha = 0.15f)
-                    isPending -> PinkSoft
-                    else -> Color.Transparent
-                }
-            )
+            .background(if (selected) Gold.copy(alpha = 0.15f) else Color.Transparent)
             .combinedClickable(
                 onClick = { if (isSelectionMode) onSelect() else if (isPending) onCategorize() else onEdit() },
                 onLongClick = onSelect
-            )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Selection indicator or Category tile
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (selected) Gold 
-                    else catColor.copy(alpha = if (isPending) 1f else 0.13f)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (selected) {
-                Icon(Icons.Default.Check, null, tint = Canvas, modifier = Modifier.size(20.dp))
-            } else if (isPending) {
-                Text(
-                    "?",
-                    fontFamily = AnekLatin,
-                    fontSize = 18.sp,
-                    color = Color.White
-                )
-            } else {
-                Text(category?.emoji ?: "?", fontSize = 18.sp)
-            }
-        }
+            ),
+        actions = { AmountAndActions("₹${fmtINR(expense.amount)}", Ink, showActions = !isSelectionMode, onEdit, onDelete) }
+    )
+}
 
-        // Description + meta
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                expense.description.ifBlank { "No description" }.take(40),
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = Ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(2.dp))
-            if (isPending) {
-                Text(
-                    "Tap to categorize →",
-                    fontSize = 11.sp,
-                    color = Pink,
-                    fontWeight = FontWeight.SemiBold
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(timeStr, fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
-                    Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
-                    Text(
-                        (expense.source ?: "MANUAL").uppercase(),
-                        fontFamily = AnekLatin,
-                        fontSize = 9.5.sp,
-                        color = Muted,
-                        letterSpacing = 0.6.sp
-                    )
-                    if (category != null) {
-                        Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
-                        Text(
-                            category.name,
-                            fontSize = 11.sp,
-                            color = catColor,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+/** The amount with the row's edit and delete under it. */
+@Composable
+private fun AmountAndActions(amount: String, color: Color, showActions: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Column(horizontalAlignment = Alignment.End) {
+        Text(amount, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
+        if (showActions) {
+            Row {
+                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(18.dp))
                 }
-                val parsedTags = Tags.parse(expense.tags)
-                if (parsedTags.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(top = 3.dp)
-                    ) {
-                        parsedTags.take(3).forEach { tag ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(GoldSoft)
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            ) {
-                                Text(
-                                    "#$tag",
-                                    fontSize = 9.5.sp,
-                                    color = GoldInk,
-                                    fontFamily = AnekLatin
-                                )
-                            }
-                        }
-                        if (parsedTags.size > 3) {
-                            Text("+${parsedTags.size - 3}", fontSize = 9.5.sp, color = Muted, fontFamily = AnekLatin)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Amount + actions
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 13.sp, fontStyle = FontStyle.Normal, color = (if (isPending) Pink else Ink).copy(alpha = 0.55f), fontFamily = AnekLatin)) { append("₹") }
-                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = AnekLatin, color = if (isPending) Pink else Ink)) { append(fmtINR(expense.amount)) }
-                }
-            )
-            if (!isSelectionMode) {
-                Row {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
-                    }
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(18.dp))
                 }
             }
         }
     }
 }
-
-// ── Dialogs ─────────────────────────────────────────────────────────────────
 
 /** "Debit Card" comes from debit-card SMS (`SmsParser.detectPaymentMethod`); a plain string, no schema change. */
 private val PAYMENT_METHODS = listOf("UPI", "Credit Card", "Debit Card", "Cash")
@@ -972,9 +716,84 @@ private fun categoryDisplayText(category: Category?, allCategories: List<Categor
     }
 }
 
+/** The category picker of the add, edit and move sheets. [pendingLabel], when given, is a first option that files the expense as pending (-1). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddExpenseDialog(
+private fun CategoryDropdown(text: String, categories: List<Category>, pendingLabel: String?, onSelect: (Long) -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val parents = remember(categories) { categories.filter { it.parentId == null } }
+    val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Category") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
+            shape = FieldShape, colors = fieldColors()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Field) {
+            if (pendingLabel != null) {
+                DropdownMenuItem(
+                    text = { Text(pendingLabel, color = Muted) },
+                    onClick = { onSelect(-1L); expanded = false }
+                )
+            }
+            parents.forEach { parent ->
+                DropdownMenuItem(
+                    text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
+                    onClick = { onSelect(parent.id); expanded = false }
+                )
+                childrenMap[parent.id]?.forEach { child ->
+                    DropdownMenuItem(
+                        text = {
+                            Row {
+                                Spacer(Modifier.width(16.dp))
+                                Text("↳ ${child.emoji} ${child.name}")
+                            }
+                        },
+                        onClick = { onSelect(child.id); expanded = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotesAndTags(description: String, onDescription: (String) -> Unit, tags: String, onTags: (String) -> Unit, tagsLabel: String) {
+    OutlinedTextField(
+        value = description,
+        onValueChange = onDescription,
+        label = { Text("Notes (optional)") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        shape = FieldShape, colors = fieldColors()
+    )
+    OutlinedTextField(
+        value = tags,
+        onValueChange = onTags,
+        label = { Text(tagsLabel) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        shape = FieldShape, colors = fieldColors()
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PaymentMethodChips(selected: String, onSelect: (String) -> Unit) {
+    Column {
+        FieldLabel("Payment Method")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            PAYMENT_METHODS.forEach { method -> Chip(method, selected = selected == method, onClick = { onSelect(method) }) }
+        }
+    }
+}
+
+@Composable
+private fun AddExpenseSheet(
     categories: List<Category>,
     lastUsedCategoryId: Long,
     startAsIncome: Boolean,
@@ -989,107 +808,43 @@ private fun AddExpenseDialog(
     // null until the user picks one, so the last-used default can appear once categories load.
     var userCategoryChoice by rememberSaveable { mutableStateOf<Long?>(null) }
     val selectedCategoryId = startingCategoryId(userCategoryChoice, categories, lastUsedCategoryId)
-    var expanded by rememberSaveable { mutableStateOf(false) }
     var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(System.currentTimeMillis())) }
     var selectedPaymentMethod by rememberSaveable { mutableStateOf("UPI") }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text(if (isIncome) "Add Income" else "Add Expense", color = Ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TwoWayToggle("Expense", "Income", rightSelected = isIncome, onSelect = { isIncome = it })
-                AmountField(amount)
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Notes (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = tags,
-                    onValueChange = { tags = it },
-                    label = { Text("Tags (e.g. #vacation, #gift)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                // Income has no payment method or category
-                if (!isIncome) {
-                    Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PAYMENT_METHODS.forEach { method ->
-                            FilterChip(
-                                selected = selectedPaymentMethod == method,
-                                onClick = { selectedPaymentMethod = method },
-                                label = { Text(method, fontSize = 12.sp) }
-                            )
-                        }
-                    }
-                    run {
-                        val parents = remember(categories) { categories.filter { it.parentId == null } }
-                        val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
-                        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                            OutlinedTextField(
-                                value = categoryDisplayText(selectedCategory, categories, CHOOSE_LATER),
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Category") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                            )
-                            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                // Saving without a category files it as pending, sorted later from the list.
-                                DropdownMenuItem(
-                                    text = { Text(CHOOSE_LATER, color = Muted) },
-                                    onClick = { userCategoryChoice = -1L; expanded = false }
-                                )
-                                parents.forEach { parent ->
-                                    DropdownMenuItem(
-                                        text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
-                                        onClick = { userCategoryChoice = parent.id; expanded = false }
-                                    )
-                                    childrenMap[parent.id]?.forEach { child ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row {
-                                                    Spacer(Modifier.width(16.dp))
-                                                    Text("↳ ${child.emoji} ${child.name}")
-                                                }
-                                            },
-                                            onClick = { userCategoryChoice = child.id; expanded = false }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                DatePickerField(
-                    selectedUtcMidnight = selectedDateUtcMidnight,
-                    onDateSelected = { selectedDateUtcMidnight = it }
+    MSheet(onDismiss) {
+        SheetTitle(if (isIncome) "Add Income" else "Add Expense")
+        SegTabs(listOf("Expense", "Income"), if (isIncome) 1 else 0, onSelect = { isIncome = it == 1 })
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AmountField(amount)
+            NotesAndTags(description, { description = it }, tags, { tags = it }, "Tags (e.g. #vacation, #gift)")
+            // Income has no payment method or category
+            if (!isIncome) {
+                PaymentMethodChips(selectedPaymentMethod) { selectedPaymentMethod = it }
+                // Saving without a category files it as pending, sorted later from the list.
+                CategoryDropdown(
+                    text = categoryDisplayText(selectedCategory, categories, CHOOSE_LATER),
+                    categories = categories,
+                    pendingLabel = CHOOSE_LATER,
+                    onSelect = { userCategoryChoice = it }
                 )
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val amt = amount.validated() ?: return@TextButton
-                    val date = buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis())
-                    if (isIncome) return@TextButton onConfirmIncome(amt, description.trim(), date, tags.trim())
-                    onConfirm(amt, description.trim(), selectedCategoryId, date, tags.trim(), selectedPaymentMethod)
-                }
-            ) { Text("Add", color = Gold) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
+            DatePickerField(
+                selectedUtcMidnight = selectedDateUtcMidnight,
+                onDateSelected = { selectedDateUtcMidnight = it }
+            )
+        }
+        ButtonPair("Cancel", onDismiss, "Add", {
+            val amt = amount.validated() ?: return@ButtonPair
+            val date = buildTimestamp(selectedDateUtcMidnight, System.currentTimeMillis())
+            if (isIncome) return@ButtonPair onConfirmIncome(amt, description.trim(), date, tags.trim())
+            onConfirm(amt, description.trim(), selectedCategoryId, date, tags.trim(), selectedPaymentMethod)
+        })
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditExpenseDialog(
+private fun EditExpenseSheet(
     expense: Expense,
     categories: List<Category>,
     onDismiss: () -> Unit,
@@ -1101,7 +856,6 @@ private fun EditExpenseDialog(
     var description by rememberSaveable { mutableStateOf(expense.description) }
     var tags by rememberSaveable { mutableStateOf(expense.tags) }
     var selectedCategoryId by rememberSaveable { mutableStateOf(expense.categoryId) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
     var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(expense.date)) }
     // Same day: keep the exact original time (buildTimestamp drops milliseconds, which made an
     // untouched SMS expense look edited). Another day: that day at the original time of day.
@@ -1109,105 +863,43 @@ private fun EditExpenseDialog(
         else buildTimestamp(selectedDateUtcMidnight, expense.date)
     var selectedPaymentMethod by rememberSaveable { mutableStateOf(expense.paymentMethod) }
     val selectedCategory = categories.find { it.id == selectedCategoryId }
+    // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
+    // fix made here, like picking a category, isn't lost on the original.
+    val edited = remember(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate) {
+        expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
+    }
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text("Edit Expense", color = Ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AmountField(amount)
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Notes (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = tags,
-                    onValueChange = { tags = it },
-                    label = { Text("Tags (e.g. #vacation, #gift)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text("Payment Method", style = MaterialTheme.typography.labelSmall, color = Muted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PAYMENT_METHODS.forEach { method ->
-                        FilterChip(
-                            selected = selectedPaymentMethod == method,
-                            onClick = { selectedPaymentMethod = method },
-                            label = { Text(method, fontSize = 12.sp) }
-                        )
-                    }
-                }
-                val editParents = remember(categories) { categories.filter { it.parentId == null } }
-                val editChildrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = categoryDisplayText(selectedCategory, categories, UNCATEGORIZED),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Category") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        // Back to pending, like the add dialog's "Choose later".
-                        DropdownMenuItem(
-                            text = { Text(UNCATEGORIZED, color = Muted) },
-                            onClick = { selectedCategoryId = -1L; expanded = false }
-                        )
-                        editParents.forEach { parent ->
-                            DropdownMenuItem(
-                                text = { Text("${parent.emoji} ${parent.name}", fontWeight = FontWeight.SemiBold) },
-                                onClick = { selectedCategoryId = parent.id; expanded = false }
-                            )
-                            editChildrenMap[parent.id]?.forEach { child ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row {
-                                            Spacer(Modifier.width(16.dp))
-                                            Text("↳ ${child.emoji} ${child.name}")
-                                        }
-                                    },
-                                    onClick = { selectedCategoryId = child.id; expanded = false }
-                                )
-                            }
-                        }
-                    }
-                }
-                DatePickerField(
-                    selectedUtcMidnight = selectedDateUtcMidnight,
-                    onDateSelected = { selectedDateUtcMidnight = it }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val amt = amount.validated() ?: return@TextButton
-                onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
-            }) { Text("Save", color = Gold) }
-        },
-        dismissButton = {
-            // With unsaved changes, Duplicate saves them to this expense too (and says so), so a
-            // fix made here, like picking a category, isn't lost on the original.
-            val edited = remember(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate) {
-                expense.isEditedTo(amount.value.text, description, selectedCategoryId, tags, selectedPaymentMethod, formDate)
-            }
-            Row {
-                TextButton(onClick = {
-                    val amt = amount.validated() ?: return@TextButton
-                    onDuplicate(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod, edited)
-                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Gold) }
-                TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
-            }
+    MSheet(onDismiss) {
+        SheetTitle("Edit Expense")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AmountField(amount)
+            NotesAndTags(description, { description = it }, tags, { tags = it }, "Tags (e.g. #vacation, #gift)")
+            PaymentMethodChips(selectedPaymentMethod) { selectedPaymentMethod = it }
+            // "Uncategorized" sends it back to pending, like the add sheet's "Choose later".
+            CategoryDropdown(
+                text = categoryDisplayText(selectedCategory, categories, UNCATEGORIZED),
+                categories = categories,
+                pendingLabel = UNCATEGORIZED,
+                onSelect = { selectedCategoryId = it }
+            )
+            DatePickerField(
+                selectedUtcMidnight = selectedDateUtcMidnight,
+                onDateSelected = { selectedDateUtcMidnight = it }
+            )
         }
-    )
+        ButtonPair("Cancel", onDismiss, "Save", {
+            val amt = amount.validated() ?: return@ButtonPair
+            onConfirm(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod)
+        })
+        UnderButtonAction(if (edited) "Save & duplicate" else "Duplicate", Gold) {
+            val amt = amount.validated() ?: return@UnderButtonAction
+            onDuplicate(amt, description.trim(), selectedCategoryId, formDate, tags.trim(), selectedPaymentMethod, edited)
+        }
+    }
 }
 
 @Composable
-private fun EditIncomeDialog(
+private fun EditIncomeSheet(
     income: Income,
     onDismiss: () -> Unit,
     onConfirm: (amount: Double, description: String, date: Long, tags: String) -> Unit,
@@ -1217,80 +909,30 @@ private fun EditIncomeDialog(
     var description by rememberSaveable { mutableStateOf(income.description) }
     var tags by rememberSaveable { mutableStateOf(income.tags) }
     var selectedDateUtcMidnight by rememberSaveable { mutableStateOf(toUtcMidnight(income.date)) }
-    // Same day keeps the exact time, as in EditExpenseDialog.
+    // Same day keeps the exact time, as in EditExpenseSheet.
     val formDate = if (selectedDateUtcMidnight == toUtcMidnight(income.date)) income.date
         else buildTimestamp(selectedDateUtcMidnight, income.date)
+    val edited = remember(amount.value.text, description, tags, formDate) {
+        income.isEditedTo(amount.value.text, description, tags, formDate)
+    }
 
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text("Edit Income", color = Ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AmountField(amount)
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Notes (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = tags,
-                    onValueChange = { tags = it },
-                    label = { Text("Tags (e.g. #bonus)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                DatePickerField(
-                    selectedUtcMidnight = selectedDateUtcMidnight,
-                    onDateSelected = { selectedDateUtcMidnight = it }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val amt = amount.validated() ?: return@TextButton
-                onConfirm(amt, description.trim(), formDate, tags.trim())
-            }) { Text("Save", color = Gold) }
-        },
-        dismissButton = {
-            val edited = remember(amount.value.text, description, tags, formDate) {
-                income.isEditedTo(amount.value.text, description, tags, formDate)
-            }
-            Row {
-                TextButton(onClick = {
-                    val amt = amount.validated() ?: return@TextButton
-                    onDuplicate(amt, description.trim(), formDate, tags.trim(), edited)
-                }) { Text(if (edited) "Save & duplicate" else "Duplicate", color = Gold) }
-                TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
-            }
+    MSheet(onDismiss) {
+        SheetTitle("Edit Income")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AmountField(amount)
+            NotesAndTags(description, { description = it }, tags, { tags = it }, "Tags (e.g. #bonus)")
+            DatePickerField(
+                selectedUtcMidnight = selectedDateUtcMidnight,
+                onDateSelected = { selectedDateUtcMidnight = it }
+            )
         }
-    )
-}
-
-/** Two options in a pill, like Statistics' view switch. */
-@Composable
-private fun TwoWayToggle(left: String, right: String, rightSelected: Boolean, onSelect: (rightSelected: Boolean) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(Paper)
-            .border(1.dp, Hairline, RoundedCornerShape(100.dp))
-            .padding(3.dp)
-    ) {
-        listOf(false to left, true to right).forEach { (isRight, label) ->
-            val selected = isRight == rightSelected
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(if (selected) Ink else Color.Transparent)
-                    .clickable { onSelect(isRight) }
-                    .padding(horizontal = 18.dp, vertical = 7.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, color = if (selected) Canvas else Muted)
-            }
+        ButtonPair("Cancel", onDismiss, "Save", {
+            val amt = amount.validated() ?: return@ButtonPair
+            onConfirm(amt, description.trim(), formDate, tags.trim())
+        })
+        UnderButtonAction(if (edited) "Save & duplicate" else "Duplicate", Gold) {
+            val amt = amount.validated() ?: return@UnderButtonAction
+            onDuplicate(amt, description.trim(), formDate, tags.trim(), edited)
         }
     }
 }
@@ -1298,91 +940,32 @@ private fun TwoWayToggle(left: String, right: String, rightSelected: Boolean, on
 @Composable
 private fun IncomeList(groups: List<DayGroup<Income>>, hasAny: Boolean, showDayHeaders: Boolean, onEdit: (Income) -> Unit, onDelete: (Income) -> Unit) {
     when {
-        !hasAny -> Box(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp), contentAlignment = Alignment.Center) {
-            Text(
-                "No income yet.\nTap Add income, or add your salary as recurring income in Plan → Bills & Reminders.",
-                color = Muted,
-                fontSize = 13.sp,
-                lineHeight = 20.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-        }
-        groups.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No income matches your search.", color = Muted, fontSize = 13.sp)
-        }
-        else -> LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
-            groups.forEachIndexed { groupIdx, dayGroup ->
+        !hasAny -> EmptyText("No income yet.\nTap Add income, or add your salary as recurring income in Plan → Bills & Reminders.")
+        groups.isEmpty() -> EmptyText("No income matches your search.")
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 80.dp)
+        ) {
+            groups.forEach { dayGroup ->
                 if (showDayHeaders) {
-                    item(key = "income_header_${dayGroup.key}") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .padding(top = if (groupIdx == 0) 0.dp else 16.dp, bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("${dayGroup.dayLabel}, ${dayGroup.dateLabel}".uppercase(), fontFamily = AnekLatin,
-                                fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = Muted, fontWeight = FontWeight.Medium)
-                            Text("+₹${fmtINR(dayGroup.total)}", fontFamily = AnekLatin, fontSize = 11.sp, color = Gold)
-                        }
-                    }
+                    item(key = "income_header_${dayGroup.key}") { DayHeader(dayGroup.label, "+₹${fmtINR(dayGroup.total)}", Mint) }
                 }
                 item(key = "income_card_${dayGroup.key}") {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp)).background(Paper)
-                    ) {
+                    Column {
                         dayGroup.items.forEachIndexed { i, income ->
-                            if (i > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(HairlineSoft))
-                            IncomeRowItem(income, onEdit = { onEdit(income) }, onDelete = { onDelete(income) })
+                            if (i > 0) RowDivider()
+                            AccentRow(
+                                accent = Mint,
+                                title = income.description.ifBlank { "Income" }.take(40),
+                                subtitle = expenseSubtitle(income.source, "", income.tags),
+                                trailing = "",
+                                onClick = { onEdit(income) },
+                                actions = {
+                                    AmountAndActions("+₹${fmtINR(income.amount)}", Mint, showActions = true, { onEdit(income) }, { onDelete(income) })
+                                }
+                            )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IncomeRowItem(income: Income, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val timeStr = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(income.date))
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Gold.copy(alpha = 0.13f)),
-            contentAlignment = Alignment.Center
-        ) { Text(if (income.source == "Recurring") "🔁" else "💰", fontSize = 18.sp) }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(income.description.ifBlank { "Income" }.take(40), fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(timeStr, fontFamily = AnekLatin, fontSize = 10.5.sp, color = Muted)
-                Box(Modifier.size(3.dp).clip(CircleShape).background(Whisper))
-                Text(income.source.uppercase(), fontFamily = AnekLatin, fontSize = 9.5.sp, color = Muted, letterSpacing = 0.6.sp)
-            }
-            val parsedTags = Tags.parse(income.tags)
-            if (parsedTags.isNotEmpty()) {
-                Text(parsedTags.take(3).joinToString(" ") { "#$it" }, fontSize = 9.5.sp, color = GoldInk, fontFamily = AnekLatin,
-                    modifier = Modifier.padding(top = 3.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(fontSize = 13.sp, color = Gold.copy(alpha = 0.7f), fontFamily = AnekLatin)) { append("+₹") }
-                    withStyle(SpanStyle(fontSize = 20.sp, fontFamily = AnekLatin, color = Gold)) { append(fmtINR(income.amount)) }
-                }
-            )
-            Row {
-                IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted, modifier = Modifier.size(14.dp))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -1401,15 +984,8 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
             .apply { timeZone = TimeZone.getTimeZone("UTC") }
             .format(Date(selectedUtcMidnight))
     }
-    OutlinedCard(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CalendarToday, null, modifier = Modifier.size(18.dp), tint = Muted)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Date", style = MaterialTheme.typography.labelSmall, color = Muted)
-                Text(displayText, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
+    FieldBox("Date", onClick = { showPicker = true }) {
+        Text(displayText, fontSize = 15.sp, color = Ink)
     }
     if (showPicker) {
         val state = rememberDatePickerState(
@@ -1429,22 +1005,12 @@ private fun DatePickerField(selectedUtcMidnight: Long, onDateSelected: (Long) ->
     }
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Expenses or incomes by day, newest first (or one "Highest amount" group when sorting by amount). */
+/** Expenses or incomes by day, newest first (or one group when sorting by amount, shown without a header). */
 private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T) -> Long, amountOf: (T) -> Double): List<DayGroup<T>> {
     if (expenses.isEmpty()) return emptyList()
-    
+
     if (sortByAmount) {
-        return listOf(
-            DayGroup(
-                key = "by_amount",
-                dayLabel = "Highest",
-                dateLabel = "Amount",
-                items = expenses.sortedByDescending(amountOf),
-                total = expenses.sumOf(amountOf)
-            )
-        )
+        return listOf(DayGroup(key = "by_amount", label = "HIGHEST AMOUNT", items = expenses.sortedByDescending(amountOf), total = expenses.sumOf(amountOf)))
     }
 
     val todayCal = Calendar.getInstance()
@@ -1464,13 +1030,11 @@ private fun <T> groupByDay(expenses: List<T>, sortByAmount: Boolean, dateOf: (T)
                 set(Calendar.MONTH, key.second)
                 set(Calendar.DAY_OF_MONTH, key.third)
             }
-            val dayLabel = when {
-                isSameDay(c, todayCal) -> "Today"
-                isSameDay(c, yesterdayCal) -> "Yesterday"
-                else -> SimpleDateFormat("EEE", Locale.getDefault()).format(c.time)
+            val label = when {
+                isSameDay(c, todayCal) -> "TODAY"
+                isSameDay(c, yesterdayCal) -> "YESTERDAY"
+                else -> SimpleDateFormat("EEE d MMM", Locale.getDefault()).format(c.time).uppercase()
             }
-            val dateLabel = SimpleDateFormat("d MMM", Locale.getDefault()).format(c.time)
-            DayGroup(key = "${key.first}_${key.second}_${key.third}", dayLabel = dayLabel, dateLabel = dateLabel, items = items.sortedByDescending(dateOf), total = items.sumOf(amountOf))
+            DayGroup(key = "${key.first}_${key.second}_${key.third}", label = label, items = items.sortedByDescending(dateOf), total = items.sumOf(amountOf))
         }
 }
-
