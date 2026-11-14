@@ -79,7 +79,7 @@ object NotificationHelper {
         context, 0,
         Intent(context, NotificationActionReceiver::class.java).apply {
             action = NotificationActionReceiver.ACTION_CATEGORIZE
-            data = Uri.parse("mymoney://categorize/$expenseId/$categoryId")
+            data = Uri.parse("thriftpot://categorize/$expenseId/$categoryId")
             putExtra(NotificationActionReceiver.EXTRA_EXPENSE_ID, expenseId)
             putExtra(NotificationActionReceiver.EXTRA_CATEGORY_ID, categoryId)
         },

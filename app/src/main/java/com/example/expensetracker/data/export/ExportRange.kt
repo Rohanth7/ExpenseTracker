@@ -45,6 +45,6 @@ object ExportRange {
             preset == ExportPreset.THIS_YEAR -> f("yyyy", range.first)
             else -> "${f("yyyy-MM-dd", range.first)}_to_${f("yyyy-MM-dd", range.second)}"
         }
-        return "mymoney-expenses-$part.csv"
+        return "thriftpot-expenses-$part.csv"
     }
 }

@@ -8,7 +8,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Android's automatic Google backup must not upload the database, settings or app files: payment
- * data only leaves the phone through MyMoney's own backup, which the user starts and controls.
+ * data only leaves the phone through Thriftpot's own backup, which the user starts and controls.
  */
 class BackupRulesTest {
     private val privateDomains = setOf("database", "sharedpref", "file", "root")

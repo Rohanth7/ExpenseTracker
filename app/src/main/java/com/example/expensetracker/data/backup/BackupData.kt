@@ -125,7 +125,7 @@ object BackupCodec {
     fun parse(json: String): ParseResult {
         // A file that starts like a backup but won't parse was cut short (e.g. an interrupted copy).
         val notBackup = if (json.trimStart().startsWith("{") && json.contains("\"categories\""))
-            "The backup file is damaged or incomplete." else "This file isn't a MyMoney backup."
+            "The backup file is damaged or incomplete." else "This file isn't a Thriftpot backup."
         val data = try {
             gson.fromJson(json, BackupData::class.java)
         } catch (e: JsonParseException) {
@@ -135,10 +135,10 @@ object BackupCodec {
         } ?: return ParseResult.Invalid("The backup file is empty.")
 
         if (data.version > CURRENT_VERSION) {
-            return ParseResult.Invalid("This backup was made by a newer version of MyMoney. Update the app first.")
+            return ParseResult.Invalid("This backup was made by a newer version of Thriftpot. Update the app first.")
         }
         if (data.categories == null || data.expenses == null) {
-            return ParseResult.Invalid("This file isn't a MyMoney backup.")
+            return ParseResult.Invalid("This file isn't a Thriftpot backup.")
         }
         problem(data)?.let { return ParseResult.Invalid("The backup file is damaged: $it.") }
         return ParseResult.Ok(data)

@@ -6,11 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** B-26: Settings ended with "Expense Tracker · v2.1" in an app called MyMoney at version 1.0. */
+/** B-26: Settings ended with "Expense Tracker · v2.1" in an app called Thriftpot at version 1.0. */
 class AppFooterTest {
     @Test fun `the footer is the app's name and version`() {
-        assertEquals("MyMoney · v1.0", appFooter("MyMoney", "1.0"))
-        assertEquals("MyMoney", appFooter("MyMoney", ""))
+        assertEquals("Thriftpot · v1.0", appFooter("Thriftpot", "1.0"))
+        assertEquals("Thriftpot", appFooter("Thriftpot", ""))
     }
 
     @Test fun `no screen writes the app's name or version by hand`() {

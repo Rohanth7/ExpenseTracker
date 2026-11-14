@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Android 11 and older, where one set of rules covers both Google backup and phone-to-phone
-    transfer. Nothing is backed up; use MyMoney's own backup to move data.
+    transfer. Nothing is backed up; use Thriftpot's own backup to move data.
 -->
 <full-backup-content>
     <exclude domain="root" path="." />
