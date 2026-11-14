@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Android 12+. Nothing goes to Android's automatic Google backup: payment data only leaves the
-    phone through MyMoney's own backup (export or Google Drive), which the user turns on.
+    phone through Thriftpot's own backup (export or Google Drive), which the user turns on.
     Phone-to-phone transfer (setting up a new phone from the old one) still copies everything.
 -->
 <data-extraction-rules>

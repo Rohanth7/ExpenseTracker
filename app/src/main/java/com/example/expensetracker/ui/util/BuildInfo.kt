@@ -11,6 +11,6 @@ fun isDebugBuild(context: Context): Boolean =
 fun appVersionName(context: Context): String =
     runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
 
-/** The Settings footer: the app's own name and real version, e.g. "MyMoney · v1.0". */
+/** The Settings footer: the app's own name and real version, e.g. "Thriftpot · v1.0". */
 fun appFooter(appName: String, versionName: String): String =
     if (versionName.isBlank()) appName else "$appName · v$versionName"
