@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.rules
 
+import com.example.expensetracker.ui.components.NoInsets
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,7 +34,7 @@ fun MessageRulesScreen(viewModel: MessageRulesViewModel, onTeach: () -> Unit, on
         viewModel.clearMessage()
     }
 
-    Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(containerColor = Canvas, contentWindowInsets = NoInsets, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)

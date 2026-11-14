@@ -69,7 +69,7 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = ScreenPadding)) {
+    Column(Modifier.fillMaxSize().background(Canvas).padding(horizontal = ScreenPadding)) {
         ScreenHeader("Teach a message", onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             if (editing) {

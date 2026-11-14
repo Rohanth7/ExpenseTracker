@@ -71,7 +71,8 @@ import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.util.parseAmountOrZero
 import com.example.expensetracker.ui.util.oneCharacter
 import com.example.expensetracker.ui.util.wholeNumberIn
-import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.*
+import androidx.compose.ui.text.style.TextAlign
 import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
@@ -180,7 +181,7 @@ fun SettingsScreen(
         if (!locked) snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
     }
 
-    Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Scaffold(containerColor = Canvas, contentWindowInsets = NoInsets, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         when (currentPage) {
             null -> if (home == SettingsHome.Plan) PlanFrontPage(
                 budgets = budgets, alertPercent = budgetAlertThreshold,
@@ -305,7 +306,7 @@ private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) 
                         Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = day == current, onClick = { onPick(day) },
                                 colors = RadioButtonDefaults.colors(selectedColor = Gold, unselectedColor = Muted))
-                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
+                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 15.sp)
                         }
                     }
                 }
@@ -352,10 +353,6 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
     )
 }
 
-// ── Plan ────────────────────────────────────────────────────────────────────
-
-// ── Main Menu ───────────────────────────────────────────────────────────────
-
 @Composable
 private fun SettingsMainMenu(
     categories: List<Category>,
@@ -373,80 +370,65 @@ private fun SettingsMainMenu(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().background(Canvas),
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
     ) {
+        item { ScreenHeader("Settings", onBack = onBack) }
+        item { AutoTrackingCard(tracking, onFixSms, onFixNotifications) }
         item {
-            SubPageHeader("Settings", onBack)
-            Spacer(Modifier.height(16.dp))
-        }
-        item {
-            SectionLabel("AUTO-TRACKING")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Sms,
-                    iconBg = if (tracking.sms) GoldSoft else PinkSoft,
-                    iconTint = if (tracking.sms) GoldInk else Pink,
-                    title = "Bank SMS",
-                    subtitle = if (tracking.sms) "On · payments are logged from bank texts" else "Off · tap to allow SMS access",
-                    onClick = { if (!tracking.sms) onFixSms() })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.NotificationsActive,
-                    iconBg = if (tracking.notifications) GoldSoft else PinkSoft,
-                    iconTint = if (tracking.notifications) GoldInk else Pink,
-                    title = "Payment app notifications",
-                    subtitle = if (tracking.notifications) "On · GPay, PhonePe, Paytm and bank apps" else "Off · tap to turn on notification access",
-                    onClick = onFixNotifications)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.Rule, iconBg = Canvas, iconTint = Ink,
-                    title = "Message rules",
-                    subtitle = if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
-                    onClick = onOpenMessageRules)
+            MCard(Modifier.padding(top = 10.dp), padding = RowCardPadding) {
+                MenuRow(
+                    "Message rules",
+                    if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
+                    onOpenMessageRules
+                )
+                RowDivider()
+                MenuRow("Categories & tags", "${categories.size} ${if (categories.size != 1) "categories" else "category"}", onOpenCategories)
+                RowDivider()
+                MenuRow("Cloud Backup", if (driveConnected) driveAccountEmail else "Not connected", onClick = { onNavigate(SettingsPage.Cloud) })
+                RowDivider()
+                MenuRow("Preferences", "Alerts, privacy, widget, week start", onClick = { onNavigate(SettingsPage.Preferences) })
+                RowDivider()
+                MenuRow("Data & Backup", "Export, import, reset all data", onClick = { onNavigate(SettingsPage.Data) })
             }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("CLOUD")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Cloud,
-                    iconBg = if (driveConnected) GoldSoft else Canvas,
-                    iconTint = if (driveConnected) GoldInk else Muted,
-                    title = "Cloud Backup",
-                    subtitle = if (driveConnected) driveAccountEmail else "Not connected",
-                    onClick = { onNavigate(SettingsPage.Cloud) })
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("CUSTOMISE")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Category, iconBg = Canvas, iconTint = Ink, title = "Categories & tags",
-                    subtitle = "${categories.size} ${if (categories.size != 1) "categories" else "category"}",
-                    onClick = onOpenCategories)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.Tune, iconBg = Canvas, iconTint = Ink, title = "Preferences",
-                    subtitle = "Alerts, privacy, widget, week start",
-                    onClick = { onNavigate(SettingsPage.Preferences) })
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("DATA")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Storage, iconBg = Canvas, iconTint = Ink, title = "Data & Backup",
-                    subtitle = "Export, import, reset all data",
-                    onClick = { onNavigate(SettingsPage.Data) })
-            }
-            Spacer(Modifier.height(32.dp))
         }
         item {
             val context = LocalContext.current
-            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = AnekLatin, fontSize = 10.sp, color = Whisper,
-                modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Spacer(Modifier.height(40.dp))
+            Text(
+                appFooter(stringResource(R.string.app_name), appVersionName(context)), fontSize = 13.sp, color = Whisper,
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp), textAlign = TextAlign.Center
+            )
         }
     }
 }
 
-// ── Sub-pages ───────────────────────────────────────────────────────────────
+/** One line when both sources are on; otherwise what is off, with a button for the first fix and a link for the second. */
+@Composable
+private fun AutoTrackingCard(tracking: TrackingStatus, onFixSms: () -> Unit, onFixNotifications: () -> Unit) {
+    MCard {
+        if (tracking.sms && tracking.notifications) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToneDot(Mint)
+                Text("Auto-tracking is on", fontSize = 15.sp, color = Ink)
+            }
+            return@MCard
+        }
+        val bothOff = !tracking.sms && !tracking.notifications
+        Text("Auto-tracking needs ${if (bothOff) "two fixes" else "one fix"}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text(
+            when {
+                bothOff -> "Bank SMS and payment app notifications are off."
+                !tracking.sms -> "Payment app notifications are on. Bank SMS is off."
+                else -> "Bank SMS is on. Payment app notifications are off."
+            },
+            fontSize = 13.sp, color = Muted
+        )
+        Spacer(Modifier.height(12.dp))
+        if (!tracking.sms) PrimaryButton("Allow SMS access", onFixSms) else PrimaryButton("Turn on notifications", onFixNotifications)
+        if (bothOff) {
+            TextAction("Turn on notifications", onFixNotifications, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
+        }
+    }
+}
 
 @Composable
 private fun CloudSubPage(
@@ -455,55 +437,46 @@ private fun CloudSubPage(
     onBackUpNow: () -> Unit, onRestoreFromDrive: () -> Unit,
     onConnectDrive: () -> Unit, onDisconnectDrive: () -> Unit, onSetAutoBackup: (Boolean) -> Unit
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Cloud Backup", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Cloud Backup", onBack = onBack) }
         item {
-            SectionLabel("GOOGLE DRIVE")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(20.dp)) {
-                if (driveConnected) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(GoldSoft), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Cloud, null, tint = GoldInk, modifier = Modifier.size(20.dp))
+            SectionLabel("Google Drive")
+            if (driveConnected) {
+                MCard(padding = RowCardPadding) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Google Drive", fontSize = 15.sp, color = Ink)
+                            Text(driveAccountEmail, fontSize = 13.sp, color = Muted)
                         }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text(driveAccountEmail, fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-                        }
-                        TextButton(onClick = onDisconnectDrive) { Text("Disconnect", color = Pink, fontSize = 12.sp) }
+                        TextAction("Disconnect", onDisconnectDrive, color = Pink)
                     }
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    RowDivider()
                     ToggleRow("Automatic Cloud Backup", "Daily backup to a private app folder in your Drive", autoBackupEnabled, onSetAutoBackup)
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                        title = "Back up now", subtitle = if (driveBusy) "Working…" else "Save everything to Drive",
-                        onClick = { if (!driveBusy) onBackUpNow() })
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                        title = "Restore from Drive", subtitle = if (driveBusy) "Working…" else "Replace this phone's data with your Drive backup",
-                        onClick = { if (!driveBusy) onRestoreFromDrive() })
-                } else {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Canvas), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.CloudOff, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text("Not connected", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-                        }
-                    }
+                    RowDivider()
+                    MenuRow("Back up now", if (driveBusy) "Working…" else "Save everything to Drive", onClick = { if (!driveBusy) onBackUpNow() })
+                    RowDivider()
+                    MenuRow(
+                        "Restore from Drive", if (driveBusy) "Working…" else "Replace this phone's data with your Drive backup",
+                        onClick = { if (!driveBusy) onRestoreFromDrive() }
+                    )
+                }
+            } else {
+                MCard {
+                    Text("Google Drive", fontSize = 15.sp, color = Ink)
+                    Text("Not connected", fontSize = 13.sp, color = Muted)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
+                        fontSize = 13.sp, color = Muted, lineHeight = 19.sp
+                    )
                     Spacer(Modifier.height(14.dp))
-                    Text("Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
-                        fontSize = 11.sp, color = Muted, lineHeight = 16.sp)
-                    Spacer(Modifier.height(14.dp))
-                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Gold).clickable(onClick = onConnectDrive).padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center) {
-                        Text("Connect Google Drive", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Deep)
-                    }
+                    PrimaryButton("Connect Google Drive", onConnectDrive)
                 }
             }
         }
-        item { Spacer(Modifier.height(40.dp)) }
     }
 }
 
@@ -516,94 +489,76 @@ private fun PreferencesSubPage(
     onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Preferences", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Preferences", onBack = onBack) }
         item {
-            SectionLabel("NOTIFICATIONS")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Budget alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text(if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit" else "Disabled", fontSize = 11.5.sp, color = Muted)
+            SectionLabel("Notifications")
+            MCard(padding = RowCardPadding) {
+                ToggleRow(
+                    "Budget alerts",
+                    if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit" else "Disabled",
+                    budgetAlertsEnabled, onSetBudgetAlerts
+                )
+                androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Warning threshold", fontSize = 13.sp, color = Muted)
+                            Text("$budgetAlertThreshold%", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                         }
-                        Switch(checked = budgetAlertsEnabled, onCheckedChange = onSetBudgetAlerts,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                    }
-                    androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Warning threshold", fontSize = 11.5.sp, color = Muted)
-                                Text("$budgetAlertThreshold%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Gold, fontFamily = AnekLatin)
-                            }
-                            Slider(value = budgetAlertThreshold.toFloat(), onValueChange = { onSetBudgetThreshold(it.toInt()) },
-                                valueRange = 50f..95f, steps = 8, modifier = Modifier.fillMaxWidth(),
-                                colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Hairline))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("50%", fontSize = 10.sp, color = Whisper)
-                                Text("95%", fontSize = 10.sp, color = Whisper)
-                            }
+                        Slider(value = budgetAlertThreshold.toFloat(), onValueChange = { onSetBudgetThreshold(it.toInt()) },
+                            valueRange = 50f..95f, steps = 8, modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Hairline))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("50%", fontSize = 13.sp, color = Whisper)
+                            Text("95%", fontSize = 13.sp, color = Whisper)
                         }
                     }
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Subscription price alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("Tell me when a subscription's price changes", fontSize = 11.5.sp, color = Muted)
-                    }
-                    Switch(checked = priceAlertsEnabled, onCheckedChange = onSetPriceAlerts,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                }
+                RowDivider()
+                ToggleRow("Subscription price alerts", "Tell me when a subscription's price changes", priceAlertsEnabled, onSetPriceAlerts)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("DISPLAY")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel("Display")
+            MCard(padding = RowCardPadding) {
                 var showWeekStartInfo by rememberSaveable { mutableStateOf(false) }
-                Row(modifier = Modifier.fillMaxWidth().clickable { onSetWeekStart(!weekStartsOnMonday) }.padding(vertical = 14.dp),
+                Row(modifier = Modifier.fillMaxWidth().clickable { onSetWeekStart(!weekStartsOnMonday) }.padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Week starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Icon(Icons.Default.Info, contentDescription = "Info", tint = Muted, modifier = Modifier.size(15.dp).clickable(
+                        Text("Week starts on", fontSize = 15.sp, color = Ink)
+                        Icon(Icons.Default.Info, contentDescription = "Info", tint = Muted, modifier = Modifier.size(18.dp).clickable(
                             indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                         ) { showWeekStartInfo = !showWeekStartInfo })
                     }
-                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
+                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                 }
                 androidx.compose.animation.AnimatedVisibility(visible = showWeekStartInfo) {
                     Text("Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
-                        fontSize = 11.5.sp, color = Muted,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
+                        fontSize = 13.sp, color = Muted, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 var showMonthStart by rememberSaveable { mutableStateOf(false) }
-                Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Month starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
-                    }
+                MenuRow("Month starts on", "Budgets, the forecast and monthly stats run from this day", onClick = { showMonthStart = true }) {
                     Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
-                        fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                 }
                 if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
                     onSetMonthStart(it); showMonthStart = false
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("SECURITY")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel("Security")
+            MCard(padding = RowCardPadding) {
                 ToggleRow("Privacy mode", "Hides screen in app switcher", privacyMode, onSetPrivacyMode)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 ToggleRow("App Lock", "Ask for fingerprint, face or screen lock to open MyMoney", biometricLockEnabled, onSetBiometricLock)
             }
-            Spacer(Modifier.height(40.dp))
         }
     }
 }
@@ -618,37 +573,34 @@ private fun DataSubPage(
     var showCsvDialog by rememberSaveable { mutableStateOf(false) }
     var showResetDialog by rememberSaveable { mutableStateOf(false) }
 
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Data & Backup", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Data & Backup", onBack = onBack) }
         item {
-            SectionLabel("BACKUP")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export CSV", subtitle = "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
+            SectionLabel("Backup")
+            MCard(padding = RowCardPadding) {
+                MenuRow("Export backup", "Save everything to a file", onExport)
+                RowDivider()
+                MenuRow("Export CSV", "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
+                RowDivider()
+                MenuRow("Restore from backup", "Replace all data with a backup file", onImport)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel(if (showMockData) "DEVELOPER" else "DANGER ZONE")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel(if (showMockData) "Developer" else "Danger zone")
+            MCard(padding = RowCardPadding) {
                 // Debug builds only: it deletes all real data before loading samples.
                 if (showMockData) {
-                    SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Gold, modifier = Modifier.size(17.dp)) },
-                        title = "Load mock data", subtitle = "Fill app with 3 months of sample expenses for testing",
-                        onClick = { showMockDataDialog = true })
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    MenuRow("Load mock data", "Fill app with 3 months of sample expenses for testing", onClick = { showMockDataDialog = true })
+                    RowDivider()
                 }
-                SettingRow(icon = { Icon(Icons.Default.Delete, null, tint = Pink, modifier = Modifier.size(17.dp)) },
-                    title = "Reset everything", subtitle = "Delete all data on this phone",
-                    danger = true, onClick = { showResetDialog = true })
+                Column(Modifier.fillMaxWidth().clickable { showResetDialog = true }.padding(vertical = 12.dp)) {
+                    Text("Reset everything", fontSize = 15.sp, color = Pink)
+                    Text("Delete all data on this phone", fontSize = 13.sp, color = Muted)
+                }
             }
-            Spacer(Modifier.height(40.dp))
         }
     }
 
@@ -674,73 +626,14 @@ private fun DataSubPage(
     }
 }
 
-// ── Shared UI helpers ────────────────────────────────────────────────────────
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 10.dp))
-}
-
-@Composable
-private fun MenuCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 4.dp, vertical = 4.dp), content = content)
-}
-
-@Composable
-private fun MenuRow(icon: ImageVector, iconBg: Color, iconTint: Color, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(iconBg), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = Whisper, modifier = Modifier.size(16.dp))
-    }
-}
-
-@Composable
-private fun SubPageHeader(title: String, onBack: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
-        }
-        Text(title, fontFamily = AnekLatin, fontSize = 22.sp, color = Ink)
-    }
-}
-
 @Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, fontSize = 15.sp, color = Ink)
+            Text(subtitle, fontSize = 13.sp, color = Muted)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-    }
-}
-
-@Composable
-private fun SettingRow(icon: @Composable () -> Unit, title: String, subtitle: String, danger: Boolean = false, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(if (danger) PinkSoft else Canvas), contentAlignment = Alignment.Center) { icon() }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = if (danger) Pink else Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = Whisper, modifier = Modifier.size(16.dp))
-    }
-}
-
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 12.sp, color = Muted)
-        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = switchColors())
     }
 }
 
@@ -759,7 +652,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
                 DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
                     preset = p; custom = c
                 }
-                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 13.sp, color = Muted,
                     modifier = Modifier.padding(top = 8.dp))
             }
         },

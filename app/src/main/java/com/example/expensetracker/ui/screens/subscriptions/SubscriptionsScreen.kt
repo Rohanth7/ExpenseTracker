@@ -59,7 +59,7 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
         viewModel.clearMessage()
     }
 
-    Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(containerColor = Canvas, contentWindowInsets = NoInsets, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)
