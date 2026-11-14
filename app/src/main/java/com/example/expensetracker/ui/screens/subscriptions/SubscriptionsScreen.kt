@@ -25,6 +25,12 @@ import com.example.expensetracker.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import com.example.expensetracker.ui.components.*
+import com.example.expensetracker.ui.util.fmtINR
 import kotlin.math.abs
 import kotlin.math.roundToLong
 import com.example.expensetracker.ui.util.formatRupees
@@ -42,7 +48,6 @@ internal fun priceChangeLabel(s: Subscription): String? {
 @Composable
 fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
     val subs by viewModel.subscriptions.collectAsState()
-    val categories by viewModel.categories.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel.message) {
@@ -55,14 +60,11 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
     }
 
     Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp)) {
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
-                    Text("Subscriptions", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink)
-                }
-                Spacer(Modifier.height(12.dp))
-            }
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)
+        ) {
+            item { ScreenHeader("Subscriptions", onBack = onBack) }
             val list = subs
             when {
                 list == null -> Unit
@@ -71,18 +73,17 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
                     item { Summary(list) }
                     items(list, key = { it.key }) { s ->
                         SubscriptionCard(
-                            s, categories.firstOrNull { it.id == s.categoryId },
+                            s,
                             canTrack = viewModel.canTrackAsBill(s),
                             onTrack = { viewModel.trackAsBill(s) },
                             onDismiss = { viewModel.dismiss(s) }
                         )
-                        Spacer(Modifier.height(10.dp))
                     }
                     item {
                         Text(
                             "Found from your payment history: the same payee charging a similar amount at regular intervals. " +
                                 "Bills you already track aren't listed.",
-                            fontSize = 12.sp, color = Muted, lineHeight = 17.sp, modifier = Modifier.padding(4.dp)
+                            fontSize = 13.sp, color = Muted, lineHeight = 19.sp, modifier = Modifier.padding(top = 14.dp)
                         )
                     }
                 }
@@ -93,62 +94,53 @@ fun SubscriptionsScreen(viewModel: SubscriptionsViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun Summary(list: List<Subscription>) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Deep).padding(20.dp)) {
-        Text("ESTIMATED COST", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted)
-        Text("${formatRupees(list.sumOf { it.yearlyCost })} a year",
-            fontFamily = AnekLatin, fontSize = 34.sp, color = Ink)
-        Text("across ${list.size} subscription${if (list.size == 1) "" else "s"}", fontSize = 13.sp, color = InkSoft)
+    val yearly = list.sumOf { it.yearlyCost }
+    MCard {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text("Estimated cost", fontSize = 13.sp, color = Muted)
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)) { append("₹${fmtINR((yearly / 12).roundToLong().toDouble())}") }
+                        withStyle(SpanStyle(fontSize = 13.sp, color = Muted)) { append(" a month") }
+                    }
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("a year", fontSize = 13.sp, color = Muted)
+                Text("₹${fmtINR(yearly.roundToLong().toDouble())}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+            }
+        }
     }
-    Spacer(Modifier.height(16.dp))
 }
 
 @Composable
-private fun SubscriptionCard(s: Subscription, category: Category?, canTrack: Boolean, onTrack: () -> Unit, onDismiss: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(16.dp)) {
+private fun SubscriptionCard(s: Subscription, canTrack: Boolean, onTrack: () -> Unit, onDismiss: () -> Unit) {
+    MCard(Modifier.padding(top = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Canvas), contentAlignment = Alignment.Center) {
-                Text(category?.emoji ?: "🔁", fontSize = 18.sp)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(s.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1)
-                Text("${s.cadence.label} · next around ${formatShortDate(s.nextExpected)}", fontSize = 12.sp, color = Muted)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(formatRupees(s.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                Text("${formatRupees(s.yearlyCost)}/yr", fontSize = 11.sp, color = Muted)
-            }
+            Text(s.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(end = 8.dp))
+            Text(formatRupees(s.amount), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
         }
+        Text("${s.cadence.label} · next around ${formatShortDate(s.nextExpected)}", fontSize = 13.sp, color = Muted)
         priceChangeLabel(s)?.let { label ->
             val rise = s.priceRose
             Text(
-                label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (rise) Pink else Gold,
-                modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(if (rise) PinkSoft else GoldSoft)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (rise) Pink else Mint,
+                modifier = Modifier.padding(top = 4.dp)
                     .semantics { contentDescription = "Price ${if (rise) "up" else "down"} ${label.drop(2)}" }
             )
         }
-        Text("Paid ${s.payments} times, last on ${formatShortDate(s.lastPaid)}", fontSize = 12.sp, color = Muted,
-            modifier = Modifier.padding(top = 10.dp))
-        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (canTrack) Chip("Remind me", Gold, onTrack)
-            Chip("Not a subscription", Muted, onDismiss)
+        Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (canTrack) Chip("Remind me", selected = false, onClick = onTrack)
+            Chip("Not a subscription", selected = false, onClick = onDismiss)
         }
     }
-}
-
-@Composable
-private fun Chip(text: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(10.dp)).background(Canvas).clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) { Text(text, fontSize = 12.5.sp, color = color, fontWeight = FontWeight.Medium) }
 }
 
 @Composable
 private fun EmptyState() {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(20.dp)) {
-        Text("No subscriptions found yet", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Ink)
+    MCard {
+        Text("No subscriptions found yet", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
         Spacer(Modifier.height(6.dp))
         Text(
             "MyMoney looks for the same payee charging a similar amount every week, month, 3 months or year. " +
