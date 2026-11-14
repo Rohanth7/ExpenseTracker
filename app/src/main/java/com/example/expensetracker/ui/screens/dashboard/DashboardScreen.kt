@@ -69,6 +69,7 @@ fun DashboardScreen(
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
     val prefs = remember { PreferencesManager(context.applicationContext) }
     var alertPercent by remember { mutableIntStateOf(prefs.budgetAlertThreshold) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     // "As of now" figures move on when the screen comes back (past midnight, a new budget month,
     // a changed alert threshold).
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -77,6 +78,8 @@ fun DashboardScreen(
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.refresh()
                 alertPercent = prefs.budgetAlertThreshold
+                // Its own state: the view model's can come back equal, and days left still has to move on.
+                now = System.currentTimeMillis()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -88,9 +91,8 @@ fun DashboardScreen(
     val stillDue = state.billsStillDue + state.emiStillDue
     val freeToSpend = state.monthlyIncome - state.totalSpent - stillDue
     val startDay by MonthStartDay.flow(context).collectAsState()
-    val now = remember(state) { System.currentTimeMillis() }
     val daysLeft = BudgetPeriod.daysLeft(now, startDay).coerceAtLeast(1)
-    val comingUp = remember(state.upcomingBills, state.activeLoans, now, startDay) {
+    val comingUp = remember(state.upcomingBills, state.activeLoans, isCurrentMonth, now, startDay) {
         if (isCurrentMonth) ComingUp.of(state.upcomingBills, state.activeLoans, now, BudgetPeriod.current(now, startDay)) else emptyList()
     }
 
@@ -99,18 +101,14 @@ fun DashboardScreen(
         contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 24.dp)
     ) {
         item {
-            ScreenHeader(
-                title = "",
-                actions = {
-                    HeaderIcon(Icons.Outlined.Notifications, "Notifications", onClick = { showNotifCenter = true },
-                        badge = state.notifItems.any { it.isUrgent })
-                    HeaderIcon(Icons.Default.Tune, "Settings", onClick = onOpenSettings)
-                },
-                titleContent = {
-                    HeaderIcon(Icons.Default.ChevronLeft, "Previous month", onClick = { viewModel.goToPreviousMonth() }, alignStart = true)
-                    Text(state.monthLabel, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink, maxLines = 1)
-                    HeaderIcon(Icons.Default.ChevronRight, "Next month", onClick = { viewModel.goToNextMonth() }, enabled = state.canGoForward)
-                }
+            MonthHeader(
+                label = state.monthLabel,
+                canGoForward = state.canGoForward,
+                onPrevious = { viewModel.goToPreviousMonth() },
+                onNext = { viewModel.goToNextMonth() },
+                hasUrgent = state.notifItems.any { it.isUrgent },
+                onOpenAlerts = { showNotifCenter = true },
+                onOpenSettings = onOpenSettings
             )
         }
 
@@ -354,9 +352,32 @@ fun DashboardScreen(
 internal fun pendingBannerText(count: Int): String =
     if (count == 1) "expense needs categorizing" else "expenses need categorizing"
 
-/** "45% achieved"; past the target it keeps counting ("110% achieved"), while the bar stays full. */
-internal fun goalAchieved(goal: SavingsGoal): String =
-    "${if (goal.targetAmount > 0) (goal.currentAmount / goal.targetAmount * 100).toInt() else 0}% achieved"
+/**
+ * The month between its chevrons, then the bell and settings. The label takes what is left after
+ * the icons and shrinks to fit: a budget month that isn't a calendar month reads
+ * "25 Dec 2025 – 24 Jan 2026", which at full size would leave the icons no room.
+ */
+@Composable
+private fun MonthHeader(
+    label: String, canGoForward: Boolean, onPrevious: () -> Unit, onNext: () -> Unit,
+    hasUrgent: Boolean, onOpenAlerts: () -> Unit, onOpenSettings: () -> Unit
+) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp).heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            HeaderIcon(Icons.Default.ChevronLeft, "Previous month", onClick = onPrevious, alignStart = true)
+            var scale by remember(label) { mutableFloatStateOf(1f) }
+            Text(
+                label, fontSize = (22 * scale).sp, fontWeight = FontWeight.SemiBold, color = Ink,
+                maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (it.didOverflowWidth && scale > 0.6f) scale *= 0.92f },
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            HeaderIcon(Icons.Default.ChevronRight, "Next month", onClick = onNext, enabled = canGoForward)
+        }
+        HeaderIcon(Icons.Outlined.Notifications, "Notifications", onClick = onOpenAlerts, badge = hasUrgent)
+        HeaderIcon(Icons.Default.Tune, "Settings", onClick = onOpenSettings)
+    }
+}
 
 /** A half circle whose gold end is the share of the month's income still free to spend. Its centre is left for the mascot. */
 @Composable
