@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -76,9 +77,19 @@ fun BarChart(
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf(0, (bars.size - 1) / 2, bars.lastIndex).distinct().forEach {
-                Text(bars[it].label, fontSize = 13.sp, color = Muted)
+        // One cell per bar, so a label sits under its own bar; its text may spill past the cell's edges.
+        val labelled = setOf(0, (bars.size - 1) / 2, bars.lastIndex)
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            bars.forEachIndexed { i, bar ->
+                Box(Modifier.weight(1f)) {
+                    if (i in labelled) {
+                        val edge = when (i) { 0 -> Alignment.Start; bars.lastIndex -> Alignment.End; else -> Alignment.CenterHorizontally }
+                        Text(
+                            bar.label, fontSize = 13.sp, color = Muted, maxLines = 1, softWrap = false,
+                            modifier = Modifier.fillMaxWidth().wrapContentWidth(edge, unbounded = true)
+                        )
+                    }
+                }
             }
         }
     }

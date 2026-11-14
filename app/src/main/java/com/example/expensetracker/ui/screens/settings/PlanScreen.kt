@@ -27,6 +27,7 @@ import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.data.db.entity.Loan
 import com.example.expensetracker.data.db.entity.RecurringIncome
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.theme.*
@@ -46,18 +47,10 @@ import java.util.Calendar
 
 /* The Plan tab: limits, bills and loans at a glance, and the pages that manage each. */
 
-private fun ordinal(day: Int) = when {
-    day in 11..13 -> "${day}th"
-    day % 10 == 1 -> "${day}st"
-    day % 10 == 2 -> "${day}nd"
-    day % 10 == 3 -> "${day}rd"
-    else -> "${day}th"
-}
-
 /** "15th · remind 2 days before", or "15th · logged automatically" for an auto-log bill. */
 internal fun billSchedule(bill: Bill): String =
-    if (bill.autoLog) "${ordinal(bill.dueDayOfMonth)} · logged automatically"
-    else "${ordinal(bill.dueDayOfMonth)} · remind ${bill.reminderDays} ${if (bill.reminderDays == 1) "day" else "days"} before"
+    if (bill.autoLog) "${BudgetPeriod.ordinal(bill.dueDayOfMonth)} · logged automatically"
+    else "${BudgetPeriod.ordinal(bill.dueDayOfMonth)} · remind ${bill.reminderDays} ${if (bill.reminderDays == 1) "day" else "days"} before"
 
 @Composable
 internal fun PlanFrontPage(
@@ -85,18 +78,7 @@ internal fun PlanFrontPage(
                 MCard(padding = RowCardPadding) {
                     budgets.forEachIndexed { i, budget ->
                         if (i > 0) RowDivider()
-                        val tone = budgetTone(budget.spent, budget.limit, alertPercent)
-                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ToneDot(tone)
-                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(budget.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text("${fmtINR(budget.spent)} of ${fmtINR(budget.limit)}", fontSize = 13.sp, color = Muted)
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                ProgressBar((budget.spent / budget.limit).toFloat(), tone)
-                            }
-                        }
+                        BudgetRow(budget.name, budget.spent, budget.limit, alertPercent)
                     }
                 }
             }
@@ -294,8 +276,8 @@ internal fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMod
                 ScheduleRow(
                     accent = categories.find { it.id == bill.categoryId }?.let { parseColor(it.colorHex) } ?: Gold,
                     name = bill.name,
-                    detail = if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on ${ordinal(bill.dueDayOfMonth)} of month"
-                        else "₹${fmtINR(bill.amount)} · due ${ordinal(bill.dueDayOfMonth)} · remind ${bill.reminderDays}d before",
+                    detail = if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on ${BudgetPeriod.ordinal(bill.dueDayOfMonth)} of month"
+                        else "₹${fmtINR(bill.amount)} · due ${BudgetPeriod.ordinal(bill.dueDayOfMonth)} · remind ${bill.reminderDays}d before",
                     enabled = bill.isEnabled,
                     onToggle = { viewModel.toggleBill(bill) }, onDelete = { billToDelete = bill }, onClick = { billToEdit = bill }
                 )
@@ -310,7 +292,7 @@ internal fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewMod
                 ScheduleRow(
                     accent = Mint,
                     name = r.name,
-                    detail = "+₹${fmtINR(r.amount)} · logged on the ${ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
+                    detail = "+₹${fmtINR(r.amount)} · logged on the ${BudgetPeriod.ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
                     enabled = r.isEnabled,
                     onToggle = { viewModel.toggleRecurringIncome(r) }, onDelete = { incomeToDelete = r }, onClick = { incomeToEdit = r }
                 )
@@ -360,7 +342,8 @@ private fun ScheduleRow(
     onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit
 ) {
     MCard(onClick = onClick, padding = PaddingValues(start = 16.dp, end = 8.dp)) {
-        AccentRow(accent, name, detail, trailing = "", actions = {
+        // The detail can run to two lines ("… logged on the 31st (or the month's last day)")
+        AccentRow(accent, name, detail, trailing = "", subtitleMaxLines = 2, actions = {
             Switch(checked = enabled, onCheckedChange = { onToggle() }, colors = switchColors())
             IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(20.dp)) }
         })

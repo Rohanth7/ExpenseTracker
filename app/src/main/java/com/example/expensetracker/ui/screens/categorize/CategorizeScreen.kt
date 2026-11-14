@@ -4,13 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -105,6 +101,8 @@ fun CategorizeScreen(
             return@Column
         }
 
+        // Everything above the buttons scrolls, so they stay in reach on a short screen (landscape, large text).
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         MCard {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Paid to ${exp.description.take(60)}", fontSize = 13.sp, color = Muted, textAlign = TextAlign.Center)
@@ -127,7 +125,7 @@ fun CategorizeScreen(
 
         when (mode) {
             CategorizeMode.Category -> {
-                CategoryGrid(categories, selectedCategoryId, onSelect = { selectedCategoryId = it }, modifier = Modifier.weight(1f))
+                CategoryGrid(categories, selectedCategoryId, onSelect = { selectedCategoryId = it })
                 OutlinedTextField(
                     value = tags,
                     onValueChange = { tags = it },
@@ -138,19 +136,20 @@ fun CategorizeScreen(
                 )
             }
             CategorizeMode.LoanEmi ->
-                if (loans.isEmpty()) NothingToLink("No loans added yet", "Add a loan in Plan → Loans & EMIs", Modifier.weight(1f))
-                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                    items(loans) { loan ->
+                if (loans.isEmpty()) NothingToLink("No loans added yet", "Add a loan in Plan → Loans & EMIs")
+                else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    loans.forEach { loan ->
                         LoanTile(loan = loan, selected = loan.id == selectedLoanId, onClick = { selectedLoanId = loan.id })
                     }
                 }
             CategorizeMode.Savings ->
-                if (savingsGoals.isEmpty()) NothingToLink("No savings goals added yet", "Add a goal on the Home screen", Modifier.weight(1f))
-                else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                    items(savingsGoals) { goal ->
+                if (savingsGoals.isEmpty()) NothingToLink("No savings goals added yet", "Add a goal on the Home screen")
+                else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    savingsGoals.forEach { goal ->
                         SavingsGoalTile(goal = goal, selected = goal.id == selectedGoalId, onClick = { selectedGoalId = goal.id })
                     }
                 }
+        }
         }
 
         ButtonPair(
@@ -205,41 +204,50 @@ fun CategorizeScreen(
     }
 }
 
+/** Three tiles to a row. A category with subcategories is a heading over its subcategories' tiles. */
 @Composable
-private fun CategoryGrid(categories: List<Category>, selectedCategoryId: Long, onSelect: (Long) -> Unit, modifier: Modifier) {
+private fun CategoryGrid(categories: List<Category>, selectedCategoryId: Long, onSelect: (Long) -> Unit) {
     val parents = remember(categories) { categories.filter { it.parentId == null } }
     val childrenMap = remember(categories) { categories.filter { it.parentId != null }.groupBy { it.parentId } }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        // Room for the selected tile's outline, which the grid would otherwise clip at its edges
-        contentPadding = PaddingValues(2.dp),
-        modifier = modifier
-    ) {
+    @Composable
+    fun TileRows(tiles: List<Category>) {
+        tiles.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { CategoryTile(it, selected = it.id == selectedCategoryId, onClick = { onSelect(it.id) }, modifier = Modifier.weight(1f)) }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // In the order the categories come: runs of plain categories share rows, a heading starts a new one
+        var run = mutableListOf<Category>()
+        val blocks = mutableListOf<Pair<Category?, List<Category>>>()
         parents.forEach { parent ->
             val children = childrenMap[parent.id]
-            if (children.isNullOrEmpty()) {
-                item { CategoryTile(parent, selected = parent.id == selectedCategoryId, onClick = { onSelect(parent.id) }) }
-            } else {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(
-                        "${parent.emoji} ${parent.name}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Muted,
-                        modifier = Modifier.padding(top = 6.dp)
-                    )
-                }
-                items(children) { child ->
-                    CategoryTile(child, selected = child.id == selectedCategoryId, onClick = { onSelect(child.id) })
-                }
+            if (children.isNullOrEmpty()) run += parent
+            else {
+                if (run.isNotEmpty()) { blocks += null to run; run = mutableListOf() }
+                blocks += parent to children
             }
+        }
+        if (run.isNotEmpty()) blocks += null to run
+        blocks.forEach { (heading, tiles) ->
+            if (heading != null) {
+                Text(
+                    "${heading.emoji} ${heading.name}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Muted,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            TileRows(tiles)
         }
     }
 }
 
 @Composable
-private fun NothingToLink(title: String, hint: String, modifier: Modifier) {
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+private fun NothingToLink(title: String, hint: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, fontSize = 15.sp, color = Ink)
         Spacer(Modifier.height(6.dp))
         Text(hint, fontSize = 13.sp, color = Muted)
@@ -254,9 +262,9 @@ private fun Modifier.tile(selected: Boolean, onClick: () -> Unit) = this
     .clickable(onClick = onClick)
 
 @Composable
-private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> Unit) {
+private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.tile(selected, onClick).padding(horizontal = 6.dp, vertical = 12.dp),
+        modifier = modifier.tile(selected, onClick).padding(horizontal = 6.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(Modifier.size(22.dp).clip(RoundedCornerShape(8.dp)).background(parseColor(category.colorHex)))

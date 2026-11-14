@@ -73,6 +73,8 @@ import com.example.expensetracker.ui.util.oneCharacter
 import com.example.expensetracker.ui.util.wholeNumberIn
 import com.example.expensetracker.ui.components.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
@@ -95,6 +97,7 @@ fun SettingsScreen(
     val bills by viewModel.bills.collectAsState()
     val loans by viewModel.loans.collectAsState()
     val budgets by viewModel.budgets.collectAsState()
+    if (home == SettingsHome.Plan) LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshBudgets() }
     val recurringIncomes by viewModel.recurringIncomes.collectAsState()
     val privacyMode by viewModel.privacyMode.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
