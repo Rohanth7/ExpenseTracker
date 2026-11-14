@@ -68,6 +68,7 @@ import com.example.expensetracker.ui.theme.Orange
 import com.example.expensetracker.ui.theme.Paper
 import com.example.expensetracker.ui.theme.Pink
 import com.example.expensetracker.ui.theme.Whisper
+import com.example.expensetracker.ui.util.fmtINR
 
 /* The Marigold design system: the pieces every screen is built from. */
 
@@ -174,6 +175,23 @@ fun RowDivider() {
 @Composable
 fun ToneDot(color: Color) {
     Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+}
+
+/** One monthly limit: a dot and a bar in its [budgetTone], the name, and "spent of limit". */
+@Composable
+fun BudgetRow(name: String, spent: Double, limit: Double, alertPercent: Int) {
+    val tone = budgetTone(spent, limit, alertPercent)
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ToneDot(tone)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${fmtINR(spent)} of ${fmtINR(limit)}", fontSize = 13.sp, color = Muted)
+            }
+            Spacer(Modifier.height(6.dp))
+            ProgressBar((spent / limit).toFloat(), tone)
+        }
+    }
 }
 
 /** A 3dp bar in [accent], the title over its subtitle, then [trailing]; [actions] sit after that. */

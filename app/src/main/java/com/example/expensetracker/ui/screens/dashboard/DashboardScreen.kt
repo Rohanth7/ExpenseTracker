@@ -197,7 +197,8 @@ fun DashboardScreen(
                 MCard(Modifier.padding(top = 10.dp), padding = RowCardPadding) {
                     state.budgets.forEachIndexed { i, budget ->
                         if (i > 0) RowDivider()
-                        BudgetRow(budget, alertPercent)
+                        // "Food › Coffee" for a subcategory's own limit
+                        BudgetRow(budget.name, budget.spent, budget.limit, alertPercent)
                     }
                 }
             }
@@ -389,23 +390,6 @@ private fun Dial(leftFraction: Float) {
         drawArc(Hairline, 180f, 180f, false, topLeft, arc, style = Stroke(stroke, cap = StrokeCap.Round))
         val sweep = 180f * leftFraction
         if (sweep > 0f) drawArc(Gold, 360f - sweep, sweep, false, topLeft, arc, style = Stroke(stroke, cap = StrokeCap.Round))
-    }
-}
-
-@Composable
-private fun BudgetRow(budget: Budget, alertPercent: Int) {
-    val tone = budgetTone(budget.spent, budget.limit, alertPercent)
-    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ToneDot(tone)
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // "Food › Coffee" for a subcategory's own limit
-                Text(budget.name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text("${fmtINR(budget.spent)} of ${fmtINR(budget.limit)}", fontSize = 13.sp, color = Muted)
-            }
-            Spacer(Modifier.height(6.dp))
-            ProgressBar((budget.spent / budget.limit).toFloat(), tone)
-        }
     }
 }
 
