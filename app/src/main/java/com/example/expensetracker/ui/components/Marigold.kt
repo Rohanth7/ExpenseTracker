@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,27 +93,16 @@ fun budgetTone(spent: Double, limit: Double, alertPercent: Int): Color = when {
 }
 
 @Composable
-fun ScreenHeader(
-    title: String,
-    onBack: (() -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {},
-    /** Replaces the title text, for Home's month with its chevrons. */
-    titleContent: (@Composable RowScope.() -> Unit)? = null
-) {
+fun ScreenHeader(title: String, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp).heightIn(min = 40.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) HeaderIcon(Icons.Default.ChevronLeft, "Back", onClick = onBack, alignStart = true)
-        if (titleContent != null) {
-            titleContent()
-            Spacer(Modifier.weight(1f))
-        } else {
-            Text(
-                title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-            )
-        }
+        Text(
+            title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+        )
         actions()
     }
 }
@@ -246,6 +239,8 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
         modifier = modifier
             .clip(CircleShape)
             .then(if (selected) Modifier.background(Gold) else Modifier.border(1.dp, Hairline, CircleShape))
+            // Said only for the chosen one: chips are also plain actions ("Remind me"), which aren't "not selected"
+            .then(if (selected) Modifier.semantics { this.selected = true } else Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     )
@@ -253,7 +248,7 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifie
 
 @Composable
 fun SegTabs(options: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+    Row(modifier.padding(vertical = 6.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         options.forEachIndexed { i, option ->
             val selected = i == selectedIndex
             Text(
@@ -262,7 +257,7 @@ fun SegTabs(options: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit, 
                 fontWeight = FontWeight.SemiBold,
                 color = if (selected) Ink else Muted,
                 modifier = Modifier
-                    .clickable(role = Role.Tab) { onSelect(i) }
+                    .selectable(selected = selected, role = Role.Tab) { onSelect(i) }
                     .padding(bottom = 4.dp)
                     .drawBehind {
                         if (selected) drawLine(Gold, Offset(0f, size.height), Offset(size.width, size.height), 2.dp.toPx())
