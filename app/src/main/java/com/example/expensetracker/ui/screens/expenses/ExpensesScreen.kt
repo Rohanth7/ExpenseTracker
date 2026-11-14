@@ -127,6 +127,7 @@ fun ExpensesScreen(
 
     Scaffold(
         containerColor = Canvas,
+        contentWindowInsets = NoInsets,
         floatingActionButton = {
             // Spending is added from the bottom bar's Add button.
             if (!isSelectionMode && showIncome) {
