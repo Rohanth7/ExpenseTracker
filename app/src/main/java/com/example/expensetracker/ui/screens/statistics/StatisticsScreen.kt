@@ -86,10 +86,13 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                     item { EmptyText("No expenses for ${view.label}.") }
                 } else {
                     item {
-                        // "Last 3 months" and "All time" are written as titles; a span of dates reads the same either way
-                        val named = viewMode == ViewMode.RANGE && selectedRange !is StatsRange.Custom
                         PeriodTotal(
-                            period = if (named) view.label.replaceFirstChar { it.lowercase() } else view.label,
+                            // "Last 3 months" and "All time" are written as titles; a month or a span of dates reads as it is
+                            heading = when (selectedRange.takeIf { viewMode == ViewMode.RANGE }) {
+                                is StatsRange.LastMonths -> "Spent in the ${view.label.replaceFirstChar { it.lowercase() }}"
+                                StatsRange.AllTime -> "Spent over all time"
+                                else -> "Spent in ${view.label}"
+                            },
                             total = view.stats.total,
                             onPeriodClick = if (viewMode == ViewMode.RANGE) ({ showRangeSheet = true }) else null
                         ) {
@@ -139,7 +142,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 item { EmptyText("No expenses recorded for ${state.yearLabel}.") }
             } else {
                 item {
-                    PeriodTotal(period = state.yearLabel, total = state.totalThisYear) {
+                    PeriodTotal(heading = "Spent in ${state.yearLabel}", total = state.totalThisYear) {
                         val monthsRecorded = state.monthStats.count { it.total > 0 }
                         Text("over $monthsRecorded months · ₹${fmtINR(state.avgPerMonth)} per active month", fontSize = 13.sp, color = Muted)
                     }
@@ -263,10 +266,10 @@ private fun RangeOption(label: String, selected: Boolean, onClick: () -> Unit) {
 
 /** "Spent in November" over the total, with [below] for what goes under the number. */
 @Composable
-private fun PeriodTotal(period: String, total: Double, onPeriodClick: (() -> Unit)? = null, below: @Composable ColumnScope.() -> Unit) {
+private fun PeriodTotal(heading: String, total: Double, onPeriodClick: (() -> Unit)? = null, below: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Text(
-            "Spent in $period", fontSize = 13.sp, color = Muted,
+            heading, fontSize = 13.sp, color = Muted,
             modifier = if (onPeriodClick != null) Modifier.clickable(onClick = onPeriodClick) else Modifier
         )
         BigNumber("₹${fmtINR(total)}", size = 36)
@@ -431,7 +434,7 @@ private fun DetectionSplitCard(split: DetectionSplit) {
         listOf(
             part("Auto-Detected", Gold, split.autoAmount, split.autoCount),
             part("Manually Added", Muted, split.manualAmount, split.manualCount),
-            part("Recurring", Hairline, split.recurringAmount, split.recurringCount)
+            part("Recurring", Sky, split.recurringAmount, split.recurringCount)
         ).filter { it.amount > 0 }
     )
 }
