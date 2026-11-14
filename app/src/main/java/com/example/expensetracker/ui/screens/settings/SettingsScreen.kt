@@ -72,6 +72,9 @@ import com.example.expensetracker.ui.util.parseAmountOrZero
 import com.example.expensetracker.ui.util.oneCharacter
 import com.example.expensetracker.ui.util.wholeNumberIn
 import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.NoInsets
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
@@ -94,6 +97,7 @@ fun SettingsScreen(
     val bills by viewModel.bills.collectAsState()
     val loans by viewModel.loans.collectAsState()
     val budgets by viewModel.budgets.collectAsState()
+    if (home == SettingsHome.Plan) LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshBudgets() }
     val recurringIncomes by viewModel.recurringIncomes.collectAsState()
     val privacyMode by viewModel.privacyMode.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
@@ -180,7 +184,7 @@ fun SettingsScreen(
         if (!locked) snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
     }
 
-    Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Scaffold(containerColor = Canvas, contentWindowInsets = NoInsets, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         when (currentPage) {
             null -> if (home == SettingsHome.Plan) PlanFrontPage(
                 budgets = budgets, alertPercent = budgetAlertThreshold,
