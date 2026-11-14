@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -74,6 +75,12 @@ val ScreenPadding = 20.dp
 val CardShape = RoundedCornerShape(22.dp)
 val FieldShape = RoundedCornerShape(14.dp)
 val ButtonShape = RoundedCornerShape(16.dp)
+
+/**
+ * For a screen's own Scaffold. The app's Scaffold has already padded for the system bars, and a
+ * nested one would pad for them a second time, pushing its title lower than other screens'.
+ */
+val NoInsets = WindowInsets(0, 0, 0, 0)
 
 /** Padding for a card that holds rows, which bring their own 12dp above and below. */
 val RowCardPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
