@@ -31,7 +31,6 @@ import com.example.expensetracker.ui.screens.dashboard.LoanProgress
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
-import com.example.expensetracker.ui.util.AmountInputState
 import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.rememberAmountInputState
