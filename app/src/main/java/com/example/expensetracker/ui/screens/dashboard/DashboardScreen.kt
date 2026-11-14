@@ -369,7 +369,8 @@ private fun MonthHeader(
             Text(
                 label, fontSize = (22 * scale).sp, fontWeight = FontWeight.SemiBold, color = Ink,
                 maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
-                onTextLayout = { if (it.didOverflowWidth && scale > 0.6f) scale *= 0.92f },
+                // Ellipsis is the last resort: it reports as an ellipsized line, not as overflow
+                onTextLayout = { if (it.isLineEllipsized(0) && scale > 0.55f) scale *= 0.92f },
                 modifier = Modifier.weight(1f, fill = false)
             )
             HeaderIcon(Icons.Default.ChevronRight, "Next month", onClick = onNext, enabled = canGoForward)
