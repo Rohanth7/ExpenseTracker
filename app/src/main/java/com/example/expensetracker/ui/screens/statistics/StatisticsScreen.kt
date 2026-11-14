@@ -102,7 +102,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                                     text = when {
                                         pct < 0 -> "${abs(pct)}% less than ${view.comparedWith}"
                                         pct > 0 -> "$pct% more than ${view.comparedWith}"
-                                        else -> "vs ${view.comparedWith}"
+                                        else -> "Same as ${view.comparedWith}"
                                     },
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -144,7 +144,7 @@ fun StatisticsScreen(viewModel: StatisticsViewModel, onMonthClick: (Long, Long) 
                 item {
                     PeriodTotal(heading = "Spent in ${state.yearLabel}", total = state.totalThisYear) {
                         val monthsRecorded = state.monthStats.count { it.total > 0 }
-                        Text("over $monthsRecorded months · ₹${fmtINR(state.avgPerMonth)} per active month", fontSize = 13.sp, color = Muted)
+                        Text("over $monthsRecorded ${if (monthsRecorded == 1) "month" else "months"} · ₹${fmtINR(state.avgPerMonth)} per active month", fontSize = 13.sp, color = Muted)
                     }
                 }
 
@@ -497,20 +497,7 @@ private fun CategoryDetailSheet(
         SheetTitle(category.name)
         val limit = category.monthlyLimit
         if (limit > 0) {
-            val tone = budgetTone(budgetSpent, limit, alertPercent)
-            MCard(padding = RowCardPadding) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ToneDot(tone)
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(budgetLabel, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Text("${fmtINR(budgetSpent)} of ${fmtINR(limit)}", fontSize = 13.sp, color = Muted)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        ProgressBar((budgetSpent / limit).toFloat(), tone)
-                    }
-                }
-            }
+            MCard(padding = RowCardPadding) { BudgetRow(budgetLabel, budgetSpent, limit, alertPercent) }
         }
         if (trend.isNotEmpty()) {
             SectionLabel("Last 6 months")
