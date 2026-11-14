@@ -205,6 +205,7 @@ fun AccentRow(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     trailingColor: Color = Ink,
+    subtitleMaxLines: Int = 1,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     Row(
@@ -218,7 +219,7 @@ fun AccentRow(
         Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
             Text(title, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotEmpty()) {
-                Text(subtitle, fontSize = 13.sp, color = subtitleColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, fontSize = 13.sp, color = subtitleColor, maxLines = subtitleMaxLines, overflow = TextOverflow.Ellipsis)
             }
         }
         if (trailing.isNotEmpty()) Text(trailing, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = trailingColor, maxLines = 1)
