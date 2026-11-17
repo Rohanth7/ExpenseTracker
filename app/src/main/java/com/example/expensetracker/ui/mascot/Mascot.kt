@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.mascot
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,16 +14,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas as ComposeCanvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
+import kotlin.math.roundToInt
 import com.example.expensetracker.ui.theme.Canvas as CanvasColor
 import com.example.expensetracker.ui.theme.Muted
 
@@ -86,22 +96,36 @@ private fun DrawScope.face(mood: MascotMood, ink: Color) {
 /** The clay pot, whole. Decorative: whatever she is saying belongs in text next to her. */
 @Composable
 fun Mascot(mood: MascotMood, modifier: Modifier = Modifier) {
-    Canvas(modifier.aspectRatio(GridWidth / GridHeight)) {
-        val unit = size.width / GridWidth
-        withTransform({ scale(unit, unit, Offset.Zero); translate(0f, -GridTop) }) {
-            drawOval(Color.Black, Offset(30f, 109f), Size(60f, 8f), alpha = .2f)
-            drawPath(Body, Clay)
-            drawOval(ClayRim, Offset(48f, 21.5f), Size(24f, 9f))
-            drawRoundRect(ClaySlot, Offset(50f, 44f), Size(20f, 4.5f), CornerRadius(2.2f))
-            for ((x, y) in listOf(38f to 100f, 49f to 104f, 60f to 105.5f, 71f to 104f, 82f to 100f)) drawCircle(ClayDots, 2f, Offset(x, y))
-            if (mood == MascotMood.Happy) {
-                drawCircle(Coin, 7f, Offset(60f, 9f))
-                drawCircle(CoinEdge, 7f, Offset(60f, 9f), style = Stroke(2f))
-                drawPath(Sparkles, Coin, style = Stroke(2.5f, cap = StrokeCap.Round))
-            }
-            // Her face sits lower on the pot than on the small pill, which is drawn on the same grid.
-            withTransform({ translate(0f, 12f) }) { face(mood, FaceInk) }
+    Canvas(modifier.aspectRatio(GridWidth / GridHeight)) { drawMascot(mood) }
+}
+
+/**
+ * Her whole pot as a bitmap [widthPx] wide, for places outside Compose (the home screen widget).
+ * Drawn by the same [drawMascot] as [Mascot], so the two can't drift apart.
+ */
+fun mascotBitmap(mood: MascotMood, widthPx: Int): Bitmap {
+    val size = IntSize(widthPx, (widthPx * GridHeight / GridWidth).roundToInt())
+    val image = ImageBitmap(size.width, size.height)
+    CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, ComposeCanvas(image), size.toSize()) { drawMascot(mood) }
+    return image.asAndroidBitmap()
+}
+
+/** Her whole pot, scaled to fill this scope's width. */
+private fun DrawScope.drawMascot(mood: MascotMood) {
+    val unit = size.width / GridWidth
+    withTransform({ scale(unit, unit, Offset.Zero); translate(0f, -GridTop) }) {
+        drawOval(Color.Black, Offset(30f, 109f), Size(60f, 8f), alpha = .2f)
+        drawPath(Body, Clay)
+        drawOval(ClayRim, Offset(48f, 21.5f), Size(24f, 9f))
+        drawRoundRect(ClaySlot, Offset(50f, 44f), Size(20f, 4.5f), CornerRadius(2.2f))
+        for ((x, y) in listOf(38f to 100f, 49f to 104f, 60f to 105.5f, 71f to 104f, 82f to 100f)) drawCircle(ClayDots, 2f, Offset(x, y))
+        if (mood == MascotMood.Happy) {
+            drawCircle(Coin, 7f, Offset(60f, 9f))
+            drawCircle(CoinEdge, 7f, Offset(60f, 9f), style = Stroke(2f))
+            drawPath(Sparkles, Coin, style = Stroke(2.5f, cap = StrokeCap.Round))
         }
+        // Her face sits lower on the pot than on the small pill, which is drawn on the same grid.
+        withTransform({ translate(0f, 12f) }) { face(mood, FaceInk) }
     }
 }
 

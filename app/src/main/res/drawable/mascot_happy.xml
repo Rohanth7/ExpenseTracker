@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from the path data in ui/mascot/Mascot.kt (Happy) by tools/mascot_vector.py; regenerate rather than edit. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="124dp"
+    android:viewportWidth="120"
+    android:viewportHeight="124">
+<group android:translateY="4">
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha=".2"
+        android:pathData="M30,113 a30,4 0 1,0 60,0 a30,4 0 1,0 -60,0 z" />
+    <path
+        android:fillColor="#FFCF6E44"
+        android:pathData="M48 26c0 4 2 6 2 8C33 40 20 55 20 74c0 22 18 37 40 37s40-15 40-37c0-19-13-34-30-40 0-2 2-4 2-8z" />
+    <path
+        android:fillColor="#FF9E472A"
+        android:pathData="M48,26 a12,4.5 0 1,0 24,0 a12,4.5 0 1,0 -24,0 z" />
+    <path
+        android:fillColor="#FF7A3018"
+        android:pathData="M52.2,44 h15.6 a2.2,2.2 0 0,1 2.2,2.2 v0.1 a2.2,2.2 0 0,1 -2.2,2.2 h-15.6 a2.2,2.2 0 0,1 -2.2,-2.2 v-0.1 a2.2,2.2 0 0,1 2.2,-2.2 z" />
+    <path
+        android:fillColor="#BFF8E6CB"
+        android:pathData="M36,100 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z M47,104 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z M58,105.5 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z M69,104 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z M80,100 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 z" />
+    <path
+        android:fillColor="#FFF4BC42"
+        android:pathData="M53,9 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z" />
+    <path
+        android:pathData="M53,9 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 z"
+        android:strokeColor="#FFC98A1B"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M76 8l5-3M78 16l5 1M44 8l-5-3"
+        android:strokeColor="#FFF4BC42"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <group android:translateY="12">
+        <path
+            android:pathData="M45 63q5-6 10 0M65 63q5-6 10 0M52 71q8 8 16 0"
+            android:strokeColor="#FF4A1E0E"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="#FFF0808A"
+            android:fillAlpha=".55"
+            android:pathData="M38,71 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 z M74,71 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 z" />
+    </group>
+</group>
+</vector>

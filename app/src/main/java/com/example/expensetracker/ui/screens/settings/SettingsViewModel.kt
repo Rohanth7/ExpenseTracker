@@ -177,7 +177,10 @@ class SettingsViewModel(
         refreshWidget()
     }
 
-    fun setMascotEnabled(enabled: Boolean) = MascotEnabled.set(appContext, enabled)
+    fun setMascotEnabled(enabled: Boolean) {
+        MascotEnabled.set(appContext, enabled)
+        refreshWidget()
+    }
 
     private val _autoBackupEnabled = MutableStateFlow(prefs.autoBackupEnabled)
     val autoBackupEnabled: StateFlow<Boolean> = _autoBackupEnabled.asStateFlow()
