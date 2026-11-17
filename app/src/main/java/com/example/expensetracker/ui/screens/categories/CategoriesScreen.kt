@@ -42,7 +42,7 @@ import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.ui.mascot.LocalMascotEnabled
 import com.example.expensetracker.ui.mascot.MascotMood
 import com.example.expensetracker.ui.mascot.MascotNote
-import kotlin.math.floor
+import kotlin.math.ceil
 import com.example.expensetracker.ui.screens.expenses.Tags
 
 private val PRESET_EMOJIS = listOf(
@@ -340,8 +340,11 @@ private fun RenameTagDialog(
     )
 }
 
-/** The amount a budget alert goes off at, in whole rupees: what the edit sheet tells the user. */
-internal fun warnAt(limit: Double, alertPercent: Int): Double = floor(limit * alertPercent / 100)
+/**
+ * The amount a budget alert goes off at, in whole rupees: what the edit sheet tells the user.
+ * Rounded up, because the alert needs spending to reach the exact share (BudgetAlertHelper).
+ */
+internal fun warnAt(limit: Double, alertPercent: Int): Double = ceil(limit * alertPercent / 100)
 
 @Composable
 internal fun CategoryDialog(
@@ -366,7 +369,10 @@ internal fun CategoryDialog(
     val canSave = nameError == null && parsedLimit != null
     val mascotEnabled = LocalMascotEnabled.current
     val context = LocalContext.current
-    val alertPercent = remember { PreferencesManager(context.applicationContext).budgetAlertThreshold }
+    val alertPrefs = remember { PreferencesManager(context.applicationContext) }
+    val alertPercent = remember { alertPrefs.budgetAlertThreshold }
+    // No note promising a warning when budget alerts are off.
+    val alertsOn = remember { alertPrefs.budgetAlertsEnabled }
 
     MSheet(onDismiss) {
         SheetTitle(when {
@@ -426,7 +432,7 @@ internal fun CategoryDialog(
                 modifier = Modifier.fillMaxWidth(),
                 shape = FieldShape, colors = fieldColors()
             )
-            if (mascotEnabled && parsedLimit != null && parsedLimit > 0) {
+            if (mascotEnabled && alertsOn && parsedLimit != null && parsedLimit > 0) {
                 // Field, not Paper: the sheet itself is Paper.
                 MascotNote(MascotMood.Worried, background = Field) {
                     Text("She warns you at ₹${fmtINR(warnAt(parsedLimit, alertPercent))}", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = Ink)
