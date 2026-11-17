@@ -185,7 +185,7 @@ class BackupManager(
      * a backup (a video) is refused by its size, before it is read into memory.
      */
     suspend fun readFromUri(uri: Uri): ParseResult = withContext(Dispatchers.IO) {
-        val tooLarge = ParseResult.Invalid("This file is too large to be a MyMoney backup (over ${MAX_BACKUP_BYTES / (1024 * 1024)} MB).")
+        val tooLarge = ParseResult.Invalid("This file is too large to be a Thriftpot backup (over ${MAX_BACKUP_BYTES / (1024 * 1024)} MB).")
         val size = runCatching { context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } }.getOrNull()
         if (size != null && size > MAX_BACKUP_BYTES) return@withContext tooLarge
         // Counted while reading too: not every file provider says how large a file is.

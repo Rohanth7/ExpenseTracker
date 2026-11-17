@@ -23,7 +23,7 @@ import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.theme.*
 
 /**
- * Teach MyMoney one message: paste it (or start from an expense), say whether it's a payment,
+ * Teach Thriftpot one message: paste it (or start from an expense), say whether it's a payment,
  * then tap the amount and the payee's first and last word.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -73,7 +73,7 @@ fun TeachMessageScreen(viewModel: MessageRulesViewModel, expenseId: Long?, onDon
         ScreenHeader("Teach a message", onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             if (editing) {
-                Text("Paste a bank message that MyMoney read wrong or missed.", fontSize = 13.sp, color = Muted)
+                Text("Paste a bank message that Thriftpot read wrong or missed.", fontSize = 13.sp, color = Muted)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text, onValueChange = { text = it; reset() },

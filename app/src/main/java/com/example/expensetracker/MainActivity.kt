@@ -141,7 +141,7 @@ class MainActivity : FragmentActivity() {
                             onDismissRequest = { showLockTurnedOff = false },
                             containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
                             title = { Text("App lock turned off") },
-                            text = { Text("This phone no longer has a screen lock, so MyMoney can't ask for one. " +
+                            text = { Text("This phone no longer has a screen lock, so Thriftpot can't ask for one. " +
                                 "Set up a PIN, pattern or fingerprint in Android settings, then turn the lock " +
                                 "back on in Settings → Preferences.") },
                             confirmButton = { TextButton(onClick = { showLockTurnedOff = false }) { Text("OK", color = Gold) } }

@@ -241,7 +241,7 @@ fun SettingsScreen(
             SettingsPage.Data -> DataSubPage(
                 modifier = Modifier.padding(padding),
                 onBack = { currentPage = null },
-                onExport = { exportLauncher.launch("mymoney-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
+                onExport = { exportLauncher.launch("thriftpot-backup-${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date())}.json") },
                 onImport = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                 onExportCsv = { preset, range, monthStartDay ->
                     pendingCsvRange = range
@@ -358,7 +358,7 @@ private fun SettingsMainMenu(
             MCard(Modifier.padding(top = 10.dp), padding = RowCardPadding) {
                 MenuRow(
                     "Message rules",
-                    if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
+                    if (ruleCount == 0) "Teach Thriftpot a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
                     onOpenMessageRules
                 )
                 RowDivider()
@@ -449,7 +449,7 @@ private fun CloudSubPage(
                     Text("Not connected", fontSize = 13.sp, color = Muted)
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
+                        "Connect your Google account to back up to a private app folder in your Drive. Only Thriftpot can see it.",
                         fontSize = 13.sp, color = Muted, lineHeight = 19.sp
                     )
                     Spacer(Modifier.height(14.dp))
@@ -537,7 +537,7 @@ private fun PreferencesSubPage(
             MCard(padding = RowCardPadding) {
                 ToggleRow("Privacy mode", "Hides screen in app switcher", privacyMode, onSetPrivacyMode)
                 RowDivider()
-                ToggleRow("App Lock", "Ask for fingerprint, face or screen lock to open MyMoney", biometricLockEnabled, onSetBiometricLock)
+                ToggleRow("App Lock", "Ask for fingerprint, face or screen lock to open Thriftpot", biometricLockEnabled, onSetBiometricLock)
             }
         }
     }

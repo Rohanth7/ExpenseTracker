@@ -26,9 +26,9 @@ class ExportRangeTest {
             ExportRange.forPreset(ExportPreset.CUSTOM, at(2026, 10, 16), custom = start(2026, 10, 1) to end(2026, 10, 13)))
 
     @Test fun `file names say what was exported`() {
-        assertEquals("mymoney-expenses-2026-10.csv", ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 10, 1) to end(2026, 10, 31)))
-        assertEquals("mymoney-expenses-all.csv", ExportRange.fileName(ExportPreset.ALL, null))
-        assertEquals("mymoney-expenses-2026-10-01_to_2026-10-13.csv",
+        assertEquals("thriftpot-expenses-2026-10.csv", ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 10, 1) to end(2026, 10, 31)))
+        assertEquals("thriftpot-expenses-all.csv", ExportRange.fileName(ExportPreset.ALL, null))
+        assertEquals("thriftpot-expenses-2026-10-01_to_2026-10-13.csv",
             ExportRange.fileName(ExportPreset.CUSTOM, start(2026, 10, 1) to end(2026, 10, 13)))
     }
 
@@ -38,10 +38,10 @@ class ExportRangeTest {
     }
 
     @Test fun `a salary-cycle month is named by its dates`() {
-        assertEquals("mymoney-expenses-2026-09-25_to_2026-10-24.csv",
+        assertEquals("thriftpot-expenses-2026-09-25_to_2026-10-24.csv",
             ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 9, 25) to end(2026, 10, 24), monthStartDay = 25))
         // Named by the setting, not by where the range happens to start
-        assertEquals("mymoney-expenses-2026-10-01_to_2026-10-31.csv",
+        assertEquals("thriftpot-expenses-2026-10-01_to_2026-10-31.csv",
             ExportRange.fileName(ExportPreset.THIS_MONTH, start(2026, 10, 1) to end(2026, 10, 31), monthStartDay = 2))
     }
 
