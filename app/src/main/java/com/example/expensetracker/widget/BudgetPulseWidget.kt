@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.TypedValue
@@ -35,7 +36,19 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
         val placeholder = buildPlaceholder(context)
         appWidgetIds.forEach { id -> appWidgetManager.updateAppWidget(id, placeholder) }
 
-        // Load real data off the main thread
+        refresh(context, appWidgetManager, appWidgetIds)
+    }
+
+    /**
+     * Resized: the text sizes depend on the width. Not through [onUpdate]: the widget is already
+     * showing its figures, and the blank placeholder would flash on every resize.
+     */
+    override fun onAppWidgetOptionsChanged(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, newOptions: android.os.Bundle) {
+        refresh(context, appWidgetManager, intArrayOf(appWidgetId))
+    }
+
+    /** Loads the figures off the main thread and shows them on [appWidgetIds]. */
+    private fun refresh(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -43,9 +56,14 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
                     AppDatabase.getInstance(context),
                     PreferencesManager(context)
                 ).load()
+                // Drawn once: every widget shows the same face at the same size.
+                val mascot = data.mood?.let { mood ->
+                    val density = context.resources.displayMetrics.density.takeIf { it > 0f } ?: 2f
+                    mascotBitmap(mood, (MASCOT_DP * density).roundToInt())
+                }
                 appWidgetIds.forEach { id ->
                     val width = appWidgetManager.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
-                    val views = if (data.widgetEnabled) buildViews(context, data, width.toFloat()) else buildDisabledViews(context)
+                    val views = if (data.widgetEnabled) buildViews(context, data, mascot, width.toFloat()) else buildDisabledViews(context)
                     appWidgetManager.updateAppWidget(id, views)
                 }
             } catch (e: Exception) {
@@ -54,11 +72,6 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
                 pending.finish()
             }
         }
-    }
-
-    /** Resized: the text sizes depend on the width. */
-    override fun onAppWidgetOptionsChanged(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, newOptions: android.os.Bundle) {
-        onUpdate(context, appWidgetManager, intArrayOf(appWidgetId))
     }
 
     companion object {
@@ -87,6 +100,9 @@ private fun blankViews(context: Context): RemoteViews =
         for (id in listOf(R.id.widget_label, R.id.widget_amount, R.id.widget_used, R.id.widget_days_left, R.id.widget_note)) setTextViewText(id, "")
         for (id in listOf(R.id.widget_mascot, R.id.widget_bar, R.id.widget_bar_over, R.id.widget_stats, R.id.widget_note)) setViewVisibility(id, View.GONE)
         setTextColor(R.id.widget_amount, INK)
+        // Sizes too: buildViews only sets them once the launcher has said how wide the widget is.
+        setTextViewTextSize(R.id.widget_amount, TypedValue.COMPLEX_UNIT_SP, AMOUNT_SP)
+        for (id in listOf(R.id.widget_label, R.id.widget_used, R.id.widget_days_left, R.id.widget_note)) setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, SMALL_SP)
     }
 
 private fun buildDisabledViews(context: Context): RemoteViews = blankViews(context).apply {
@@ -163,14 +179,16 @@ internal fun widgetText(data: WidgetData): WidgetText {
     )
 }
 
-/** [widthDp] is the widget's width on the home screen; 0 when the launcher hasn't said. */
-private fun buildViews(context: Context, data: WidgetData, widthDp: Float): RemoteViews {
+/**
+ * [mascot] is her face for [WidgetData.mood], null when she is hidden. [widthDp] is the widget's
+ * width on the home screen; 0 when the launcher hasn't said.
+ */
+private fun buildViews(context: Context, data: WidgetData, mascot: Bitmap?, widthDp: Float): RemoteViews {
     val text = widgetText(data)
     return blankViews(context).apply {
         // Her face follows Home's (the same mascotMonth). Without her, the text starts at the left edge.
-        if (data.mood != null) {
-            val density = context.resources.displayMetrics.density.takeIf { it > 0f } ?: 2f
-            setImageViewBitmap(R.id.widget_mascot, mascotBitmap(data.mood, (58 * density).roundToInt()))
+        if (mascot != null) {
+            setImageViewBitmap(R.id.widget_mascot, mascot)
             setViewVisibility(R.id.widget_mascot, View.VISIBLE)
         }
 
@@ -180,7 +198,7 @@ private fun buildViews(context: Context, data: WidgetData, widthDp: Float): Remo
         // A large font or a narrow widget would cut the text off; it gets smaller instead.
         if (widthDp > 0f) {
             val inner = widthDp - 2 * PADDING_DP
-            val beside = inner - ADD_DP - GAP_DP - (if (data.mood != null) MASCOT_DP + GAP_DP else 0f)
+            val beside = inner - ADD_DP - GAP_DP - (if (mascot != null) MASCOT_DP + GAP_DP else 0f)
             setTextViewTextSize(R.id.widget_label, TypedValue.COMPLEX_UNIT_SP, fitSp(context, listOf(text.label), beside, SMALL_SP))
             setTextViewTextSize(R.id.widget_amount, TypedValue.COMPLEX_UNIT_SP, fitSp(context, listOf(text.amount), beside, AMOUNT_SP, bold = true))
             val stats = fitSp(context, listOf(text.used, text.daysLeft), inner, SMALL_SP, gapDp = GAP_DP)
