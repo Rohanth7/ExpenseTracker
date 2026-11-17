@@ -135,7 +135,7 @@ private fun EmptyState() {
         Text("No subscriptions found yet", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
         Spacer(Modifier.height(6.dp))
         Text(
-            "MyMoney looks for the same payee charging a similar amount every week, month, 3 months or year. " +
+            "Thriftpot looks for the same payee charging a similar amount every week, month, 3 months or year. " +
                 "A monthly subscription shows up after 3 payments.",
             fontSize = 13.sp, color = Muted, lineHeight = 19.sp
         )

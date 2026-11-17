@@ -41,13 +41,13 @@ fun MessageRulesScreen(viewModel: MessageRulesViewModel, onTeach: () -> Unit, on
         ) {
             item {
                 ScreenHeader("Message rules", onBack = onBack)
-                Text("Rules you've taught MyMoney. They're checked before its own reading of bank messages.",
+                Text("Rules you've taught Thriftpot. They're checked before its own reading of bank messages.",
                     fontSize = 13.sp, color = Muted, modifier = Modifier.padding(bottom = 12.dp))
                 PrimaryButton("Teach a message", onTeach)
                 Spacer(Modifier.height(16.dp))
             }
             if (rules.isEmpty()) item {
-                Text("No rules yet. When a bank message is read wrong, open the expense and tap \"Read wrong? Teach MyMoney\", or paste the message here.",
+                Text("No rules yet. When a bank message is read wrong, open the expense and tap \"Read wrong? Teach Thriftpot\", or paste the message here.",
                     fontSize = 13.sp, color = Muted)
             }
             items(rules, key = { it.id }) { rule ->

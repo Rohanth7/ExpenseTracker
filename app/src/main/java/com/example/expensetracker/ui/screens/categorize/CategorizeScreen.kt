@@ -178,7 +178,7 @@ fun CategorizeScreen(
                 Text(
                     buildAnnotatedString {
                         append("Read wrong? ")
-                        withStyle(SpanStyle(color = Gold)) { append("Teach MyMoney") }
+                        withStyle(SpanStyle(color = Gold)) { append("Teach Thriftpot") }
                     },
                     fontSize = 13.sp, color = Muted,
                     modifier = Modifier.clickable { onTeach(exp.id) }.padding(vertical = 4.dp)
