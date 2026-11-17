@@ -48,10 +48,11 @@ parts = [
     "    " + fill(ellipse(42, 71, 4, 4) + " " + ellipse(78, 71, 4, 4), color("Cheek"), ".55").replace("\n", "\n    "),
     "    </group>",
 ]
-# Grid point (60, 60.7) is the centre of the smallest circle around coin, sparkles, body and
-# shadow (radius 60.7). Scaled by .49 that circle is 29.7dp, inside the 33dp safe radius, and she
-# takes the share of the icon the mockup gives her (78 of 96).
-ICON_SCALE, ICON_CENTRE_Y = .49, 60.7
+# Centred on what can be seen: the top of her coin (grid y 1) and the bottom of her body (y 111),
+# so the padding above and below her is the same. Her shadow is too faint on the dark background
+# to count. Scaled by .49, every part of her, shadow included, stays within 31.6dp of the centre,
+# inside the 33dp safe radius, and she takes the share of the icon the mockup gives her (78 of 96).
+ICON_SCALE, ICON_CENTRE_Y = .49, 56
 if len(sys.argv) > 3 and sys.argv[3] == "icon":
     size, viewport = "108dp", ("108", "108")
     group = (f'<group android:scaleX="{ICON_SCALE}" android:scaleY="{ICON_SCALE}" '

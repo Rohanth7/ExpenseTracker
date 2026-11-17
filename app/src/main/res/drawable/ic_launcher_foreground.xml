@@ -5,7 +5,7 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-<group android:scaleX="0.49" android:scaleY="0.49" android:translateX="24.6" android:translateY="24.257">
+<group android:scaleX="0.49" android:scaleY="0.49" android:translateX="24.6" android:translateY="26.56">
     <path
         android:fillColor="#000000"
         android:fillAlpha=".2"
