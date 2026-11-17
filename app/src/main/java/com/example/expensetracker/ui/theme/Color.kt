@@ -14,6 +14,7 @@ val Ink         = Color(0xFFF4EEDD)   // primary text, warm cream
 val InkSoft     = Color(0xFFD9D6E6)   // secondary text on hero
 val Muted       = Color(0xFF8E94C6)   // label / secondary text
 val Whisper     = Color(0xFF5A609A)   // placeholder text
+val Field       = Color(0xFF232A66)   // input fields, secondary buttons, cards inside sheets
 
 // Hairlines
 val Hairline         = Color(0xFF2B3178)
@@ -36,3 +37,7 @@ val SkySoft     = Color(0xFF1F2F66)   // dark sky background
 // Mint: income and good news
 val Mint        = Color(0xFF7FD8B0)
 val MintSoft    = Color(0xFF1C3A52)   // dark mint background
+
+// Budget tones (with Gold for "at the alert level" and Pink for "over")
+val Leaf        = Color(0xFF5FC08C)   // comfortable
+val Orange      = Color(0xFFF08A3C)   // limit reached

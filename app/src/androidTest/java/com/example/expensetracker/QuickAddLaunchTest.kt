@@ -95,7 +95,7 @@ class QuickAddLaunchTest {
             compose.waitUntilAtLeastOneExists(hasText("Activity") and hasClickAction(), timeoutMillis = 30_000)
             compose.onNode(hasText("Activity") and hasClickAction()).performClick()
             scenario.onActivity { it.startActivity(categorize) }
-            compose.waitUntilAtLeastOneExists(hasText("Categorize Expense"), timeoutMillis = 10_000)
+            compose.waitUntilAtLeastOneExists(hasText("What was this for?"), timeoutMillis = 10_000)
             scenario.onActivity { it.startActivity(quickAdd) }
             compose.waitUntilAtLeastOneExists(hasText("Add Expense"), timeoutMillis = 10_000)
         }

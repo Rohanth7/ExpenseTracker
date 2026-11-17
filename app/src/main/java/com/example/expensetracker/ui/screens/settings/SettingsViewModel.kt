@@ -16,6 +16,9 @@ import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.backup.DriveBackupClient
 import com.example.expensetracker.data.backup.ParseResult
 import com.example.expensetracker.data.export.CsvExporter
+import com.example.expensetracker.data.budget.Budget
+import com.example.expensetracker.data.budget.Budgets
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.google.android.gms.auth.UserRecoverableAuthException
@@ -51,6 +54,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -81,6 +85,17 @@ class SettingsViewModel(
 
     val loans: StateFlow<List<Loan>> = loanRepo.allLoans
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Plan left open past a month's end would keep the old month's spending; it calls this when it comes back.
+    private val budgetsAsOf = MutableStateFlow(System.currentTimeMillis())
+    fun refreshBudgets() { budgetsAsOf.value = System.currentTimeMillis() }
+
+    /** Every monthly limit with this budget month's spending against it, for Plan's front page (the Overview's rule: Budgets.of). */
+    val budgets: StateFlow<List<Budget>> =
+        combine(categoryRepo.allCategories, expenseRepo.allExpenses, MonthStartDay.flow(appContext), budgetsAsOf) { categories, expenses, startDay, now ->
+            val cycle = BudgetPeriod.current(now, startDay)
+            Budgets.of(categories, expenses.filter { it.date in cycle && it.categoryId != -1L })
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun addLoan(name: String, emoji: String, totalAmount: Double, monthlyEmi: Double, tenureMonths: Int, startDate: Long, dueDayOfMonth: Int) = viewModelScope.launch {
         loanRepo.insert(Loan(name = name, emoji = emoji, totalAmount = totalAmount, monthlyEmi = monthlyEmi, tenureMonths = tenureMonths, startDate = startDate, dueDayOfMonth = dueDayOfMonth))

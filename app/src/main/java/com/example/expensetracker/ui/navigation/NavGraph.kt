@@ -226,7 +226,6 @@ fun AppNavGraph(launchAction: LaunchAction? = null, onLaunchHandled: () -> Unit 
                 DashboardScreen(
                     viewModel = vm,
                     onViewPending = { navController.navigateToTab(Screen.Expenses.route) },
-                    onViewAllSpending = { navController.navigateToTab(Screen.Statistics.route) },
                     onViewSubscriptions = { navController.navigate(Screen.Subscriptions.route) },
                     onOpenSettings = { navController.navigate(Screen.Settings.route) },
                     // The Auto-tracking card is the first thing in Settings.

@@ -115,7 +115,7 @@ class ExpensesFiltersTest {
         compose.onNode(hasText("Save") and hasAnyAncestor(isDialog())).performClick()
         compose.waitUntil(5_000) { runBlocking { db.expenseDao().getPending().first().any { it.description == "Dinner" } } }
         // Pending rows say so
-        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Tap to categorize", substring = true)).fetchSemanticsNodes().size == 2 }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Needs a category")).fetchSemanticsNodes().size == 2 }
     }
 
     /** B-13: an expense whose category no longer exists showed "?" and wasn't pending. */

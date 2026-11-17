@@ -52,7 +52,7 @@ class DeleteGoalTest {
                 SavingsGoalRepository(db.savingsGoalDao()), BillRepository(db.billDao()), LoanRepository(db.loanDao()),
                 IncomeRepository(db.incomeDao(), db.recurringIncomeDao(), context), PreferencesManager(context, "delete_goal_test"))
         }
-        compose.setContent { DashboardScreen(vm, onViewPending = {}, onViewAllSpending = {}) }
+        compose.setContent { DashboardScreen(vm, onViewPending = {}) }
         compose.waitUntil(15_000) { vm.uiState.value.savingsGoals.isNotEmpty() }
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("Delete goal Trip"))
     }

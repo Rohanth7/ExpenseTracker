@@ -11,11 +11,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,8 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,12 +36,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
+import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.screens.settings.RestoreConfirmDialog
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.NotificationAccessUtil
 import com.example.expensetracker.ui.util.SmsPermissionUtil
+import com.example.expensetracker.ui.util.fmtINR
 import com.example.expensetracker.ui.util.rememberTrackingStatus
 
 private enum class Step { Welcome, Sms, Notifications, Alerts, Income }
@@ -112,36 +117,35 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
     val incomeShown = remember(incomeText) { AmountCalculator.previewText(incomeText, parsedIncome) }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)
+        modifier = Modifier.fillMaxSize().background(Canvas).systemBarsPadding().padding(horizontal = ScreenPadding).padding(top = 8.dp, bottom = 16.dp)
     ) {
-        ProgressDots(count = steps.size, current = index)
-        Spacer(Modifier.height(32.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             when (step) {
                 Step.Welcome -> {
+                    // Left empty for the mascot.
+                    Spacer(Modifier.size(170.dp).align(Alignment.CenterHorizontally))
                     StepBody(
-                        eyebrow = "WELCOME",
                         title = "Your spending, tracked automatically",
                         body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
                             "Everything stays on this phone. There's no account, no ads and no loans.",
+                        centered = true,
                         points = listOf(
-                            "📩  Reads bank SMS and GPay, PhonePe and Paytm alerts",
-                            "🗂  Sorts payments into categories, and learns as you go",
-                            "🔒  Your data never leaves your phone unless you back it up"
+                            "Reads bank SMS and GPay, PhonePe and Paytm alerts",
+                            "Sorts payments into categories, and learns as you go",
+                            "Your data never leaves your phone unless you back it up"
                         )
                     )
                     viewModel.restoreError?.let { Text(it, color = Pink, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp)) }
                 }
                 Step.Sms -> StepBody(
-                    eyebrow = "STEP 1 · BANK SMS",
                     title = "Log payments from bank SMS",
                     body = "When your bank texts you about a debit, MyMoney logs the amount and payee.\n\n" +
                         "It only looks at new messages from banks and payment services. OTPs and personal " +
                         "messages are ignored, and nothing is sent anywhere.",
-                    status = if (tracking.status.sms) "SMS access is on" else null
+                    status = if (tracking.status.sms) "SMS access is on" else null,
+                    example = { SmsExample() }
                 )
                 Step.Notifications -> StepBody(
-                    eyebrow = "STEP 2 · PAYMENT APPS",
                     title = "Catch UPI payments from GPay and PhonePe",
                     body = "Some UPI payments only show up as a notification from the payment app. To log those, " +
                         "Android needs you to switch on notification access for MyMoney.\n\n" +
@@ -151,7 +155,6 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                     status = if (tracking.status.notifications) "Notification access is on" else null
                 )
                 Step.Alerts -> StepBody(
-                    eyebrow = "STEP 3 · ALERTS",
                     title = "Get a prompt after each payment",
                     body = "MyMoney sends a notification right after a payment so you can pick its category in one tap. " +
                         "It also warns you when a category is close to its budget.",
@@ -159,17 +162,17 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                 )
                 Step.Income -> if (restored != null && skipIncome) {
                     StepBody(
-                        eyebrow = "LAST STEP",
                         title = "You're all set",
                         body = "Restored from your backup: ${restored.summary}.\n\nYou can change anything later in Settings.",
+                        centered = true,
                         points = if (restored.hadCategories) emptyList() else listOf(starterNote)
                     )
                 } else {
                     StepBody(
-                        eyebrow = "LAST STEP",
                         title = "What's your monthly income?",
                         body = "This is optional. It lets Home show how much is still free to spend this month. " +
                             "You can change it any time from the Home screen.",
+                        centered = true,
                         points = when {
                             restored == null -> listOf(starterNote)
                             restored.hadCategories -> listOf("Restored from your backup: ${restored.summary}.")
@@ -182,55 +185,54 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                         onValueChange = { incomeText = it },
                         label = { Text("Monthly income (₹)") },
                         singleLine = true,
+                        textStyle = LocalTextStyle.current.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
                         isError = incomeText.isNotBlank() && parsedIncome == null,
                         // "50000", not "50,000": on a comma-decimal phone that's ₹50.
                         supportingText = when {
                             incomeText.isNotBlank() && parsedIncome == null -> {{ Text("Enter an amount like 50000") }}
-                            incomeShown != null -> {{ Text(incomeShown, color = Muted, fontSize = 12.sp) }}
+                            incomeShown != null -> {{ Text(incomeShown, color = Muted, fontSize = 13.sp) }}
                             else -> null
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Ink, unfocusedTextColor = Ink,
-                            focusedBorderColor = Gold, unfocusedBorderColor = Hairline,
-                            focusedLabelColor = Gold, unfocusedLabelColor = Muted, cursorColor = Gold
-                        ),
+                        shape = FieldShape, colors = fieldColors(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
+            Spacer(Modifier.height(16.dp))
         }
 
-        // Buttons
+        ProgressDots(count = steps.size, current = index, modifier = Modifier.align(Alignment.CenterHorizontally))
+        Spacer(Modifier.height(14.dp))
         when (step) {
             Step.Welcome -> {
-                PrimaryButton("Get started", enabled = !busy, onClick = next)
-                SecondaryButton(if (busy) "Restoring…" else "Moving from another phone? Restore a backup") {
+                PrimaryButton("Get started", onClick = next, enabled = !busy)
+                RestoreAction(busy) {
                     // Drive restore needs the app's Google sign-in client registered first (Play launch work).
                     if (!busy) restoreLauncher.launch(arrayOf("application/json", "*/*"))
                 }
             }
             Step.Sms -> if (tracking.status.sms) PrimaryButton("Continue", onClick = next) else {
-                PrimaryButton(if (smsDeniedForGood) "Open app settings" else "Allow SMS access") {
+                PrimaryButton(if (smsDeniedForGood) "Open app settings" else "Allow SMS access", onClick = {
                     if (smsDeniedForGood) SmsPermissionUtil.openSettings(context)
                     else smsLauncher.launch(Manifest.permission.RECEIVE_SMS)
-                }
-                SecondaryButton("Not now", onClick = next)
+                })
+                SkipAction("Not now", onClick = next)
             }
             Step.Notifications -> if (tracking.status.notifications) PrimaryButton("Continue", onClick = next) else {
-                PrimaryButton("Turn on notification access") { NotificationAccessUtil.openSettings(context) }
-                SecondaryButton("Not now", onClick = next)
+                PrimaryButton("Turn on notification access", onClick = { NotificationAccessUtil.openSettings(context) })
+                SkipAction("Not now", onClick = next)
             }
             Step.Alerts -> if (alertsGranted) PrimaryButton("Continue", onClick = next) else {
-                PrimaryButton("Allow alerts") { alertsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-                SecondaryButton("Not now", onClick = next)
+                PrimaryButton("Allow alerts", onClick = { alertsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) })
+                SkipAction("Not now", onClick = next)
             }
             Step.Income -> if (skipIncome) {
-                PrimaryButton("Finish") { onFinish(null) }
+                PrimaryButton("Finish", onClick = { onFinish(null) })
             } else {
                 val incomeInvalid = incomeText.isNotBlank() && parsedIncome == null
-                PrimaryButton("Finish", enabled = !incomeInvalid) { onFinish(parsedIncome?.takeIf { it > 0 }) }
-                SecondaryButton("Skip") { onFinish(null) }
+                PrimaryButton("Finish", onClick = { onFinish(parsedIncome?.takeIf { it > 0 }) }, enabled = !incomeInvalid)
+                SkipAction("Skip", onClick = { onFinish(null) })
             }
         }
     }
@@ -240,68 +242,81 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
 }
 
 @Composable
-private fun ProgressDots(count: Int, current: Int) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun ProgressDots(count: Int, current: Int, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         repeat(count) { i ->
             Box(
-                Modifier.height(4.dp).width(if (i == current) 24.dp else 12.dp).clip(CircleShape)
-                    .background(if (i <= current) Gold else Hairline)
+                Modifier.height(5.dp).width(if (i == current) 18.dp else 5.dp).clip(CircleShape)
+                    .background(if (i == current) Gold else Hairline)
             )
         }
     }
 }
 
 @Composable
-private fun StepBody(
-    eyebrow: String,
+private fun ColumnScope.StepBody(
     title: String,
     body: String,
     points: List<String> = emptyList(),
     hint: String? = null,
-    status: String? = null
+    status: String? = null,
+    centered: Boolean = false,
+    example: (@Composable ColumnScope.() -> Unit)? = null
 ) {
-    Text(eyebrow, fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
-    Spacer(Modifier.height(8.dp))
-    Text(title, fontFamily = AnekLatin, fontSize = 30.sp, color = Ink, lineHeight = 34.sp)
+    val align = if (centered) TextAlign.Center else TextAlign.Start
     Spacer(Modifier.height(16.dp))
-    Text(body, fontSize = 15.sp, color = InkSoft, lineHeight = 22.sp)
+    Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Ink, lineHeight = 30.sp, textAlign = align, modifier = Modifier.fillMaxWidth())
+    Spacer(Modifier.height(10.dp))
+    Text(body, fontSize = 15.sp, color = Muted, lineHeight = 22.sp, textAlign = align, modifier = Modifier.fillMaxWidth())
+    if (example != null) {
+        Spacer(Modifier.height(14.dp))
+        example()
+    }
     if (points.isNotEmpty()) {
-        Spacer(Modifier.height(20.dp))
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) { points.forEach { Text(it, fontSize = 14.sp, color = Ink, lineHeight = 20.sp) } }
+        Spacer(Modifier.height(16.dp))
+        MCard {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                points.forEach { Text(it, fontSize = 15.sp, color = Ink) }
+            }
+        }
     }
     if (hint != null) {
         Spacer(Modifier.height(16.dp))
-        Text(hint, fontSize = 13.sp, color = Muted, lineHeight = 19.sp)
+        Text(hint, fontSize = 13.sp, color = Muted)
     }
     if (status != null) {
-        Spacer(Modifier.height(20.dp))
-        Row(
-            Modifier.clip(RoundedCornerShape(12.dp)).background(GoldSoft).padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) { Text("✓  $status", fontSize = 14.sp, color = GoldInk, fontWeight = FontWeight.Medium) }
+        Spacer(Modifier.height(16.dp))
+        Text("✓  $status", fontSize = 15.sp, color = Mint, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** What the SMS step does, shown with a made-up message. */
+@Composable
+private fun ColumnScope.SmsExample() {
+    MCard {
+        Text("Your bank sends", fontSize = 13.sp, color = Muted)
+        Text("Rs 486.00 debited from a/c **1234 to SWIGGY on 12-Nov", fontSize = 15.sp, color = Ink)
+    }
+    Text("↓", fontSize = 15.sp, color = Gold, modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 4.dp))
+    MCard(padding = RowCardPadding) {
+        AccentRow(accent = Gold, title = "Swiggy", subtitle = "Food · today", trailing = "₹${fmtINR(486.0)}")
     }
 }
 
 @Composable
-private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(if (enabled) Gold else Gold.copy(alpha = 0.35f))
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(vertical = 15.dp),
-        contentAlignment = Alignment.Center
-    ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Deep) }
-    Spacer(Modifier.height(8.dp))
+private fun ColumnScope.SkipAction(text: String, onClick: () -> Unit) {
+    TextAction(text, onClick, color = Muted, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
 }
 
 @Composable
-private fun SecondaryButton(text: String, onClick: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 13.dp),
-        contentAlignment = Alignment.Center
-    ) { Text(text, fontSize = 14.sp, color = Muted, fontWeight = FontWeight.Medium) }
+private fun ColumnScope.RestoreAction(busy: Boolean, onClick: () -> Unit) {
+    Text(
+        if (busy) buildAnnotatedString { append("Restoring…") } else buildAnnotatedString {
+            append("Moving from another phone? ")
+            withStyle(SpanStyle(color = Gold)) { append("Restore a backup") }
+        },
+        fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Muted, textAlign = TextAlign.Center,
+        modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
+            .clip(FieldShape).clickable(role = Role.Button, onClick = onClick).padding(vertical = 4.dp)
+    )
 }
-

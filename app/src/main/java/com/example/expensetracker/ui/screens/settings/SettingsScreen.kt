@@ -4,9 +4,6 @@ import com.example.expensetracker.R
 import androidx.compose.ui.res.stringResource
 import com.example.expensetracker.ui.util.appFooter
 import com.example.expensetracker.ui.util.appVersionName
-import com.example.expensetracker.ui.util.fmtINR
-import com.example.expensetracker.ui.screens.dashboard.LoanProgress
-import com.example.expensetracker.ui.util.rememberSaveableItem
 import android.app.Activity
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -21,22 +18,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import android.Manifest
 import androidx.core.app.ActivityCompat
@@ -45,10 +35,7 @@ import com.example.expensetracker.ui.util.SmsPermissionUtil
 import com.example.expensetracker.ui.util.TrackingStatus
 import com.example.expensetracker.ui.util.rememberTrackingStatus
 import androidx.compose.ui.unit.sp
-import com.example.expensetracker.data.db.entity.Bill
 import com.example.expensetracker.data.db.entity.Category
-import com.example.expensetracker.data.db.entity.Loan
-import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
@@ -60,22 +47,15 @@ import androidx.fragment.app.FragmentActivity
 import com.example.expensetracker.security.AppLock
 import com.example.expensetracker.ui.util.BiometricUtil
 import com.example.expensetracker.ui.util.isDebugBuild
-import com.example.expensetracker.ui.util.formatLimitInput
-import com.example.expensetracker.ui.util.parseColor
-import com.example.expensetracker.ui.util.AmountCalculator
-import com.example.expensetracker.ui.util.AmountField
-import com.example.expensetracker.ui.util.rememberAmountInputState
-import com.example.expensetracker.ui.util.parseLimitInput
 import java.util.Locale
-import com.example.expensetracker.ui.util.rememberAmountText
-import com.example.expensetracker.ui.util.parseAmountOrZero
-import com.example.expensetracker.ui.util.oneCharacter
-import com.example.expensetracker.ui.util.wholeNumberIn
-import com.example.expensetracker.ui.components.AppAlertDialog
+import com.example.expensetracker.ui.components.*
+import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.expensetracker.ui.components.LocalAppLocked
 
 // An enum so the open page survives rotation and Android closing the app (rememberSaveable).
-private enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
+internal enum class SettingsPage { Bills, Loans, CategoryBudgets, Cloud, Preferences, Data }
 
 /** Which front page the screen opens on: the Plan tab, or Settings (reached from Home). */
 enum class SettingsHome { Settings, Plan }
@@ -93,6 +73,9 @@ fun SettingsScreen(
     val categories by viewModel.categories.collectAsState()
     val bills by viewModel.bills.collectAsState()
     val loans by viewModel.loans.collectAsState()
+    val budgets by viewModel.budgets.collectAsState()
+    if (home == SettingsHome.Plan) LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshBudgets() }
+    val recurringIncomes by viewModel.recurringIncomes.collectAsState()
     val privacyMode by viewModel.privacyMode.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
     val widgetEnabled by viewModel.widgetEnabled.collectAsState()
@@ -178,10 +161,12 @@ fun SettingsScreen(
         if (!locked) snackbarMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSnackbar() }
     }
 
-    Scaffold(containerColor = Canvas, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Scaffold(containerColor = Canvas, contentWindowInsets = NoInsets, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         when (currentPage) {
-            null -> if (home == SettingsHome.Plan) PlanMenu(
+            null -> if (home == SettingsHome.Plan) PlanFrontPage(
+                budgets = budgets, alertPercent = budgetAlertThreshold,
                 bills = bills, loans = loans, categories = categories,
+                recurringIncomeCount = recurringIncomes.size,
                 onOpenSubscriptions = onOpenSubscriptions,
                 modifier = Modifier.padding(padding),
                 onNavigate = { currentPage = it }
@@ -301,7 +286,7 @@ private fun MonthStartDialog(current: Int, onDismiss: () -> Unit, onPick: (Int) 
                         Row(Modifier.fillMaxWidth().clickable { onPick(day) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = day == current, onClick = { onPick(day) },
                                 colors = RadioButtonDefaults.colors(selectedColor = Gold, unselectedColor = Muted))
-                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 14.sp)
+                            Text(if (day == 1) "1st (calendar month)" else BudgetPeriod.ordinal(day), color = Ink, fontSize = 15.sp)
                         }
                     }
                 }
@@ -348,54 +333,6 @@ internal fun RestoreConfirmDialog(data: BackupData, fromDrive: Boolean, onConfir
     )
 }
 
-// ── Plan ────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun PlanMenu(
-    bills: List<Bill>,
-    loans: List<Loan>,
-    categories: List<Category>,
-    onOpenSubscriptions: () -> Unit,
-    modifier: Modifier = Modifier,
-    onNavigate: (SettingsPage) -> Unit
-) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize().background(Canvas),
-        contentPadding = PaddingValues(16.dp)
-    ) {
-        item {
-            Text("LIMITS, BILLS AND LOANS", fontFamily = AnekLatin, fontSize = 10.5.sp, letterSpacing = 1.8.sp, color = Muted, fontWeight = FontWeight.Medium)
-            Text("Plan", fontFamily = AnekLatin, fontSize = 28.sp, color = Ink, lineHeight = 30.sp)
-            Spacer(Modifier.height(24.dp))
-        }
-        item {
-            MenuCard {
-                MenuRow(icon = Icons.Default.Receipt, iconBg = GoldSoft, iconTint = GoldInk, title = "Bills & Reminders",
-                    subtitle = if (bills.isEmpty()) "No bills set up" else "${bills.size} bill${if (bills.size != 1) "s" else ""} · ${bills.count { it.isEnabled }} active",
-                    onClick = { onNavigate(SettingsPage.Bills) })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.AccountBalance, iconBg = Canvas, iconTint = Ink, title = "Loans & EMIs",
-                    subtitle = if (loans.isEmpty()) "No loans tracked" else "${loans.size} loan${if (loans.size != 1) "s" else ""} tracked",
-                    onClick = { onNavigate(SettingsPage.Loans) })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                val budgetedCount = categories.count { it.monthlyLimit > 0 }
-                MenuRow(
-                    icon = Icons.Default.PieChart, iconBg = Canvas, iconTint = Ink,
-                    title = "Category Budgets",
-                    subtitle = if (budgetedCount == 0) "No limits set" else "$budgetedCount ${if (budgetedCount != 1) "categories" else "category"} with limits",
-                    onClick = { onNavigate(SettingsPage.CategoryBudgets) }
-                )
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.Autorenew, iconBg = Canvas, iconTint = Ink, title = "Subscriptions",
-                    subtitle = "Repeating payments found in your spending",
-                    onClick = onOpenSubscriptions)
-            }
-        }
-    }
-}
-
-// ── Main Menu ───────────────────────────────────────────────────────────────
-
 @Composable
 private fun SettingsMainMenu(
     categories: List<Category>,
@@ -413,353 +350,63 @@ private fun SettingsMainMenu(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().background(Canvas),
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
     ) {
+        item { ScreenHeader("Settings", onBack = onBack) }
+        item { AutoTrackingCard(tracking, onFixSms, onFixNotifications) }
         item {
-            SubPageHeader("Settings", onBack)
-            Spacer(Modifier.height(16.dp))
-        }
-        item {
-            SectionLabel("AUTO-TRACKING")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Sms,
-                    iconBg = if (tracking.sms) GoldSoft else PinkSoft,
-                    iconTint = if (tracking.sms) GoldInk else Pink,
-                    title = "Bank SMS",
-                    subtitle = if (tracking.sms) "On · payments are logged from bank texts" else "Off · tap to allow SMS access",
-                    onClick = { if (!tracking.sms) onFixSms() })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.NotificationsActive,
-                    iconBg = if (tracking.notifications) GoldSoft else PinkSoft,
-                    iconTint = if (tracking.notifications) GoldInk else Pink,
-                    title = "Payment app notifications",
-                    subtitle = if (tracking.notifications) "On · GPay, PhonePe, Paytm and bank apps" else "Off · tap to turn on notification access",
-                    onClick = onFixNotifications)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.Rule, iconBg = Canvas, iconTint = Ink,
-                    title = "Message rules",
-                    subtitle = if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
-                    onClick = onOpenMessageRules)
+            MCard(Modifier.padding(top = 10.dp), padding = RowCardPadding) {
+                MenuRow(
+                    "Message rules",
+                    if (ruleCount == 0) "Teach MyMoney a message it reads wrong" else "$ruleCount rule${if (ruleCount == 1) "" else "s"} you've taught",
+                    onOpenMessageRules
+                )
+                RowDivider()
+                MenuRow("Categories & tags", "${categories.size} ${if (categories.size != 1) "categories" else "category"}", onOpenCategories)
+                RowDivider()
+                MenuRow("Cloud Backup", if (driveConnected) driveAccountEmail else "Not connected", onClick = { onNavigate(SettingsPage.Cloud) })
+                RowDivider()
+                MenuRow("Preferences", "Alerts, privacy, widget, week start", onClick = { onNavigate(SettingsPage.Preferences) })
+                RowDivider()
+                MenuRow("Data & Backup", "Export, import, reset all data", onClick = { onNavigate(SettingsPage.Data) })
             }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("CLOUD")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Cloud,
-                    iconBg = if (driveConnected) GoldSoft else Canvas,
-                    iconTint = if (driveConnected) GoldInk else Muted,
-                    title = "Cloud Backup",
-                    subtitle = if (driveConnected) driveAccountEmail else "Not connected",
-                    onClick = { onNavigate(SettingsPage.Cloud) })
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("CUSTOMISE")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Category, iconBg = Canvas, iconTint = Ink, title = "Categories & tags",
-                    subtitle = "${categories.size} ${if (categories.size != 1) "categories" else "category"}",
-                    onClick = onOpenCategories)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 12.dp))
-                MenuRow(icon = Icons.Default.Tune, iconBg = Canvas, iconTint = Ink, title = "Preferences",
-                    subtitle = "Alerts, privacy, widget, week start",
-                    onClick = { onNavigate(SettingsPage.Preferences) })
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-        item {
-            SectionLabel("DATA")
-            MenuCard {
-                MenuRow(icon = Icons.Default.Storage, iconBg = Canvas, iconTint = Ink, title = "Data & Backup",
-                    subtitle = "Export, import, reset all data",
-                    onClick = { onNavigate(SettingsPage.Data) })
-            }
-            Spacer(Modifier.height(32.dp))
         }
         item {
             val context = LocalContext.current
-            Text(appFooter(stringResource(R.string.app_name), appVersionName(context)), fontFamily = AnekLatin, fontSize = 10.sp, color = Whisper,
-                modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Spacer(Modifier.height(40.dp))
+            Text(
+                appFooter(stringResource(R.string.app_name), appVersionName(context)), fontSize = 13.sp, color = Whisper,
+                modifier = Modifier.fillMaxWidth().padding(top = 32.dp), textAlign = TextAlign.Center
+            )
         }
     }
 }
 
-// ── Sub-pages ───────────────────────────────────────────────────────────────
-
+/** One line when both sources are on; otherwise what is off, with a button for the first fix and a link for the second. */
 @Composable
-private fun CategoryBudgetsSubPage(
-    categories: List<Category>,
-    viewModel: SettingsViewModel,
-    modifier: Modifier = Modifier,
-    onBack: () -> Unit
-) {
-    var categoryToEdit by rememberSaveableItem(categories) { it.id }
-    val parentCategories = categories.filter { it.parentId == null }
-    // Each category, then its subcategories: a subcategory can have a limit of its own.
-    val rows = parentCategories.flatMap { parent -> listOf(parent) + categories.filter { it.parentId == parent.id } }
-
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Category Budgets", onBack); Spacer(Modifier.height(8.dp)) }
-        item {
-            SectionLabel("MONTHLY LIMITS")
-            Text(
-                "Set a monthly cap per category. You'll be alerted when spending approaches or exceeds the limit. A subcategory's spending counts toward its own limit and its category's.",
-                fontSize = 11.5.sp, color = Muted, lineHeight = 16.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
+private fun AutoTrackingCard(tracking: TrackingStatus, onFixSms: () -> Unit, onFixNotifications: () -> Unit) {
+    MCard {
+        if (tracking.sms && tracking.notifications) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToneDot(Mint)
+                Text("Auto-tracking is on", fontSize = 15.sp, color = Ink)
+            }
+            return@MCard
         }
-        if (parentCategories.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No categories yet.\nAdd expenses to create categories first.",
-                        fontSize = 12.sp, color = Muted,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
-        } else {
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper)
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    rows.forEachIndexed { i, cat ->
-                        if (i > 0) HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                        CategoryLimitRow(category = cat, onClick = { categoryToEdit = cat })
-                    }
-                }
-            }
-        }
-        item { Spacer(Modifier.height(40.dp)) }
-    }
-
-    categoryToEdit?.let { cat ->
-        CategoryLimitDialog(
-            category = cat,
-            onDismiss = { categoryToEdit = null },
-            onConfirm = { limit ->
-                viewModel.updateCategoryLimit(cat, limit)
-                categoryToEdit = null
-            }
+        val bothOff = !tracking.sms && !tracking.notifications
+        Text("Auto-tracking needs ${if (bothOff) "two fixes" else "one fix"}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text(
+            when {
+                bothOff -> "Bank SMS and payment app notifications are off."
+                !tracking.sms -> "Payment app notifications are on. Bank SMS is off."
+                else -> "Bank SMS is on. Payment app notifications are off."
+            },
+            fontSize = 13.sp, color = Muted
         )
-    }
-}
-
-@Composable
-private fun CategoryLimitRow(category: Category, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
-                .background(parseColor(category.colorHex).copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(category.emoji, fontSize = 16.sp)
+        Spacer(Modifier.height(12.dp))
+        if (!tracking.sms) PrimaryButton("Allow SMS access", onFixSms) else PrimaryButton("Turn on notifications", onFixNotifications)
+        if (bothOff) {
+            TextAction("Turn on notifications", onFixNotifications, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(category.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(
-                if (category.monthlyLimit > 0) "₹${fmtINR(category.monthlyLimit)} / month" else "No limit",
-                fontSize = 11.sp,
-                color = if (category.monthlyLimit > 0) Gold else Muted
-            )
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = Muted, modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
-private fun CategoryLimitDialog(
-    category: Category,
-    onDismiss: () -> Unit,
-    onConfirm: (Double) -> Unit
-) {
-    var limitText by rememberSaveable {
-        mutableStateOf(formatLimitInput(category.monthlyLimit))
-    }
-    val limit = rememberAmountText(limitText) { parseLimitInput(it) }
-    val parsedLimit = limit.value
-
-    AppAlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Paper,
-        title = { Text("${category.emoji} ${category.name}", color = Ink) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = limitText,
-                    onValueChange = { limitText = it },
-                    label = { Text("Monthly limit (₹)") },
-                    placeholder = { Text("e.g. 5000", color = Muted) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    isError = limit.invalid,
-                    supportingText = limit.supportingText,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Gold,
-                        focusedTextColor = Ink,
-                        unfocusedTextColor = Ink
-                    )
-                )
-                if (category.monthlyLimit > 0) {
-                    Text("Set to 0 or leave blank to remove the limit.", fontSize = 11.sp, color = Muted)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { parsedLimit?.let(onConfirm) },
-                enabled = parsedLimit != null
-            ) { Text("Save", color = if (parsedLimit != null) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } }
-    )
-}
-
-@Composable
-private fun BillsSubPage(bills: List<Bill>, categories: List<Category>, viewModel: SettingsViewModel, modifier: Modifier = Modifier, onBack: () -> Unit) {
-    var showAddBill by rememberSaveable { mutableStateOf(false) }
-    var billToDelete by rememberSaveableItem(bills) { it.id }
-    var billToEdit by rememberSaveableItem(bills) { it.id }
-    val recurringIncomes by viewModel.recurringIncomes.collectAsState()
-    var showAddIncome by rememberSaveable { mutableStateOf(false) }
-    var incomeToEdit by rememberSaveableItem(recurringIncomes) { it.id }
-    var incomeToDelete by rememberSaveableItem(recurringIncomes) { it.id }
-
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Bills & Reminders", onBack) ; Spacer(Modifier.height(8.dp)) }
-        item {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel("BILLS & RECURRING")
-                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddBill = true })
-            }
-        }
-        if (bills.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("No bills set up yet.\nTap Add + to track subscriptions, rent, or auto-log recurring expenses.",
-                        fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
-                }
-            }
-        } else {
-            items(bills) { bill ->
-                BillRow(bill = bill, category = categories.find { it.id == bill.categoryId },
-                    onToggle = { viewModel.toggleBill(bill) }, onDelete = { billToDelete = bill }, onClick = { billToEdit = bill })
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        item {
-            Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel("RECURRING INCOME")
-                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddIncome = true })
-            }
-        }
-        if (recurringIncomes.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("No recurring income yet.\nAdd your salary and it's logged as income on its day each month.",
-                        fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
-                }
-            }
-        } else {
-            items(recurringIncomes, key = { "income_${it.id}" }) { r ->
-                RecurringIncomeRow(r, onToggle = { viewModel.toggleRecurringIncome(r) }, onDelete = { incomeToDelete = r }, onClick = { incomeToEdit = r })
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        item { Spacer(Modifier.height(40.dp)) }
-    }
-
-    if (showAddIncome) {
-        RecurringIncomeDialog(existing = null, onDismiss = { showAddIncome = false },
-            onConfirm = { viewModel.addRecurringIncome(it); showAddIncome = false })
-    }
-    incomeToEdit?.let { r ->
-        RecurringIncomeDialog(existing = r, onDismiss = { incomeToEdit = null },
-            onConfirm = { viewModel.updateRecurringIncome(it); incomeToEdit = null })
-    }
-    incomeToDelete?.let { r ->
-        AppAlertDialog(onDismissRequest = { incomeToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-            title = { Text("Delete recurring income?") },
-            text = { Text("\"${r.name}\" won't be logged any more. Income it already logged stays.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteRecurringIncome(r); incomeToDelete = null }) { Text("Delete", color = Pink) } },
-            dismissButton = { TextButton(onClick = { incomeToDelete = null }) { Text("Cancel", color = Muted) } })
-    }
-
-    if (showAddBill) {
-        AddBillDialog(categories = categories, onDismiss = { showAddBill = false },
-            onConfirm = { name, amount, day, reminderDays, catId, autoLog ->
-                viewModel.addBill(name, amount, day, reminderDays, catId, autoLog); showAddBill = false
-            })
-    }
-    billToDelete?.let { bill ->
-        AppAlertDialog(onDismissRequest = { billToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-            title = { Text("Delete bill?") }, text = { Text("\"${bill.name}\" will be removed from your bill reminders.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteBill(bill); billToDelete = null }) { Text("Delete", color = Pink) } },
-            dismissButton = { TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = Muted) } })
-    }
-    billToEdit?.let { bill ->
-        EditBillDialog(bill = bill, categories = categories, onDismiss = { billToEdit = null },
-            onConfirm = { updated -> viewModel.updateBill(updated); billToEdit = null })
-    }
-}
-
-@Composable
-private fun LoansSubPage(loans: List<Loan>, viewModel: SettingsViewModel, modifier: Modifier = Modifier, onBack: () -> Unit) {
-    var showAddLoan by rememberSaveable { mutableStateOf(false) }
-    var loanToDelete by rememberSaveableItem(loans) { it.id }
-    var loanToEdit by rememberSaveableItem(loans) { it.id }
-
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Loans & EMIs", onBack) ; Spacer(Modifier.height(8.dp)) }
-        item {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel("LOANS")
-                Text("Add +", fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { showAddLoan = true })
-            }
-        }
-        if (loans.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("No loans tracked.\nTap Add + to monitor EMI progress.",
-                        fontSize = 12.sp, color = Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 18.sp)
-                }
-            }
-        } else {
-            items(loans) { loan ->
-                LoanRow(loan = loan, onDelete = { loanToDelete = loan }, onClick = { loanToEdit = loan })
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-        item { Spacer(Modifier.height(40.dp)) }
-    }
-
-    if (showAddLoan) {
-        AddLoanDialog(onDismiss = { showAddLoan = false },
-            onConfirm = { name, emoji, total, emi, tenure, startDate, dueDay ->
-                viewModel.addLoan(name, emoji, total, emi, tenure, startDate, dueDay); showAddLoan = false
-            })
-    }
-    loanToDelete?.let { loan ->
-        AppAlertDialog(onDismissRequest = { loanToDelete = null }, containerColor = Paper, titleContentColor = Ink, textContentColor = Muted,
-            title = { Text("Delete loan?") }, text = { Text("\"${loan.name}\" will be removed from your EMI tracker.") },
-            confirmButton = { TextButton(onClick = { viewModel.deleteLoan(loan); loanToDelete = null }) { Text("Delete", color = Pink) } },
-            dismissButton = { TextButton(onClick = { loanToDelete = null }) { Text("Cancel", color = Muted) } })
-    }
-    loanToEdit?.let { loan ->
-        EditLoanDialog(loan = loan, onDismiss = { loanToEdit = null },
-            onConfirm = { updated -> viewModel.updateLoan(updated); loanToEdit = null })
     }
 }
 
@@ -770,55 +417,46 @@ private fun CloudSubPage(
     onBackUpNow: () -> Unit, onRestoreFromDrive: () -> Unit,
     onConnectDrive: () -> Unit, onDisconnectDrive: () -> Unit, onSetAutoBackup: (Boolean) -> Unit
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Cloud Backup", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Cloud Backup", onBack = onBack) }
         item {
-            SectionLabel("GOOGLE DRIVE")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(20.dp)) {
-                if (driveConnected) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(GoldSoft), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Cloud, null, tint = GoldInk, modifier = Modifier.size(20.dp))
+            SectionLabel("Google Drive")
+            if (driveConnected) {
+                MCard(padding = RowCardPadding) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Google Drive", fontSize = 15.sp, color = Ink)
+                            Text(driveAccountEmail, fontSize = 13.sp, color = Muted)
                         }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text(driveAccountEmail, fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-                        }
-                        TextButton(onClick = onDisconnectDrive) { Text("Disconnect", color = Pink, fontSize = 12.sp) }
+                        TextAction("Disconnect", onDisconnectDrive, color = Pink)
                     }
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    RowDivider()
                     ToggleRow("Automatic Cloud Backup", "Daily backup to a private app folder in your Drive", autoBackupEnabled, onSetAutoBackup)
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                        title = "Back up now", subtitle = if (driveBusy) "Working…" else "Save everything to Drive",
-                        onClick = { if (!driveBusy) onBackUpNow() })
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                    SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                        title = "Restore from Drive", subtitle = if (driveBusy) "Working…" else "Replace this phone's data with your Drive backup",
-                        onClick = { if (!driveBusy) onRestoreFromDrive() })
-                } else {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Canvas), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.CloudOff, null, tint = Muted, modifier = Modifier.size(20.dp))
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Google Drive", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text("Not connected", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-                        }
-                    }
+                    RowDivider()
+                    MenuRow("Back up now", if (driveBusy) "Working…" else "Save everything to Drive", onClick = { if (!driveBusy) onBackUpNow() })
+                    RowDivider()
+                    MenuRow(
+                        "Restore from Drive", if (driveBusy) "Working…" else "Replace this phone's data with your Drive backup",
+                        onClick = { if (!driveBusy) onRestoreFromDrive() }
+                    )
+                }
+            } else {
+                MCard {
+                    Text("Google Drive", fontSize = 15.sp, color = Ink)
+                    Text("Not connected", fontSize = 13.sp, color = Muted)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
+                        fontSize = 13.sp, color = Muted, lineHeight = 19.sp
+                    )
                     Spacer(Modifier.height(14.dp))
-                    Text("Connect your Google account to back up to a private app folder in your Drive. Only MyMoney can see it.",
-                        fontSize = 11.sp, color = Muted, lineHeight = 16.sp)
-                    Spacer(Modifier.height(14.dp))
-                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Gold).clickable(onClick = onConnectDrive).padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center) {
-                        Text("Connect Google Drive", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Deep)
-                    }
+                    PrimaryButton("Connect Google Drive", onConnectDrive)
                 }
             }
         }
-        item { Spacer(Modifier.height(40.dp)) }
     }
 }
 
@@ -831,94 +469,76 @@ private fun PreferencesSubPage(
     onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
     onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Preferences", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Preferences", onBack = onBack) }
         item {
-            SectionLabel("NOTIFICATIONS")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Budget alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                            Text(if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit" else "Disabled", fontSize = 11.5.sp, color = Muted)
+            SectionLabel("Notifications")
+            MCard(padding = RowCardPadding) {
+                ToggleRow(
+                    "Budget alerts",
+                    if (budgetAlertsEnabled) "Alert at $budgetAlertThreshold% & 100% of limit" else "Disabled",
+                    budgetAlertsEnabled, onSetBudgetAlerts
+                )
+                androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Warning threshold", fontSize = 13.sp, color = Muted)
+                            Text("$budgetAlertThreshold%", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                         }
-                        Switch(checked = budgetAlertsEnabled, onCheckedChange = onSetBudgetAlerts,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                    }
-                    androidx.compose.animation.AnimatedVisibility(visible = budgetAlertsEnabled) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Warning threshold", fontSize = 11.5.sp, color = Muted)
-                                Text("$budgetAlertThreshold%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Gold, fontFamily = AnekLatin)
-                            }
-                            Slider(value = budgetAlertThreshold.toFloat(), onValueChange = { onSetBudgetThreshold(it.toInt()) },
-                                valueRange = 50f..95f, steps = 8, modifier = Modifier.fillMaxWidth(),
-                                colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Hairline))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("50%", fontSize = 10.sp, color = Whisper)
-                                Text("95%", fontSize = 10.sp, color = Whisper)
-                            }
+                        Slider(value = budgetAlertThreshold.toFloat(), onValueChange = { onSetBudgetThreshold(it.toInt()) },
+                            valueRange = 50f..95f, steps = 8, modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(thumbColor = Gold, activeTrackColor = Gold, inactiveTrackColor = Hairline))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("50%", fontSize = 13.sp, color = Whisper)
+                            Text("95%", fontSize = 13.sp, color = Whisper)
                         }
                     }
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Subscription price alerts", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("Tell me when a subscription's price changes", fontSize = 11.5.sp, color = Muted)
-                    }
-                    Switch(checked = priceAlertsEnabled, onCheckedChange = onSetPriceAlerts,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                }
+                RowDivider()
+                ToggleRow("Subscription price alerts", "Tell me when a subscription's price changes", priceAlertsEnabled, onSetPriceAlerts)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("DISPLAY")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel("Display")
+            MCard(padding = RowCardPadding) {
                 var showWeekStartInfo by rememberSaveable { mutableStateOf(false) }
-                Row(modifier = Modifier.fillMaxWidth().clickable { onSetWeekStart(!weekStartsOnMonday) }.padding(vertical = 14.dp),
+                Row(modifier = Modifier.fillMaxWidth().clickable { onSetWeekStart(!weekStartsOnMonday) }.padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Week starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Icon(Icons.Default.Info, contentDescription = "Info", tint = Muted, modifier = Modifier.size(15.dp).clickable(
+                        Text("Week starts on", fontSize = 15.sp, color = Ink)
+                        Icon(Icons.Default.Info, contentDescription = "Info", tint = Muted, modifier = Modifier.size(18.dp).clickable(
                             indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
                         ) { showWeekStartInfo = !showWeekStartInfo })
                     }
-                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
+                    Text(if (weekStartsOnMonday) "Monday" else "Sunday", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                 }
                 androidx.compose.animation.AnimatedVisibility(visible = showWeekStartInfo) {
                     Text("Controls which day the 'This week' total resets on in the Expenses screen. Set to Monday for a work-week view, or Sunday for a calendar-week view.",
-                        fontSize = 11.5.sp, color = Muted,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Canvas).padding(10.dp, 8.dp).padding(bottom = 6.dp))
+                        fontSize = 13.sp, color = Muted, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 var showMonthStart by rememberSaveable { mutableStateOf(false) }
-                Row(modifier = Modifier.fillMaxWidth().clickable { showMonthStart = true }.padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Month starts on", fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text("Budgets, the forecast and monthly stats run from this day", fontSize = 11.5.sp, color = Muted)
-                    }
+                MenuRow("Month starts on", "Budgets, the forecast and monthly stats run from this day", onClick = { showMonthStart = true }) {
                     Text(if (monthStartDay == 1) "1st (calendar month)" else BudgetPeriod.ordinal(monthStartDay),
-                        fontFamily = AnekLatin, fontSize = 11.sp, color = Gold, letterSpacing = 0.4.sp)
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Gold)
                 }
                 if (showMonthStart) MonthStartDialog(monthStartDay, onDismiss = { showMonthStart = false }) {
                     onSetMonthStart(it); showMonthStart = false
                 }
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel("SECURITY")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel("Security")
+            MCard(padding = RowCardPadding) {
                 ToggleRow("Privacy mode", "Hides screen in app switcher", privacyMode, onSetPrivacyMode)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                RowDivider()
                 ToggleRow("App Lock", "Ask for fingerprint, face or screen lock to open MyMoney", biometricLockEnabled, onSetBiometricLock)
             }
-            Spacer(Modifier.height(40.dp))
         }
     }
 }
@@ -933,37 +553,34 @@ private fun DataSubPage(
     var showCsvDialog by rememberSaveable { mutableStateOf(false) }
     var showResetDialog by rememberSaveable { mutableStateOf(false) }
 
-    LazyColumn(modifier = modifier.fillMaxSize().background(Canvas), contentPadding = PaddingValues(16.dp)) {
-        item { SubPageHeader("Data & Backup", onBack) ; Spacer(Modifier.height(8.dp)) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize().background(Canvas),
+        contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, bottom = 40.dp)
+    ) {
+        item { ScreenHeader("Data & Backup", onBack = onBack) }
         item {
-            SectionLabel("BACKUP")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
-                SettingRow(icon = { Icon(Icons.Default.CloudUpload, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export backup", subtitle = "Save everything to a file", onClick = onExport)
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                SettingRow(icon = { Icon(Icons.Default.TableChart, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Export CSV", subtitle = "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
-                HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
-                SettingRow(icon = { Icon(Icons.Default.Restore, null, tint = Ink, modifier = Modifier.size(17.dp)) },
-                    title = "Restore from backup", subtitle = "Replace all data with a backup file", onClick = onImport)
+            SectionLabel("Backup")
+            MCard(padding = RowCardPadding) {
+                MenuRow("Export backup", "Save everything to a file", onExport)
+                RowDivider()
+                MenuRow("Export CSV", "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
+                RowDivider()
+                MenuRow("Restore from backup", "Replace all data with a backup file", onImport)
             }
-            Spacer(Modifier.height(20.dp))
         }
         item {
-            SectionLabel(if (showMockData) "DEVELOPER" else "DANGER ZONE")
-            Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 16.dp, vertical = 4.dp)) {
+            SectionLabel(if (showMockData) "Developer" else "Danger zone")
+            MCard(padding = RowCardPadding) {
                 // Debug builds only: it deletes all real data before loading samples.
                 if (showMockData) {
-                    SettingRow(icon = { Icon(Icons.Default.Science, null, tint = Gold, modifier = Modifier.size(17.dp)) },
-                        title = "Load mock data", subtitle = "Fill app with 3 months of sample expenses for testing",
-                        onClick = { showMockDataDialog = true })
-                    HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+                    MenuRow("Load mock data", "Fill app with 3 months of sample expenses for testing", onClick = { showMockDataDialog = true })
+                    RowDivider()
                 }
-                SettingRow(icon = { Icon(Icons.Default.Delete, null, tint = Pink, modifier = Modifier.size(17.dp)) },
-                    title = "Reset everything", subtitle = "Delete all data on this phone",
-                    danger = true, onClick = { showResetDialog = true })
+                Column(Modifier.fillMaxWidth().clickable { showResetDialog = true }.padding(vertical = 12.dp)) {
+                    Text("Reset everything", fontSize = 15.sp, color = Pink)
+                    Text("Delete all data on this phone", fontSize = 13.sp, color = Muted)
+                }
             }
-            Spacer(Modifier.height(40.dp))
         }
     }
 
@@ -989,534 +606,14 @@ private fun DataSubPage(
     }
 }
 
-// ── Shared UI helpers ────────────────────────────────────────────────────────
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(text, fontFamily = AnekLatin, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Muted, modifier = Modifier.padding(bottom = 10.dp))
-}
-
-@Composable
-private fun MenuCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Paper).padding(horizontal = 4.dp, vertical = 4.dp), content = content)
-}
-
-@Composable
-private fun MenuRow(icon: ImageVector, iconBg: Color, iconTint: Color, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(iconBg), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(18.dp))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = Whisper, modifier = Modifier.size(16.dp))
-    }
-}
-
-@Composable
-private fun SubPageHeader(title: String, onBack: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Ink)
-        }
-        Text(title, fontFamily = AnekLatin, fontSize = 22.sp, color = Ink)
-    }
-}
-
 @Composable
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, fontSize = 15.sp, color = Ink)
+            Text(subtitle, fontSize = 13.sp, color = Muted)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-    }
-}
-
-@Composable
-private fun SettingRow(icon: @Composable () -> Unit, title: String, subtitle: String, danger: Boolean = false, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(if (danger) PinkSoft else Canvas), contentAlignment = Alignment.Center) { icon() }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = if (danger) Pink else Ink)
-            Text(subtitle, fontSize = 11.5.sp, color = Muted)
-        }
-        Icon(Icons.Default.ChevronRight, null, tint = Whisper, modifier = Modifier.size(16.dp))
-    }
-}
-
-// ── Bill / Loan rows & dialogs ───────────────────────────────────────────────
-
-private fun ordinal(day: Int) = when {
-    day in 11..13 -> "${day}th"
-    day % 10 == 1 -> "${day}st"
-    day % 10 == 2 -> "${day}nd"
-    day % 10 == 3 -> "${day}rd"
-    else -> "${day}th"
-}
-
-@Composable
-private fun RecurringIncomeRow(r: RecurringIncome, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-            Text("💰", fontSize = 18.sp)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(r.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text("+₹${fmtINR(r.amount)} · logged on the ${ordinal(r.dayOfMonth)}${if (r.dayOfMonth > 28) " (or the month's last day)" else ""}",
-                fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-        }
-        Switch(checked = r.isEnabled, onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Muted, modifier = Modifier.size(18.dp)) }
-    }
-}
-
-/** Add ([existing] null) or edit a recurring income: name, amount, day of the month, on/off. Mirrors the bill dialogs. */
-@Composable
-private fun RecurringIncomeDialog(existing: RecurringIncome?, onDismiss: () -> Unit, onConfirm: (RecurringIncome) -> Unit) {
-    var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
-    val amount = rememberAmountInputState(existing?.let { AmountCalculator.forEditing(it.amount) } ?: "")
-    var day by rememberSaveable { mutableStateOf(existing?.dayOfMonth?.toString() ?: "") }
-    var enabled by rememberSaveable { mutableStateOf(existing?.isEnabled ?: true) }
-    val dayValue = day.toIntOrNull()?.takeIf { it in 1..31 }
-    val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink)
-
-    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
-        title = { Text(if (existing == null) "Add Recurring Income" else "Edit Recurring Income") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (e.g. Salary)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors)
-                AmountField(amount)
-                OutlinedTextField(value = day, onValueChange = { if (it.length <= 2) day = it.filter { c -> c.isDigit() } },
-                    label = { Text("Day of the month (1–31)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors,
-                    isError = day.isNotEmpty() && dayValue == null,
-                    supportingText = { Text(if (day.isNotEmpty() && dayValue == null) "Enter a day from 1 to 31" else "Logged as income on this day; 31 means the month's last day") })
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (enabled) GoldSoft else Canvas).clickable { enabled = !enabled }.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Log it each month", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                    Switch(checked = enabled, onCheckedChange = { enabled = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                }
-            }
-        },
-        confirmButton = {
-            val canSave = name.isNotBlank() && dayValue != null
-            TextButton(onClick = {
-                val amt = amount.validated() ?: return@TextButton
-                val d = dayValue ?: return@TextButton
-                val base = existing ?: RecurringIncome(name = "", amount = 0.0, dayOfMonth = 1)
-                onConfirm(base.copy(name = name.trim(), amount = amt, dayOfMonth = d, isEnabled = enabled))
-            }, enabled = canSave) { Text(if (existing == null) "Add" else "Save", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
-}
-
-@Composable
-private fun BillRow(bill: Bill, category: Category?, onToggle: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit) {
-    val ordinal = ordinal(bill.dueDayOfMonth)
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
-            .background(if (category != null) parseColor(category.colorHex).copy(alpha = 0.15f) else Muted.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center) {
-            Text(category?.emoji ?: if (bill.autoLog) "🔁" else "📋", fontSize = 18.sp)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(bill.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(if (bill.autoLog) GoldSoft else Canvas).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Text(if (bill.autoLog) "AUTO" else "REMIND", fontSize = 8.sp, fontFamily = AnekLatin, fontWeight = FontWeight.Bold, color = if (bill.autoLog) GoldInk else Muted)
-                }
-            }
-            Text(
-                if (bill.autoLog) "₹${fmtINR(bill.amount)} · logs on $ordinal of month"
-                else "₹${fmtINR(bill.amount)} · due $ordinal · remind ${bill.reminderDays}d before",
-                fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-        }
-        Switch(checked = bill.isEnabled, onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun AddBillDialog(categories: List<Category>, onDismiss: () -> Unit, onConfirm: (String, Double, Int, Int, Long, Boolean) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
-    // Above 0: an auto-log bill adds its amount as an expense every month.
-    val amountText = rememberAmountText(amount) { AmountCalculator.evaluate(it) }
-    var dueDay by rememberSaveable { mutableStateOf("") }
-    var reminderDays by rememberSaveable { mutableStateOf("3") }
-    // Optional: none unless the user picks one.
-    var selectedCategoryId by rememberSaveable { mutableStateOf(-1L) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    var autoLog by rememberSaveable { mutableStateOf(false) }
-    val selectedCategory = categories.find { it.id == selectedCategoryId }
-    val dayValue = wholeNumberIn(dueDay, 1..31)
-    val remindValue = wholeNumberIn(reminderDays, 0..14)
-    val canSave = name.isNotBlank() && amountText.value != null && dayValue != null && (autoLog || remindValue != null)
-
-    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
-        title = { Text("Add Bill / Recurring") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (e.g. Rent, Netflix)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) GoldSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
-                    }
-                    Switch(checked = autoLog, onCheckedChange = { autoLog = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = amountText.invalid, supportingText = amountText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
-                    OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
-                        label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
-                        isError = dueDay.isNotEmpty() && dayValue == null,
-                        supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                if (!autoLog) {
-                    OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
-                        label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        isError = reminderDays.isNotEmpty() && remindValue == null,
-                        supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                if (categories.isNotEmpty()) {
-                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
-                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
-                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
-                            categories.forEach { cat ->
-                                DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val amt = amountText.value ?: return@TextButton
-                val day = dayValue ?: return@TextButton
-                val remind = if (autoLog) 0 else remindValue ?: return@TextButton
-                onConfirm(name.trim(), amt, day, remind, selectedCategoryId, autoLog)
-            }, enabled = canSave) { Text("Add", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
-}
-
-@Composable
-private fun LoanRow(loan: Loan, onDelete: () -> Unit, onClick: () -> Unit) {
-    // The Overview counts the same way (LoanProgress)
-    val paidMonths = LoanProgress.paid(loan, System.currentTimeMillis())
-    val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
-    val remaining = loan.tenureMonths - paidMonths
-
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp)).background(Canvas), contentAlignment = Alignment.Center) {
-            Text(loan.emoji, fontSize = 20.sp)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(loan.name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = Ink)
-            Text("₹${fmtINR(loan.monthlyEmi)}/mo · ${loan.tenureMonths} months", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(100.dp)).background(Canvas)) {
-                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Gold))
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("$paidMonths paid · $remaining remaining", fontFamily = AnekLatin, fontSize = 10.sp, color = Muted)
-        }
-        IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, null, tint = Muted, modifier = Modifier.size(18.dp)) }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun EditBillDialog(bill: Bill, categories: List<Category>, onDismiss: () -> Unit, onConfirm: (Bill) -> Unit) {
-    var name by rememberSaveable { mutableStateOf(bill.name) }
-    var amount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(bill.amount)) }
-    var autoLog by rememberSaveable { mutableStateOf(bill.autoLog) }
-    // Above 0: an auto-log bill adds its amount as an expense every month. A reminder-only bill
-    // saved with ₹0 before that rule may keep its 0, so its name, due day and reminder can still
-    // be changed; turning auto-log on asks for an amount.
-    val amountText = if (bill.amount == 0.0 && !autoLog) rememberAmountText(amount) { parseAmountOrZero(it) }
-        else rememberAmountText(amount) { AmountCalculator.evaluate(it) }
-    var dueDay by rememberSaveable { mutableStateOf(bill.dueDayOfMonth.toString()) }
-    var reminderDays by rememberSaveable { mutableStateOf(bill.reminderDays.toString()) }
-    var selectedCategoryId by rememberSaveable { mutableStateOf(bill.categoryId) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val selectedCategory = categories.find { it.id == selectedCategoryId }
-    val dayValue = wholeNumberIn(dueDay, 1..31)
-    val remindValue = wholeNumberIn(reminderDays, 0..14)
-    val canSave = name.isNotBlank() && amountText.value != null && dayValue != null && (autoLog || remindValue != null)
-
-    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
-        title = { Text("Edit Bill") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (autoLog) GoldSoft else Canvas).clickable { autoLog = !autoLog }.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text("Auto-log expense monthly", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Ink)
-                        Text(if (autoLog) "Expense added on its due day each month" else "Send a reminder notification instead", fontSize = 11.sp, color = Muted)
-                    }
-                    Switch(checked = autoLog, onCheckedChange = { autoLog = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Ink, checkedTrackColor = Gold, uncheckedThumbColor = Ink, uncheckedTrackColor = Hairline))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (₹)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = amountText.invalid, supportingText = amountText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    // Auto-log bills have a due day too: the day they're logged (31 = the month's last day).
-                    OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
-                        label = { Text("Due day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(0.7f),
-                        isError = dueDay.isNotEmpty() && dayValue == null,
-                        supportingText = if (dueDay.isNotEmpty() && dayValue == null) ({ Text("Enter 1 to 31") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                if (!autoLog) {
-                    OutlinedTextField(value = reminderDays, onValueChange = { reminderDays = it.filter { c -> c.isDigit() } },
-                        label = { Text("Remind N days before") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        isError = reminderDays.isNotEmpty() && remindValue == null,
-                        supportingText = if (reminderDays.isNotEmpty() && remindValue == null) ({ Text("Enter 0 to 14 days") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                if (categories.isNotEmpty()) {
-                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                        OutlinedTextField(value = selectedCategory?.let { "${it.emoji} ${it.name}" } ?: NO_CATEGORY,
-                            onValueChange = {}, readOnly = true, label = { Text("Category (optional)") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, containerColor = Paper) {
-                            DropdownMenuItem(text = { Text(NO_CATEGORY, color = Muted) }, onClick = { selectedCategoryId = -1L; expanded = false })
-                            categories.forEach { cat ->
-                                DropdownMenuItem(text = { Text("${cat.emoji} ${cat.name}", color = Ink) }, onClick = { selectedCategoryId = cat.id; expanded = false })
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val amt = amountText.value ?: return@TextButton
-                val day = dayValue ?: return@TextButton
-                val remind = if (autoLog) 0 else remindValue ?: return@TextButton
-                onConfirm(bill.copy(name = name.trim(), amount = amt, dueDayOfMonth = day, reminderDays = remind, categoryId = selectedCategoryId, autoLog = autoLog))
-            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
-}
-
-/** A bill's category picker when it has none: an auto-logged expense is then pending. */
-private const val NO_CATEGORY = "None"
-
-/** 100 years: enough for any loan, and keeps the month arithmetic in range. */
-private const val MAX_TENURE_MONTHS = 1200
-
-@Composable
-internal fun EditLoanDialog(loan: Loan, onDismiss: () -> Unit, onConfirm: (Loan) -> Unit) {
-    // The Overview counts the same way (LoanProgress)
-    val paidMonths = LoanProgress.paid(loan, System.currentTimeMillis())
-    val progress = (paidMonths.toFloat() / loan.tenureMonths).coerceIn(0f, 1f)
-
-    val initialMonthsAgo = run {
-        val now = java.util.Calendar.getInstance()
-        val start = java.util.Calendar.getInstance().apply { timeInMillis = loan.startDate }
-        ((now.get(java.util.Calendar.YEAR) - start.get(java.util.Calendar.YEAR)) * 12 +
-            (now.get(java.util.Calendar.MONTH) - start.get(java.util.Calendar.MONTH))).coerceAtLeast(0)
-    }
-
-    var name by rememberSaveable { mutableStateOf(loan.name) }
-    var emoji by rememberSaveable { mutableStateOf(loan.emoji) }
-    // To the paisa: toLong() here cut the paise off an untouched loan when it was saved.
-    var totalAmount by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(loan.totalAmount)) }
-    var monthlyEmi by rememberSaveable { mutableStateOf(AmountCalculator.forEditing(loan.monthlyEmi)) }
-    // The total may be 0 (only the EMI known), as before; the EMI may not.
-    val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
-    val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
-    val amountsValid = totalText.value != null && emiText.value != null
-    var tenureMonths by rememberSaveable { mutableStateOf(loan.tenureMonths.toString()) }
-    var monthsAgo by rememberSaveable { mutableStateOf(initialMonthsAgo.toString()) }
-    var dueDay by rememberSaveable { mutableStateOf(loan.dueDayOfMonth.toString()) }
-    val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
-    val dueValue = wholeNumberIn(dueDay, 1..31)
-    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
-    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
-
-    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
-        title = { Text("Edit Loan") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Progress summary (read-only)
-                Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Canvas).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("$paidMonths of ${loan.tenureMonths} EMIs paid", fontSize = 11.sp, color = Muted)
-                        Text("${"%.0f".format(progress * 100)}%", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Gold, fontFamily = AnekLatin)
-                    }
-                    Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(100.dp)).background(Hairline)) {
-                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(progress).clip(RoundedCornerShape(100.dp)).background(Gold))
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = totalText.invalid, supportingText = totalText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = emiText.invalid, supportingText = emiText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = tenureMonths.isNotEmpty() && tenureValue == null,
-                        supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = agoValue == null,
-                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    isError = dueDay.isNotEmpty() && dueValue == null,
-                    supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val total = totalText.value ?: return@TextButton
-                val emi = emiText.value ?: return@TextButton
-                val tenure = tenureValue ?: return@TextButton
-                val due = dueValue ?: return@TextButton
-                val ago = agoValue ?: return@TextButton
-                val newStartDate = java.util.Calendar.getInstance().apply {
-                    add(java.util.Calendar.MONTH, -ago)
-                    set(java.util.Calendar.DAY_OF_MONTH, 1)
-                    set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
-                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-                }.timeInMillis
-                onConfirm(loan.copy(name = name.trim(), emoji = emoji.ifBlank { "🏦" }, totalAmount = total, monthlyEmi = emi, tenureMonths = tenure, startDate = newStartDate, dueDayOfMonth = due))
-            }, enabled = canSave) { Text("Save", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun AddLoanDialog(onDismiss: () -> Unit, onConfirm: (String, String, Double, Double, Int, Long, Int) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var emoji by rememberSaveable { mutableStateOf("🏦") }
-    var totalAmount by rememberSaveable { mutableStateOf("") }
-    var monthlyEmi by rememberSaveable { mutableStateOf("") }
-    // The total may be 0 (only the EMI known), as before; the EMI may not.
-    val totalText = rememberAmountText(totalAmount) { parseAmountOrZero(it) }
-    val emiText = rememberAmountText(monthlyEmi) { AmountCalculator.evaluate(it) }
-    val amountsValid = totalText.value != null && emiText.value != null
-    var tenureMonths by rememberSaveable { mutableStateOf("") }
-    var monthsAgo by rememberSaveable { mutableStateOf("0") }
-    var dueDay by rememberSaveable { mutableStateOf("5") }
-    val tenureValue = wholeNumberIn(tenureMonths, 1..MAX_TENURE_MONTHS)
-    val dueValue = wholeNumberIn(dueDay, 1..31)
-    // Blank isn't 0: saved as 0 it moved the first EMI to this month and reset the loan's progress.
-    val agoValue = wholeNumberIn(monthsAgo, 0..MAX_TENURE_MONTHS)
-    val canSave = name.isNotBlank() && amountsValid && tenureValue != null && dueValue != null && agoValue != null
-
-    AppAlertDialog(onDismissRequest = onDismiss, containerColor = Paper, titleContentColor = Ink,
-        title = { Text("Add Loan / EMI") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = emoji, onValueChange = { emoji = oneCharacter(emoji, it) }, label = { Text("Icon") }, singleLine = true, modifier = Modifier.width(72.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Loan name") }, singleLine = true, modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = totalAmount, onValueChange = { totalAmount = it }, label = { Text("Total (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = totalText.invalid, supportingText = totalText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthlyEmi, onValueChange = { monthlyEmi = it }, label = { Text("EMI (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = emiText.invalid, supportingText = emiText.supportingText,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = tenureMonths, onValueChange = { tenureMonths = it.filter { c -> c.isDigit() } }, label = { Text("Tenure (mo)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = tenureMonths.isNotEmpty() && tenureValue == null,
-                        supportingText = if (tenureMonths.isNotEmpty() && tenureValue == null) ({ Text("1 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                    OutlinedTextField(value = monthsAgo, onValueChange = { monthsAgo = it.filter { c -> c.isDigit() } }, label = { Text("1st EMI, months ago") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.weight(1f),
-                        isError = agoValue == null,
-                        supportingText = if (agoValue == null) ({ Text("0 to $MAX_TENURE_MONTHS months") }) else null,
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-                }
-                OutlinedTextField(value = dueDay, onValueChange = { if (it.length <= 2) dueDay = it.filter { c -> c.isDigit() } }, label = { Text("Due day of month") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    isError = dueDay.isNotEmpty() && dueValue == null,
-                    supportingText = if (dueDay.isNotEmpty() && dueValue == null) ({ Text("Enter 1 to 31") }) else null,
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Gold, focusedLabelColor = Gold, unfocusedBorderColor = Hairline, unfocusedLabelColor = Muted, focusedTextColor = Ink, unfocusedTextColor = Ink))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val total = totalText.value ?: return@TextButton
-                val emi = emiText.value ?: return@TextButton
-                val tenure = tenureValue ?: return@TextButton
-                val due = dueValue ?: return@TextButton
-                val ago = agoValue ?: return@TextButton
-                val startDate = java.util.Calendar.getInstance().apply {
-                    add(java.util.Calendar.MONTH, -ago)
-                    set(java.util.Calendar.DAY_OF_MONTH, 1)
-                    set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
-                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-                }.timeInMillis
-                onConfirm(name.trim(), emoji.ifBlank { "🏦" }, total, emi, tenure, startDate, due)
-            }, enabled = canSave) { Text("Add", color = if (canSave) Gold else Muted) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) } })
-}
-
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontSize = 12.sp, color = Muted)
-        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Ink)
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = switchColors())
     }
 }
 
@@ -1535,7 +632,7 @@ private fun CsvExportDialog(onDismiss: () -> Unit, onExport: (ExportPreset, Pair
                 DatePresetOptions(preset, custom, pickerTitle = "Dates to export") { p, c ->
                     preset = p; custom = c
                 }
-                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 12.sp, color = Muted,
+                Text("Expenses and income, with date, amount, payee, category, payment method and tags.", fontSize = 13.sp, color = Muted,
                     modifier = Modifier.padding(top = 8.dp))
             }
         },

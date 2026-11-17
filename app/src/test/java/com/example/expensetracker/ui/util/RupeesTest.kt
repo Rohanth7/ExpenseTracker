@@ -43,7 +43,6 @@ class RupeesTest {
         fun lines(match: (String) -> Boolean) = sources.flatMap { f -> f.readLines().mapIndexedNotNull { i, l -> if (match(l)) "${f.name}:${i + 1}" else null } }
         assertEquals(listOf("Rupees.kt"), lines { "fun fmtINR(" in it || "fun fmtVM(" in it }.map { it.substringBefore(':') })
         val rupee = "₹"
-        // components/BarChart.kt is not used by any screen
-        assertEquals(emptyList<String>(), lines { rupee in it && (".toLong()" in it || ".toInt()" in it || "%.0f" in it || "%.2f" in it) }.filterNot { it.startsWith("BarChart.kt") })
+        assertEquals(emptyList<String>(), lines { rupee in it && (".toLong()" in it || ".toInt()" in it || "%.0f" in it || "%.2f" in it) })
     }
 }

@@ -4,8 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +19,14 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import com.example.expensetracker.ui.components.Chip
+import com.example.expensetracker.ui.components.FieldShape
+import com.example.expensetracker.ui.components.fieldColors
+import com.example.expensetracker.ui.theme.Gold
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -101,36 +109,32 @@ fun rememberAmountInputState(initial: String = ""): AmountInputState =
  * whenever a comma was typed, since a comma can mean thousands or decimals.
  */
 @Composable
-fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: String = "Amount (₹)") {
+fun AmountField(state: AmountInputState, modifier: Modifier = Modifier, label: String = "Amount (₹)", large: Boolean = false) {
     val text = state.value.text
     // Parsed once per text change, not on every recomposition.
     val preview = remember(text) { AmountCalculator.previewText(text, AmountCalculator.evaluate(text)) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
         OutlinedTextField(
             value = state.value,
             onValueChange = { state.value = it; state.error = "" },
             label = { Text(label) },
+            textStyle = LocalTextStyle.current.copy(fontSize = if (large) 32.sp else 28.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             isError = state.error.isNotEmpty(),
-            supportingText = when {
-                state.error.isNotEmpty() -> {{ Text(state.error) }}
-                preview != null -> {{ Text(preview, color = Muted, fontSize = 12.sp) }}
-                else -> null
-            },
-            modifier = Modifier.fillMaxWidth()
+            supportingText = if (state.error.isNotEmpty()) {{ Text(state.error) }} else null,
+            modifier = Modifier.fillMaxWidth(),
+            shape = FieldShape, colors = fieldColors()
         )
+        if (preview != null && state.error.isEmpty()) Text(preview, color = Gold, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("+", "−", "×", "÷").forEach { op ->
-                AssistChip(
-                    onClick = {
-                        val v = state.value
-                        val (newText, cursor) = AmountCalculator.insertAt(v.text, v.selection.start, v.selection.end, op)
-                        state.value = TextFieldValue(newText, TextRange(cursor))
-                        state.error = ""
-                    },
-                    label = { Text(op, fontSize = 14.sp) }
-                )
+                Chip(op, selected = false, onClick = {
+                    val v = state.value
+                    val (newText, cursor) = AmountCalculator.insertAt(v.text, v.selection.start, v.selection.end, op)
+                    state.value = TextFieldValue(newText, TextRange(cursor))
+                    state.error = ""
+                }, modifier = Modifier.widthIn(min = 44.dp))
             }
         }
     }
