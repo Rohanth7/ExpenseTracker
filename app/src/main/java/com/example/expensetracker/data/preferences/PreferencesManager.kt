@@ -3,6 +3,7 @@ package com.example.expensetracker.data.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.expensetracker.data.period.BudgetPeriod
+import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.data.recurring.BillMonth
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -82,6 +83,24 @@ class PreferencesManager(context: Context, fileName: String = "expense_tracker_p
     var widgetEnabled: Boolean
         get() = prefs.getBoolean("widget_enabled", true)
         set(value) = prefs.edit().putBoolean("widget_enabled", value).apply()
+
+    /** "Show the pot". Read it live through `MascotEnabled`. */
+    var mascotEnabled: Boolean
+        get() = prefs.getBoolean("mascot_enabled", true)
+        set(value) = prefs.edit().putBoolean("mascot_enabled", value).apply()
+
+    /** The days the month's money ran out on, by budget month (`OverspentDay`). */
+    val overspentDays: OverspentDay.Store = object : OverspentDay.Store {
+        override fun all(): Map<String, Long> =
+            prefs.all.filterKeys { it.startsWith(OverspentDay.PREFIX) }.mapNotNull { (k, v) -> (v as? Long)?.let { k to it } }.toMap()
+        override fun put(key: String, epochDay: Long) = prefs.edit().putLong(key, epochDay).apply()
+        override fun remove(keys: Collection<String>) {
+            if (keys.isEmpty()) return
+            val edit = prefs.edit()
+            keys.forEach(edit::remove)
+            edit.apply()
+        }
+    }
 
     var autoBackupEnabled: Boolean
         get() = prefs.getBoolean("auto_backup_enabled", false)

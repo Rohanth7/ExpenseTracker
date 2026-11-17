@@ -37,6 +37,10 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.example.expensetracker.data.defaults.DefaultCategories
 import com.example.expensetracker.ui.components.*
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.Mascot
+import com.example.expensetracker.ui.mascot.MascotMood
+import com.example.expensetracker.ui.mascot.MascotNote
 import com.example.expensetracker.ui.screens.settings.RestoreConfirmDialog
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
@@ -112,6 +116,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
         viewModel.restoreShown()
     }
 
+    val mascotEnabled = LocalMascotEnabled.current
     var incomeText by rememberSaveable { mutableStateOf("") }
     val parsedIncome = remember(incomeText) { parseLimitInput(incomeText) }
     val incomeShown = remember(incomeText) { AmountCalculator.previewText(incomeText, parsedIncome) }
@@ -122,8 +127,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             when (step) {
                 Step.Welcome -> {
-                    // Left empty for the mascot.
-                    Spacer(Modifier.size(170.dp).align(Alignment.CenterHorizontally))
+                    if (mascotEnabled) Mascot(MascotMood.Happy, Modifier.width(170.dp).align(Alignment.CenterHorizontally))
                     StepBody(
                         title = "Your spending, tracked automatically",
                         body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
@@ -143,7 +147,14 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                         "It only looks at new messages from banks and payment services. OTPs and personal " +
                         "messages are ignored, and nothing is sent anywhere.",
                     status = if (tracking.status.sms) "SMS access is on" else null,
-                    example = { SmsExample() }
+                    example = {
+                        SmsExample()
+                        if (mascotEnabled) {
+                            MascotNote(MascotMood.Happy, Modifier.padding(top = 10.dp)) {
+                                Text("OTPs, offers and personal messages are ignored. Nothing is uploaded.", fontSize = 12.5.sp, color = Muted)
+                            }
+                        }
+                    }
                 )
                 Step.Notifications -> StepBody(
                     title = "Catch UPI payments from GPay and PhonePe",
@@ -169,6 +180,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                     )
                 } else {
                     StepBody(
+                        mascot = MascotMood.Happy.takeIf { mascotEnabled },
                         title = "What's your monthly income?",
                         body = "This is optional. It lets Home show how much is still free to spend this month. " +
                             "You can change it any time from the Home screen.",
@@ -255,6 +267,8 @@ private fun ProgressDots(count: Int, current: Int, modifier: Modifier = Modifier
 
 @Composable
 private fun ColumnScope.StepBody(
+    /** Her face above the title, if any. */
+    mascot: MascotMood? = null,
     title: String,
     body: String,
     points: List<String> = emptyList(),
@@ -265,6 +279,10 @@ private fun ColumnScope.StepBody(
 ) {
     val align = if (centered) TextAlign.Center else TextAlign.Start
     Spacer(Modifier.height(16.dp))
+    if (mascot != null) {
+        Mascot(mascot, Modifier.width(96.dp).align(Alignment.CenterHorizontally))
+        Spacer(Modifier.height(6.dp))
+    }
     Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Ink, lineHeight = 30.sp, textAlign = align, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     Text(body, fontSize = 15.sp, color = Muted, lineHeight = 22.sp, textAlign = align, modifier = Modifier.fillMaxWidth())
