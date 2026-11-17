@@ -9,10 +9,10 @@ class WarnAtTest {
         assertEquals(2_500.0, warnAt(5_000.0, 50), 0.0)
     }
 
-    @Test fun roundsDown() {
-        // 85% of 999 is 849.15
-        assertEquals(849.0, warnAt(999.0, 85), 0.0)
+    @Test fun roundsUpToTheFirstRupeeThatAlerts() {
+        // 85% of 999 is 849.15: ₹849 doesn't alert yet, ₹850 does
+        assertEquals(850.0, warnAt(999.0, 85), 0.0)
         // 95% of 1,999 is 1,899.05
-        assertEquals(1_899.0, warnAt(1_999.0, 95), 0.0)
+        assertEquals(1_900.0, warnAt(1_999.0, 95), 0.0)
     }
 }
