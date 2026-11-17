@@ -359,8 +359,8 @@ class BackupRestoreTest {
             RandomAccessFile(large, "rw").use { it.setLength(BackupManager.MAX_BACKUP_BYTES + 1L) }
             binary.writeBytes(ByteArray(4096) { (it * 31).toByte() })
             val manager = manager(target, targetPrefs)
-            assertEquals(ParseResult.Invalid("This file is too large to be a MyMoney backup (over 50 MB)."), manager.readFromUri(Uri.fromFile(large)))
-            assertEquals(ParseResult.Invalid("This file isn't a MyMoney backup."), manager.readFromUri(Uri.fromFile(binary)))
+            assertEquals(ParseResult.Invalid("This file is too large to be a Thriftpot backup (over 50 MB)."), manager.readFromUri(Uri.fromFile(large)))
+            assertEquals(ParseResult.Invalid("This file isn't a Thriftpot backup."), manager.readFromUri(Uri.fromFile(binary)))
         } finally {
             large.delete(); binary.delete()
         }

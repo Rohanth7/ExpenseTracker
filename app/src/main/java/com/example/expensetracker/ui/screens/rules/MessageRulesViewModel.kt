@@ -52,7 +52,7 @@ class MessageRulesViewModel(
                     expenseRepo.delete(e)
                     "Rule saved. This message wasn't a payment, so its expense was removed"
                 }
-            } else "Rule saved. MyMoney will read messages like this one from now on"
+            } else "Rule saved. Thriftpot will read messages like this one from now on"
             onSaved()
         }
         return null

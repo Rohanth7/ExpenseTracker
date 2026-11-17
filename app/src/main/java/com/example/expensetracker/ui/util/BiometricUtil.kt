@@ -29,7 +29,7 @@ object BiometricUtil {
      */
     fun showBiometricPrompt(
         activity: FragmentActivity,
-        title: String = "Unlock MyMoney",
+        title: String = "Unlock Thriftpot",
         subtitle: String = "Use your fingerprint, face or screen lock",
         onSuccess: () -> Unit,
         onError: (String?) -> Unit

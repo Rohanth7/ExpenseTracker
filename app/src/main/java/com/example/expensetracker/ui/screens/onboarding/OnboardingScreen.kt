@@ -130,7 +130,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                     if (mascotEnabled) Mascot(MascotMood.Happy, Modifier.width(170.dp).align(Alignment.CenterHorizontally))
                     StepBody(
                         title = "Your spending, tracked automatically",
-                        body = "MyMoney logs payments for you from bank SMS and UPI app notifications.\n\n" +
+                        body = "Thriftpot logs payments for you from bank SMS and UPI app notifications.\n\n" +
                             "Everything stays on this phone. There's no account, no ads and no loans.",
                         centered = true,
                         points = listOf(
@@ -143,7 +143,7 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                 }
                 Step.Sms -> StepBody(
                     title = "Log payments from bank SMS",
-                    body = "When your bank texts you about a debit, MyMoney logs the amount and payee.\n\n" +
+                    body = "When your bank texts you about a debit, Thriftpot logs the amount and payee.\n\n" +
                         "It only looks at new messages from banks and payment services. OTPs and personal " +
                         "messages are ignored, and nothing is sent anywhere.",
                     status = if (tracking.status.sms) "SMS access is on" else null,
@@ -159,15 +159,15 @@ fun OnboardingScreen(onFinish: (monthlyIncome: Double?) -> Unit, viewModel: Onbo
                 Step.Notifications -> StepBody(
                     title = "Catch UPI payments from GPay and PhonePe",
                     body = "Some UPI payments only show up as a notification from the payment app. To log those, " +
-                        "Android needs you to switch on notification access for MyMoney.\n\n" +
-                        "MyMoney only reads notifications from payment and banking apps. Messages and chats are ignored.",
-                    hint = "Tap the button, find MyMoney and turn on the switch, then come back. If the switch is " +
-                        "greyed out, open App info for MyMoney, tap ⋮ and choose \"Allow restricted settings\" first.",
+                        "Android needs you to switch on notification access for Thriftpot.\n\n" +
+                        "Thriftpot only reads notifications from payment and banking apps. Messages and chats are ignored.",
+                    hint = "Tap the button, find Thriftpot and turn on the switch, then come back. If the switch is " +
+                        "greyed out, open App info for Thriftpot, tap ⋮ and choose \"Allow restricted settings\" first.",
                     status = if (tracking.status.notifications) "Notification access is on" else null
                 )
                 Step.Alerts -> StepBody(
                     title = "Get a prompt after each payment",
-                    body = "MyMoney sends a notification right after a payment so you can pick its category in one tap. " +
+                    body = "Thriftpot sends a notification right after a payment so you can pick its category in one tap. " +
                         "It also warns you when a category is close to its budget.",
                     status = if (alertsGranted) "Alerts are on" else null
                 )
