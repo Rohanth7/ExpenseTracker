@@ -17,6 +17,7 @@ import com.example.expensetracker.data.db.entity.RecurringIncome
 import com.example.expensetracker.data.db.entity.RecurringIncomeMonth
 import com.example.expensetracker.data.db.entity.RecurringTemplate
 import com.example.expensetracker.data.db.entity.SavingsGoal
+import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.BillMonth
 import com.example.expensetracker.data.subscriptions.DismissedSubscriptions
@@ -184,6 +185,13 @@ class BackupRestoreTest {
         assertTrue(target.expenseDao().getAll().first().isEmpty())
         assertTrue(target.billDao().getAll().first().isEmpty())
         assertEquals(before, targetIncome())
+    }
+
+    /** The day the phone's month went over belonged to its old data: an overspent restore starts at day zero. */
+    @Test fun aRestoreForgetsTheDayTheMoneyRanOut() = runBlocking {
+        targetPrefs.overspentDays.put(OverspentDay.PREFIX + 20_758L, 20_760L)
+        manager(target, targetPrefs).restore(BackupData(categories = emptyList(), expenses = emptyList()))
+        assertTrue(targetPrefs.overspentDays.all().isEmpty())
     }
 
     /** The phone's record of handled months is about the data a restore replaces. */

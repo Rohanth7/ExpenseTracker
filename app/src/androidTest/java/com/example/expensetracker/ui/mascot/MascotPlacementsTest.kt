@@ -14,6 +14,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.db.entity.Expense
+import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
 import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.data.preferences.PreferencesManager
@@ -59,9 +60,9 @@ class MascotPlacementsTest {
 
     private fun shows(text: String) = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty()
 
-    private fun home(): DashboardViewModel {
+    private fun home(spent: Double = 1_000.0, loaded: String = "Free to spend"): DashboardViewModel {
         prefs.monthlyIncome = 50_000.0
-        runBlocking { db.expenseDao().insert(Expense(amount = 1_000.0, description = "Groceries", source = "Manual")) }
+        runBlocking { db.expenseDao().insert(Expense(amount = spent, description = "Groceries", source = "Manual")) }
         val vm = runBlocking(Dispatchers.Main) {
             DashboardViewModel(context, CategoryRepository(db.categoryDao(), db.expenseDao()), ExpenseRepository(db.expenseDao(), context),
                 SavingsGoalRepository(db.savingsGoalDao()), BillRepository(db.billDao()), LoanRepository(db.loanDao()),
@@ -71,19 +72,14 @@ class MascotPlacementsTest {
         compose.setContent {
             CompositionLocalProvider(LocalMascotEnabled provides shown.value) { DashboardScreen(vm, onViewPending = {}) }
         }
-        compose.waitUntil(10_000) { shows("Free to spend") }
+        compose.waitUntil(10_000) { shows(loaded) }
         return vm
     }
 
     // Her wording has its own tests (MascotVoiceTest); these only check where it shows.
     private fun todaysLine(): String {
-        val nothingStored = OverspentDay(object : OverspentDay.Store {
-            override fun all() = emptyMap<String, Long>()
-            override fun put(key: String, epochDay: Long) {}
-            override fun remove(keys: Collection<String>) {}
-        })
-        val month = mascotMonth(50_000.0, 1_000.0, 0.0, emptyList(), PreferencesManager(context).budgetAlertThreshold,
-            System.currentTimeMillis(), MonthStartDay.get(context), nothingStored)
+        val month = mascotMonth(50_000.0, 1_000.0, 0.0, emptyList(), prefs.budgetAlertThreshold,
+            System.currentTimeMillis(), MonthStartDay.get(context), daysOver = 0)
         return MascotVoice.say(month).line
     }
 
@@ -105,6 +101,14 @@ class MascotPlacementsTest {
         compose.waitForIdle()
         compose.onNodeWithText(line).assertDoesNotExist()
         assertTrue("Home still shows its figures", shows("Free to spend"))
+    }
+
+    @Test fun withThePotHiddenHomeStillRecordsTheDayTheMoneyRanOut() {
+        shown.value = false
+        home(spent = 60_000.0, loaded = "Over this month")
+        val now = System.currentTimeMillis()
+        val monthStart = BudgetPeriod.epochDay(BudgetPeriod.current(now, MonthStartDay.get(context)).start)
+        assertEquals(mapOf(OverspentDay.PREFIX + monthStart to BudgetPeriod.epochDay(now)), prefs.overspentDays.all())
     }
 
     @Test fun activityWithNoExpensesSaysSoWithOrWithoutHer() {

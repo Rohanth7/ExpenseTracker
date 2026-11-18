@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.expensetracker.data.db.entity.Category
+import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
 import com.example.expensetracker.data.repository.ExpenseRepository
 import com.example.expensetracker.data.repository.IncomeRepository
@@ -21,8 +22,13 @@ class CategoriesViewModel(
     private val repo: CategoryRepository,
     private val expenseRepo: ExpenseRepository,
     /** Tags are renamed and deleted on income too. */
-    private val incomeRepo: IncomeRepository
+    private val incomeRepo: IncomeRepository,
+    private val prefs: PreferencesManager
 ) : ViewModel() {
+
+    /** For the note in the category dialog about when a limit alerts. */
+    val alertPercent: Int get() = prefs.budgetAlertThreshold
+    val budgetAlertsOn: Boolean get() = prefs.budgetAlertsEnabled
 
     val categories: StateFlow<List<Category>> = repo.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -58,11 +64,11 @@ class CategoriesViewModel(
     }
 
     companion object {
-        fun factory(repo: CategoryRepository, expenseRepo: ExpenseRepository, incomeRepo: IncomeRepository) =
+        fun factory(repo: CategoryRepository, expenseRepo: ExpenseRepository, incomeRepo: IncomeRepository, prefs: PreferencesManager) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    CategoriesViewModel(repo, expenseRepo, incomeRepo) as T
+                    CategoriesViewModel(repo, expenseRepo, incomeRepo, prefs) as T
             }
     }
 }

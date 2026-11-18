@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import com.example.expensetracker.data.backup.worker.AutoBackupWorker
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.recurring.BillMonth
 import com.example.expensetracker.data.recurring.RecurringManager
@@ -141,6 +142,8 @@ class BackupManager(
         // user's decision about a payee, not a fact about the data ("Reset everything" clears it).
         PriceChangeAlerts.forgetAlerts(context)
         BudgetAlertHelper.forgetAlerts(context)
+        // Else a restore into an overspent month would carry on from the old day: sad at once, not pleading.
+        OverspentDay(prefs.overspentDays).forget()
         if (data.bills != null) BillReminderHelper.forgetReminders(context)
         // Settings are applied only after the database commit succeeded. Category ids now come
         // from the backup, so the add dialog's last-used id may point at another category.

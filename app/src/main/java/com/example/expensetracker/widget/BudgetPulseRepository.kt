@@ -33,15 +33,18 @@ class BudgetPulseRepository(private val db: AppDatabase, private val prefs: Pref
     suspend fun load(now: Long = System.currentTimeMillis()): WidgetData {
         val startDay = prefs.monthStartDay
         val cur = BudgetPeriod.current(now, startDay)
-        val expenses = db.expenseDao().getByDateRange(cur.start, cur.endInclusive).first()
-        val spent = expenses.sumOf { it.amount }
+        // Her face needs each category's spending; without her the month's total is enough.
+        val expenses = if (prefs.mascotEnabled) db.expenseDao().getByDateRange(cur.start, cur.endInclusive).first() else null
+        val spent = expenses?.sumOf { it.amount } ?: db.expenseDao().getTotalSpentInRange(cur.start, cur.endInclusive)
         // Same rule as Home: logged and recurring income, else the expected figure
         val income = IncomeForecast.load(db, prefs.monthlyIncome, now, cur).total
         val stillDue = CashFlow.billsStillDue(db.billDao().getAllOnce(), now, cur) +
             CashFlow.emiStillDue(db.loanDao().getAll().first(), now, cur)
-        val mood = if (!prefs.mascotEnabled) null else {
-            val budgets = Budgets.of(db.categoryDao().getAllOnce(), expenses.filter { it.categoryId != -1L }).filter { it.spent > 0.0 }
-            MascotVoice.say(mascotMonth(income, spent, stillDue, budgets, prefs.budgetAlertThreshold, now, startDay, OverspentDay(prefs.overspentDays))).mood
+        // Recorded whether or not she is shown, like Home does.
+        val daysOver = OverspentDay(prefs.overspentDays).record(income, spent, stillDue, now, startDay)
+        val mood = expenses?.let { month ->
+            val budgets = Budgets.of(db.categoryDao().getAllOnce(), month.filter { it.categoryId != -1L }).filter { it.spent > 0.0 }
+            MascotVoice.say(mascotMonth(income, spent, stillDue, budgets, prefs.budgetAlertThreshold, now, startDay, daysOver)).mood
         }
         return WidgetData(
             spent = spent,

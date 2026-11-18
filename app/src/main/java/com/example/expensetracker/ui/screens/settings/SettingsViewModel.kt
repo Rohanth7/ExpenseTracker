@@ -21,6 +21,7 @@ import com.example.expensetracker.data.budget.Budget
 import com.example.expensetracker.data.budget.Budgets
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.ui.util.isDebugBuild
 import com.google.android.gms.auth.UserRecoverableAuthException
 import kotlinx.coroutines.CancellationException
@@ -500,6 +501,7 @@ class SettingsViewModel(
         PriceChangeAlerts.forgetAlerts(appContext)
         BudgetAlertHelper.forgetAlerts(appContext)
         BillReminderHelper.forgetReminders(appContext)
+        OverspentDay(prefs.overspentDays).forget()
         prefs.lastManualCategoryId = -1L
         com.example.expensetracker.ui.widgets.WidgetUpdateHelper.update(appContext)
         setMonthStartDay(1)

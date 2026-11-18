@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +37,6 @@ import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.components.*
-import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.ui.mascot.LocalMascotEnabled
 import com.example.expensetracker.ui.mascot.MascotMood
 import com.example.expensetracker.ui.mascot.MascotNote
@@ -220,6 +218,8 @@ fun CategoriesScreen(viewModel: CategoriesViewModel, onBack: () -> Unit = {}) {
         CategoryDialog(
             initial = editTarget,
             siblingNames = categories.filter { it.parentId == editTarget?.parentId && it.id != editTarget?.id }.map { it.name },
+            alertPercent = viewModel.alertPercent,
+            alertsOn = viewModel.budgetAlertsOn,
             onDismiss = { showDialog = false; editTarget = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 val existing = editTarget
@@ -239,6 +239,8 @@ fun CategoriesScreen(viewModel: CategoriesViewModel, onBack: () -> Unit = {}) {
             initial = null,
             parentName = parent.name,
             siblingNames = categories.filter { it.parentId == parent.id }.map { it.name },
+            alertPercent = viewModel.alertPercent,
+            alertsOn = viewModel.budgetAlertsOn,
             onDismiss = { addSubcategoryFor = null },
             onConfirm = { name, emoji, colorHex, limit ->
                 viewModel.addCategory(name, emoji, colorHex, limit, parentId = parent.id)
@@ -352,6 +354,10 @@ internal fun CategoryDialog(
     parentName: String? = null,
     /** The other names under the same parent; a new or renamed category can't take one of them. */
     siblingNames: List<String> = emptyList(),
+    /** The budget alert threshold, for the note saying when this limit alerts. */
+    alertPercent: Int,
+    /** No note promising a warning when budget alerts are off. */
+    alertsOn: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Double) -> Unit
 ) {
@@ -368,11 +374,6 @@ internal fun CategoryDialog(
     val nameError = categoryNameError(name, siblingNames, current = initial?.name)
     val canSave = nameError == null && parsedLimit != null
     val mascotEnabled = LocalMascotEnabled.current
-    val context = LocalContext.current
-    val alertPrefs = remember { PreferencesManager(context.applicationContext) }
-    val alertPercent = remember { alertPrefs.budgetAlertThreshold }
-    // No note promising a warning when budget alerts are off.
-    val alertsOn = remember { alertPrefs.budgetAlertsEnabled }
 
     MSheet(onDismiss) {
         SheetTitle(when {

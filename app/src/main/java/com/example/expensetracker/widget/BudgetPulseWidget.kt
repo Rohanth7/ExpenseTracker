@@ -27,6 +27,24 @@ import kotlin.math.roundToInt
 
 class BudgetPulseWidgetReceiver : AppWidgetProvider() {
 
+    /**
+     * Days left and her face depend on the date, and nothing else refreshes the widget when only
+     * the date moves on: midnight ([WidgetMidnight]), the clock set by hand, a new time zone.
+     */
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action !in DAY_CHANGES) return super.onReceive(context, intent)
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                requestUpdate(context)
+            } catch (e: Exception) {
+                android.util.Log.e("BudgetPulseWidget", "day change update failed", e)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -47,6 +65,9 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
         refresh(context, appWidgetManager, intArrayOf(appWidgetId))
     }
 
+    /** The last one was removed. */
+    override fun onDisabled(context: Context) = WidgetMidnight.cancel(context)
+
     /** Loads the figures off the main thread and shows them on [appWidgetIds]. */
     private fun refresh(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         val pending = goAsync()
@@ -56,6 +77,8 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
                     AppDatabase.getInstance(context),
                     PreferencesManager(context)
                 ).load()
+                // Also after a reboot, an update or a clock change: each of those refreshes the widget.
+                WidgetMidnight.schedule(context)
                 // Drawn once: every widget shows the same face at the same size.
                 val mascot = data.mood?.let { mood ->
                     val density = context.resources.displayMetrics.density.takeIf { it > 0f } ?: 2f
@@ -75,6 +98,8 @@ class BudgetPulseWidgetReceiver : AppWidgetProvider() {
     }
 
     companion object {
+        private val DAY_CHANGES = setOf(WidgetMidnight.ACTION, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED)
+
         fun requestUpdate(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(

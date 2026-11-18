@@ -40,13 +40,10 @@ import com.example.expensetracker.data.budget.Budget
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
-import com.example.expensetracker.data.period.OverspentDay
-import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.ui.components.*
 import com.example.expensetracker.ui.mascot.LocalMascotEnabled
 import com.example.expensetracker.ui.mascot.Mascot
 import com.example.expensetracker.ui.mascot.MascotVoice
-import com.example.expensetracker.ui.mascot.mascotMonth
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.fmtINR
@@ -72,17 +69,14 @@ fun DashboardScreen(
     var goalToDelete by rememberSaveableItem(state.savingsGoals) { it.id }
     // Re-read on every resume so the banner disappears after the user turns tracking on.
     val tracking = com.example.expensetracker.ui.util.rememberTrackingStatus()
-    val prefs = remember { PreferencesManager(context.applicationContext) }
-    var alertPercent by remember { mutableIntStateOf(prefs.budgetAlertThreshold) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     // "As of now" figures move on when the screen comes back (past midnight, a new budget month,
-    // a changed alert threshold).
+    // a changed alert threshold: the view model re-reads it).
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.refresh()
-                alertPercent = prefs.budgetAlertThreshold
                 // Its own state: the view model's can come back equal, and days left still has to move on.
                 now = System.currentTimeMillis()
             }
@@ -98,12 +92,7 @@ fun DashboardScreen(
     val startDay by MonthStartDay.flow(context).collectAsState()
     val daysLeft = BudgetPeriod.daysLeft(now, startDay).coerceAtLeast(1)
     val mascotEnabled = LocalMascotEnabled.current
-    // Only once the month has loaded: an empty first state would forget the day the money ran out.
-    val say = if (mascotEnabled && isCurrentMonth && state.monthLabel.isNotEmpty()) {
-        remember(state.monthlyIncome, state.totalSpent, stillDue, state.budgets, alertPercent, now, startDay) {
-            MascotVoice.say(mascotMonth(state.monthlyIncome, state.totalSpent, stillDue, state.budgets, alertPercent, now, startDay, OverspentDay(prefs.overspentDays)))
-        }
-    } else null
+    val say = remember(state.mascot) { state.mascot?.let(MascotVoice::say) }.takeIf { mascotEnabled }
     val comingUp = remember(state.upcomingBills, state.activeLoans, isCurrentMonth, now, startDay) {
         if (isCurrentMonth) ComingUp.of(state.upcomingBills, state.activeLoans, now, BudgetPeriod.current(now, startDay)) else emptyList()
     }
@@ -220,7 +209,7 @@ fun DashboardScreen(
                     state.budgets.forEachIndexed { i, budget ->
                         if (i > 0) RowDivider()
                         // "Food › Coffee" for a subcategory's own limit
-                        BudgetRow(budget.name, budget.spent, budget.limit, alertPercent)
+                        BudgetRow(budget.name, budget.spent, budget.limit, state.alertPercent)
                     }
                 }
             }
