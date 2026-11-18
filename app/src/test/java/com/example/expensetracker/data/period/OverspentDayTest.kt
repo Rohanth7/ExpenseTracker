@@ -89,4 +89,11 @@ class OverspentDayTest {
         assertEquals(0, record(at(2026, 11, 17), income = 0.0, spent = 60_000.0))
         assertTrue(store.days.isEmpty())
     }
+
+    @Test fun forgetClearsTheDaySoTheNextOverspendIsDayZero() {
+        record(at(2026, 11, 5), spent = 31_000.0)
+        overspent.forget()
+        assertTrue(store.days.isEmpty())
+        assertEquals(0, record(at(2026, 11, 12), spent = 31_000.0))
+    }
 }

@@ -46,6 +46,9 @@ class OverspentDay(private val store: Store) {
         return (todayEpochDay - since).coerceAtLeast(0).toInt()
     }
 
+    /** Reset everything and restores: the day belonged to the data they replace. */
+    fun forget() = store.remove(store.all().keys)
+
     companion object {
         const val PREFIX = "overspent_since_"
     }
