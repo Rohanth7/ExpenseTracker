@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -33,6 +35,9 @@ import com.example.expensetracker.data.export.DateFilter
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.ui.components.*
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.Mascot
+import com.example.expensetracker.ui.mascot.MascotMood
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.AmountField
@@ -292,7 +297,7 @@ fun ExpensesScreen(
                     onEdit = { editingIncome = it },
                     onDelete = { incomeToDelete = it }
                 )
-                !hasAnyExpenses -> EmptyText("No expenses yet.\nSMS transactions will appear here automatically.")
+                !hasAnyExpenses -> NoExpensesYet()
                 expenses.isEmpty() -> EmptyText("No expenses match your search.")
                 else -> {
                     LazyColumn(
@@ -472,6 +477,25 @@ fun ExpensesScreen(
                 showAdvancedFilters = false
             }
         )
+    }
+}
+
+@Composable
+private fun NoExpensesYet() {
+    // Centred, but scrolls rather than clipping when a large font makes it taller than the space.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()).fillMaxWidth().heightIn(min = maxHeight).padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (LocalMascotEnabled.current) {
+                Mascot(MascotMood.Happy, Modifier.width(96.dp))
+                Spacer(Modifier.height(6.dp))
+            }
+            Text("Nothing here yet", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink, textAlign = TextAlign.Center)
+            Text("Your first payment will show up on its own.", fontSize = 13.sp, color = Muted, textAlign = TextAlign.Center)
+        }
     }
 }
 

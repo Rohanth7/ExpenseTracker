@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -56,6 +57,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.MascotFace
+import com.example.expensetracker.ui.mascot.MascotVoice
 import com.example.expensetracker.ui.theme.Deep
 import com.example.expensetracker.ui.theme.Field
 import com.example.expensetracker.ui.theme.Gold
@@ -177,12 +181,13 @@ fun ToneDot(color: Color) {
     Box(Modifier.size(8.dp).clip(CircleShape).background(color))
 }
 
-/** One monthly limit: a dot and a bar in its [budgetTone], the name, and "spent of limit". */
+/** One monthly limit: her face in its mood (a dot when she is hidden), a bar in its [budgetTone], the name, and "spent of limit". */
 @Composable
 fun BudgetRow(name: String, spent: Double, limit: Double, alertPercent: Int) {
     val tone = budgetTone(spent, limit, alertPercent)
     Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        ToneDot(tone)
+        if (LocalMascotEnabled.current) MascotFace(MascotVoice.mood(spent, limit, alertPercent), Modifier.width(34.dp))
+        else ToneDot(tone)
         Column(Modifier.weight(1f).padding(start = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

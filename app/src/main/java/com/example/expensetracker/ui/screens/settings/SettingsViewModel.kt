@@ -1,5 +1,6 @@
 package com.example.expensetracker.ui.screens.settings
 
+import com.example.expensetracker.ui.mascot.MascotEnabled
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -175,6 +176,8 @@ class SettingsViewModel(
         _widgetEnabled.value = enabled
         refreshWidget()
     }
+
+    fun setMascotEnabled(enabled: Boolean) = MascotEnabled.set(appContext, enabled)
 
     private val _autoBackupEnabled = MutableStateFlow(prefs.autoBackupEnabled)
     val autoBackupEnabled: StateFlow<Boolean> = _autoBackupEnabled.asStateFlow()

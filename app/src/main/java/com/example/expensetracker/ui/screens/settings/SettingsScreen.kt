@@ -37,6 +37,12 @@ import com.example.expensetracker.ui.util.rememberTrackingStatus
 import androidx.compose.ui.unit.sp
 import com.example.expensetracker.data.db.entity.Category
 import com.example.expensetracker.ui.theme.*
+import com.example.expensetracker.data.privacy.CapturedTextRetention
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.Mascot
+import com.example.expensetracker.ui.mascot.MascotMood
+import com.example.expensetracker.ui.mascot.MascotNote
+import java.util.concurrent.TimeUnit
 import com.example.expensetracker.data.backup.BackupData
 import com.example.expensetracker.data.export.ExportPreset
 import com.example.expensetracker.data.period.BudgetPeriod
@@ -79,6 +85,7 @@ fun SettingsScreen(
     val privacyMode by viewModel.privacyMode.collectAsState()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsState()
     val widgetEnabled by viewModel.widgetEnabled.collectAsState()
+    val mascotEnabled = LocalMascotEnabled.current
     val autoBackupEnabled by viewModel.autoBackupEnabled.collectAsState()
     val driveConnected by viewModel.driveConnected.collectAsState()
     val driveAccountEmail by viewModel.driveAccountEmail.collectAsState()
@@ -214,6 +221,7 @@ fun SettingsScreen(
                 privacyMode = privacyMode,
                 biometricLockEnabled = biometricLockEnabled,
                 widgetEnabled = widgetEnabled,
+                mascotEnabled = mascotEnabled,
                 modifier = Modifier.padding(padding),
                 onBack = { currentPage = null },
                 onSetBudgetAlerts = { viewModel.setBudgetAlertsEnabled(it) },
@@ -236,7 +244,8 @@ fun SettingsScreen(
                         )
                     }
                 },
-                onSetWidget = { viewModel.setWidgetEnabled(it) }
+                onSetWidget = { viewModel.setWidgetEnabled(it) },
+                onSetMascot = { viewModel.setMascotEnabled(it) }
             )
             SettingsPage.Data -> DataSubPage(
                 modifier = Modifier.padding(padding),
@@ -393,15 +402,20 @@ private fun AutoTrackingCard(tracking: TrackingStatus, onFixSms: () -> Unit, onF
             return@MCard
         }
         val bothOff = !tracking.sms && !tracking.notifications
-        Text("Auto-tracking needs ${if (bothOff) "two fixes" else "one fix"}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-        Text(
-            when {
-                bothOff -> "Bank SMS and payment app notifications are off."
-                !tracking.sms -> "Payment app notifications are on. Bank SMS is off."
-                else -> "Bank SMS is on. Payment app notifications are off."
-            },
-            fontSize = 13.sp, color = Muted
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (LocalMascotEnabled.current) Mascot(MascotMood.Worried, Modifier.width(48.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Auto-tracking needs ${if (bothOff) "two fixes" else "one fix"}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                Text(
+                    when {
+                        bothOff -> "Bank SMS and payment app notifications are off."
+                        !tracking.sms -> "Payment app notifications are on. Bank SMS is off."
+                        else -> "Bank SMS is on. Payment app notifications are off."
+                    },
+                    fontSize = 13.sp, color = Muted
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
         if (!tracking.sms) PrimaryButton("Allow SMS access", onFixSms) else PrimaryButton("Turn on notifications", onFixNotifications)
         if (bothOff) {
@@ -464,10 +478,11 @@ private fun CloudSubPage(
 private fun PreferencesSubPage(
     budgetAlertsEnabled: Boolean, budgetAlertThreshold: Int, priceAlertsEnabled: Boolean,
     weekStartsOnMonday: Boolean, monthStartDay: Int, privacyMode: Boolean, biometricLockEnabled: Boolean, widgetEnabled: Boolean,
+    mascotEnabled: Boolean,
     modifier: Modifier = Modifier, onBack: () -> Unit,
     onSetBudgetAlerts: (Boolean) -> Unit, onSetBudgetThreshold: (Int) -> Unit, onSetPriceAlerts: (Boolean) -> Unit,
     onSetWeekStart: (Boolean) -> Unit, onSetMonthStart: (Int) -> Unit, onSetPrivacyMode: (Boolean) -> Unit,
-    onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit
+    onSetBiometricLock: (Boolean) -> Unit, onSetWidget: (Boolean) -> Unit, onSetMascot: (Boolean) -> Unit
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize().background(Canvas),
@@ -530,6 +545,8 @@ private fun PreferencesSubPage(
                 }
                 RowDivider()
                 ToggleRow("Home Screen Widget", "Show progress on home screen", widgetEnabled, onSetWidget)
+                RowDivider()
+                ToggleRow("Show the pot", "Her face and her tips on Home and beside your budgets", mascotEnabled, onSetMascot)
             }
         }
         item {
@@ -566,6 +583,16 @@ private fun DataSubPage(
                 MenuRow("Export CSV", "Expenses and income for Excel or Google Sheets", onClick = { showCsvDialog = true })
                 RowDivider()
                 MenuRow("Restore from backup", "Replace all data with a backup file", onImport)
+            }
+            if (LocalMascotEnabled.current) {
+                // Both halves are enforced in code: BackupCodec.toJson and CapturedTextRetention.
+                MascotNote(MascotMood.Asleep, Modifier.padding(top = 10.dp)) {
+                    Text(
+                        "The text of your bank messages is never put in a backup, and is deleted from the phone after " +
+                            "${TimeUnit.MILLISECONDS.toDays(CapturedTextRetention.KEEP_MS)} days.",
+                        fontSize = 12.5.sp, color = Muted
+                    )
+                }
             }
         }
         item {

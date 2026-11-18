@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +38,11 @@ import com.example.expensetracker.ui.util.parseColor
 import com.example.expensetracker.ui.util.parseLimitInput
 import com.example.expensetracker.ui.util.rememberAmountText
 import com.example.expensetracker.ui.components.*
+import com.example.expensetracker.data.preferences.PreferencesManager
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.MascotMood
+import com.example.expensetracker.ui.mascot.MascotNote
+import kotlin.math.ceil
 import com.example.expensetracker.ui.screens.expenses.Tags
 
 private val PRESET_EMOJIS = listOf(
@@ -333,6 +340,12 @@ private fun RenameTagDialog(
     )
 }
 
+/**
+ * The amount a budget alert goes off at, in whole rupees: what the edit sheet tells the user.
+ * Rounded up, because the alert needs spending to reach the exact share (BudgetAlertHelper).
+ */
+internal fun warnAt(limit: Double, alertPercent: Int): Double = ceil(limit * alertPercent / 100)
+
 @Composable
 internal fun CategoryDialog(
     initial: Category?,
@@ -354,6 +367,12 @@ internal fun CategoryDialog(
     // says why. A blank name isn't flagged before anything is typed.
     val nameError = categoryNameError(name, siblingNames, current = initial?.name)
     val canSave = nameError == null && parsedLimit != null
+    val mascotEnabled = LocalMascotEnabled.current
+    val context = LocalContext.current
+    val alertPrefs = remember { PreferencesManager(context.applicationContext) }
+    val alertPercent = remember { alertPrefs.budgetAlertThreshold }
+    // No note promising a warning when budget alerts are off.
+    val alertsOn = remember { alertPrefs.budgetAlertsEnabled }
 
     MSheet(onDismiss) {
         SheetTitle(when {
@@ -413,6 +432,13 @@ internal fun CategoryDialog(
                 modifier = Modifier.fillMaxWidth(),
                 shape = FieldShape, colors = fieldColors()
             )
+            if (mascotEnabled && alertsOn && parsedLimit != null && parsedLimit > 0) {
+                // Field, not Paper: the sheet itself is Paper.
+                MascotNote(MascotMood.Worried, background = Field) {
+                    Text("She warns you at ₹${fmtINR(warnAt(parsedLimit, alertPercent))}", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text("That is $alertPercent% of the limit.", fontSize = 12.5.sp, color = Muted)
+                }
+            }
         }
         ButtonPair(
             secondary = "Cancel", onSecondary = onDismiss,

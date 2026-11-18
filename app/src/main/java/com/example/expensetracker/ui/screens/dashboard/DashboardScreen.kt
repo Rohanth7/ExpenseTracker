@@ -40,8 +40,13 @@ import com.example.expensetracker.data.budget.Budget
 import com.example.expensetracker.data.db.entity.SavingsGoal
 import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
+import com.example.expensetracker.data.period.OverspentDay
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.ui.components.*
+import com.example.expensetracker.ui.mascot.LocalMascotEnabled
+import com.example.expensetracker.ui.mascot.Mascot
+import com.example.expensetracker.ui.mascot.MascotVoice
+import com.example.expensetracker.ui.mascot.mascotMonth
 import com.example.expensetracker.ui.theme.*
 import com.example.expensetracker.ui.util.AmountCalculator
 import com.example.expensetracker.ui.util.fmtINR
@@ -92,6 +97,13 @@ fun DashboardScreen(
     val freeToSpend = state.monthlyIncome - state.totalSpent - stillDue
     val startDay by MonthStartDay.flow(context).collectAsState()
     val daysLeft = BudgetPeriod.daysLeft(now, startDay).coerceAtLeast(1)
+    val mascotEnabled = LocalMascotEnabled.current
+    // Only once the month has loaded: an empty first state would forget the day the money ran out.
+    val say = if (mascotEnabled && isCurrentMonth && state.monthLabel.isNotEmpty()) {
+        remember(state.monthlyIncome, state.totalSpent, stillDue, state.budgets, alertPercent, now, startDay) {
+            MascotVoice.say(mascotMonth(state.monthlyIncome, state.totalSpent, stillDue, state.budgets, alertPercent, now, startDay, OverspentDay(prefs.overspentDays)))
+        }
+    } else null
     val comingUp = remember(state.upcomingBills, state.activeLoans, isCurrentMonth, now, startDay) {
         if (isCurrentMonth) ComingUp.of(state.upcomingBills, state.activeLoans, now, BudgetPeriod.current(now, startDay)) else emptyList()
     }
@@ -145,13 +157,22 @@ fun DashboardScreen(
                     }
                     !hasIncome -> {
                         Spacer(Modifier.height(16.dp))
+                        if (say != null) {
+                            Mascot(say.mood, Modifier.width(96.dp))
+                            Spacer(Modifier.height(8.dp))
+                        }
                         Text("Spent this month", fontSize = 13.sp, color = Muted)
                         BigNumber("₹${fmtINR(state.totalSpent)}")
                         TextAction("Set your monthly income", { showIncomeDialog = true })
+                        if (say != null) SpeechLine(say.line)
                     }
                     else -> {
                         val over = freeToSpend < 0
-                        Dial(leftFraction = if (over) 0f else (freeToSpend / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat())
+                        Box(Modifier.size(DialWidth, DialHeight)) {
+                            Dial(leftFraction = if (over) 0f else (freeToSpend / state.monthlyIncome).coerceIn(0.0, 1.0).toFloat())
+                            // offset, not padding: hanging below the dial mustn't push the text down.
+                            if (say != null) Mascot(say.mood, Modifier.width(92.dp).align(Alignment.BottomCenter).offset(y = 4.dp))
+                        }
                         Spacer(Modifier.height(8.dp))
                         Text(if (over) "Over this month" else "Free to spend", fontSize = 13.sp, color = Muted)
                         BigNumber("₹${fmtINR(if (over) -freeToSpend else freeToSpend)}", color = if (over) Pink else Ink)
@@ -166,6 +187,7 @@ fun DashboardScreen(
                                 fontSize = 13.sp
                             )
                         }
+                        if (say != null) SpeechLine(say.line)
                     }
                 }
             }
@@ -381,10 +403,23 @@ private fun MonthHeader(
     }
 }
 
-/** A half circle whose gold end is the share of the month's income still free to spend. Its centre is left for the mascot. */
+private val DialWidth = 220.dp
+private val DialHeight = 117.dp
+
+/** Her one sentence about the month, under the figures. */
+@Composable
+private fun SpeechLine(line: String) {
+    Text(
+        line, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink, textAlign = TextAlign.Center,
+        modifier = Modifier.padding(top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Paper)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    )
+}
+
+/** A half circle whose gold end is the share of the month's income still free to spend. She sits in its centre. */
 @Composable
 private fun Dial(leftFraction: Float) {
-    Canvas(Modifier.size(220.dp, 117.dp)) {
+    Canvas(Modifier.size(DialWidth, DialHeight)) {
         val stroke = 14.dp.toPx()
         val topLeft = Offset(stroke / 2, stroke / 2)
         val arc = Size(size.width - stroke, size.width - stroke)

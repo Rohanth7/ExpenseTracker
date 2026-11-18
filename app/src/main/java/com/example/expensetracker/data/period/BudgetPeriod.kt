@@ -3,6 +3,7 @@ package com.example.expensetracker.data.period
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 data class DateRange(val start: Long, val endInclusive: Long) {
     operator fun contains(t: Long) = t in start..endInclusive
@@ -118,6 +119,18 @@ object BudgetPeriod {
 
     /** The same number for every moment of one local day. */
     fun dayKey(t: Long): Int = Calendar.getInstance().apply { timeInMillis = t }.let { it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR) }
+
+    /**
+     * [t]'s local date as days since 1 January 1970, the number `LocalDate.toEpochDay()` gives.
+     * java.time needs Android 8, and the app runs on 7.
+     */
+    fun epochDay(t: Long): Long {
+        val local = Calendar.getInstance().apply { timeInMillis = t }
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear(); set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+        }
+        return utc.timeInMillis / DAY_MS
+    }
 
     fun startOfDay(t: Long): Long = Calendar.getInstance().apply {
         timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
