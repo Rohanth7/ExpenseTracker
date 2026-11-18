@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.expensetracker.notification.LockScreenPrivacy.privateOnLockScreen
 import com.example.expensetracker.LaunchAction
 import com.example.expensetracker.MainActivity
 import com.example.expensetracker.data.db.AppDatabase
@@ -173,6 +174,8 @@ object PriceChangeAlerts {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(openSubscriptionsIntent(context))
+            .privateOnLockScreen(context, CHANNEL_ID, android.R.drawable.ic_dialog_info,
+                "Subscription price changed", "Unlock to see the new price")
             .build()
         // Without the notification permission Android drops it; never let that fail the capture.
         runCatching {
