@@ -92,7 +92,9 @@ data class DashboardUiState(
     /** Current month only; most expensive per year first. */
     val subscriptions: List<Subscription> = emptyList(),
     /** The current month as she sees it; null for other months. */
-    val mascot: MascotMonth? = null
+    val mascot: MascotMonth? = null,
+    /** The budget alert threshold, percent; re-read with each refresh(). */
+    val alertPercent: Int = 80
 )
 
 class DashboardViewModel(
@@ -193,10 +195,11 @@ class DashboardViewModel(
         // Limits with this month's spending against them, a subcategory's own included.
         val budgets = Budgets.of(categories, categorizedExpenses).filter { it.spent > 0.0 }
         val notifItems = buildNotifItems(expenses, if (offset == 0) budgets else emptyList(), categories, upcomingBills)
+        val alertPercent = prefs.budgetAlertThreshold
         // Recorded whether or not she is shown, so turning her on later finds the day it really ran out.
         val mascot = if (offset != 0) null else {
             val daysOver = OverspentDay(prefs.overspentDays).record(income, total, billsStillDue + emiStillDue, nowMs, startDay)
-            mascotMonth(income, total, billsStillDue + emiStillDue, budgets, prefs.budgetAlertThreshold, nowMs, startDay, daysOver)
+            mascotMonth(income, total, billsStillDue + emiStillDue, budgets, alertPercent, nowMs, startDay, daysOver)
         }
 
         DashboardUiState(
@@ -225,7 +228,8 @@ class DashboardViewModel(
             subscriptions = if (offset == 0)
                 SubscriptionDetector.detect(expenses, nowMs, dismissedSubscriptions, bills.map { it.name })
             else emptyList(),
-            mascot = mascot
+            mascot = mascot,
+            alertPercent = alertPercent
         )
     // Off the main thread: subscription detection goes through the whole history.
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardUiState())
