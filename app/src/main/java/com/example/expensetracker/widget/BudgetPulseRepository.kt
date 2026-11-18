@@ -39,9 +39,11 @@ class BudgetPulseRepository(private val db: AppDatabase, private val prefs: Pref
         val income = IncomeForecast.load(db, prefs.monthlyIncome, now, cur).total
         val stillDue = CashFlow.billsStillDue(db.billDao().getAllOnce(), now, cur) +
             CashFlow.emiStillDue(db.loanDao().getAll().first(), now, cur)
+        // Recorded whether or not she is shown, like Home does.
+        val daysOver = OverspentDay(prefs.overspentDays).record(income, spent, stillDue, now, startDay)
         val mood = if (!prefs.mascotEnabled) null else {
             val budgets = Budgets.of(db.categoryDao().getAllOnce(), expenses.filter { it.categoryId != -1L }).filter { it.spent > 0.0 }
-            MascotVoice.say(mascotMonth(income, spent, stillDue, budgets, prefs.budgetAlertThreshold, now, startDay, OverspentDay(prefs.overspentDays))).mood
+            MascotVoice.say(mascotMonth(income, spent, stillDue, budgets, prefs.budgetAlertThreshold, now, startDay, daysOver)).mood
         }
         return WidgetData(
             spent = spent,
