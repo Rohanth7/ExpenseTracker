@@ -17,8 +17,9 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.Calendar
 
-/** The widget records the day the month's money ran out even while she is hidden; in-memory DB, test prefs. */
+/** The widget with her hidden or shown: the same spending, and the day the money ran out still recorded; in-memory DB, test prefs. */
 @RunWith(AndroidJUnit4::class)
 class BudgetPulseOverspentTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -48,5 +49,19 @@ class BudgetPulseOverspentTest {
         prefs.overspentDays.put(key, BudgetPeriod.epochDay(now) - 3)
         prefs.mascotEnabled = true
         assertEquals(MascotMood.Sad, load().mood)
+    }
+
+    /** Hidden, she needs no per-category figures, so the month is summed in the database instead. */
+    @Test fun spentIsTheSameWithOrWithoutHer() {
+        runBlocking {
+            db.expenseDao().insert(Expense(amount = 250.0, description = "Pending", date = now, source = "SMS"))
+            val lastMonth = Calendar.getInstance().apply { timeInMillis = BudgetPeriod.current(now, 1).start; add(Calendar.DAY_OF_MONTH, -1) }.timeInMillis
+            db.expenseDao().insert(Expense(amount = 9_999.0, description = "Old", date = lastMonth, source = "Manual"))
+        }
+        prefs.mascotEnabled = false
+        val hidden = load().spent
+        prefs.mascotEnabled = true
+        assertEquals(12_250.0, hidden, 0.0)
+        assertEquals(hidden, load().spent, 0.0)
     }
 }

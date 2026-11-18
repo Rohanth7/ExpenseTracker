@@ -52,7 +52,7 @@ class TagEditTest {
         ExpensesViewModel(expenses, categories, MerchantMappingRepository(db.merchantMappingDao()), incomes, context, prefs, SavedStateHandle())
     }.also { vm -> screen.launch { vm.allTagSummaries.collect {} } }  // the screen keeps this subscribed
 
-    private suspend fun categoriesScreen() = withContext(Dispatchers.Main) { CategoriesViewModel(categories, expenses, incomes) }
+    private suspend fun categoriesScreen() = withContext(Dispatchers.Main) { CategoriesViewModel(categories, expenses, incomes, prefs) }
         .also { vm -> screen.launch { vm.allTagSummaries.collect {} } }
 
     private suspend fun act(action: () -> Job) = withContext(Dispatchers.Main) { action() }.join()

@@ -23,8 +23,9 @@ class CategoryDialogTest {
     @get:Rule val compose = createComposeRule()
     private var saved: Pair<String, Double>? = null
 
-    private fun show(initial: Category? = null, siblings: List<String> = listOf("Food", "Rent")) = compose.setContent {
-        CategoryDialog(initial = initial, siblingNames = siblings, onDismiss = {}, onConfirm = { name, _, _, limit -> saved = name to limit })
+    private fun show(initial: Category? = null, siblings: List<String> = listOf("Food", "Rent"), alertPercent: Int = 80, alertsOn: Boolean = true) = compose.setContent {
+        CategoryDialog(initial = initial, siblingNames = siblings, alertPercent = alertPercent, alertsOn = alertsOn,
+            onDismiss = {}, onConfirm = { name, _, _, limit -> saved = name to limit })
     }
     private fun field(label: String) = compose.onNode(hasSetTextAction() and hasText(label))
     private fun retype(label: String, text: String) = field(label).run { performTextClearance(); performTextInput(text) }
@@ -44,6 +45,17 @@ class CategoryDialogTest {
         retype("Monthly limit ₹ (optional)", "1,500")
         save.assertIsEnabled().performClick()
         assertEquals("Travel" to 1500.0, saved)
+    }
+
+    @Test fun theWarningNoteFollowsTheAlertSettingsItIsGiven() {
+        show(initial = Category(id = 1, name = "Food", monthlyLimit = 1000.0), siblings = emptyList(), alertPercent = 50)
+        compose.onNodeWithText("She warns you at ₹500").assertExists()
+        compose.onNodeWithText("That is 50% of the limit.").assertExists()
+    }
+
+    @Test fun withBudgetAlertsOffThereIsNoWarningNote() {
+        show(initial = Category(id = 1, name = "Food", monthlyLimit = 1000.0), siblings = emptyList(), alertsOn = false)
+        compose.onNodeWithText("She warns you at", substring = true).assertDoesNotExist()
     }
 
     @Test fun aNameAlreadyInUseIsRefusedWhateverItsCase() {
