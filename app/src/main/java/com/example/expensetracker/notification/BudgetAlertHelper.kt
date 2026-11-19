@@ -10,6 +10,7 @@ import com.example.expensetracker.data.period.BudgetPeriod
 import com.example.expensetracker.data.period.MonthStartDay
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.expensetracker.notification.LockScreenPrivacy.privateOnLockScreen
 import com.example.expensetracker.data.db.AppDatabase
 import com.example.expensetracker.data.preferences.PreferencesManager
 import com.example.expensetracker.data.repository.CategoryRepository
@@ -124,6 +125,8 @@ object BudgetAlertHelper {
             .setContentText(text)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .privateOnLockScreen(context, CHANNEL_ID, android.R.drawable.ic_dialog_alert,
+                "Budget alert", "Unlock to see which budget")
             .build()
         context.getSystemService(NotificationManager::class.java).notify(TAG, id, notification)
     }

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.expensetracker.notification.LockScreenPrivacy.privateOnLockScreen
 import com.example.expensetracker.MainActivity
 
 object NotificationHelper {
@@ -58,6 +59,8 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
+            .privateOnLockScreen(context, CHANNEL_ID, android.R.drawable.ic_dialog_info,
+                "New payment logged", "Unlock to see it and choose a category")
 
         // Android shows at most three buttons, so they're all categories (a separate "Categorize"
         // button used to take one slot and hide the third category). Tapping the notification
