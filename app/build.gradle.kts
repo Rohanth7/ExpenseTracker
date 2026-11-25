@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -21,9 +23,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // The upload key's location and passwords live in keystore.properties at the project root,
+    // which is never committed. Without that file, release builds are left unsigned.
+    val keystoreFile = rootProject.file("keystore.properties")
+    val upload = keystoreFile.takeIf { it.exists() }?.let { file ->
+        val props = Properties().apply { file.inputStream().use(::load) }
+        signingConfigs.create("upload") {
+            storeFile = file(props.getProperty("storeFile"))
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = upload
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

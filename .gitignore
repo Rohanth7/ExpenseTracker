@@ -16,3 +16,8 @@ local.properties
 
 # Claude Code local config
 .claude/settings.local.json
+
+# Release signing (upload key and passwords)
+keystore.properties
+*.jks
+*.keystore
