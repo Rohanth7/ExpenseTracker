@@ -1,21 +1,21 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Gson reads and writes these classes by reflection, using their field names as the JSON keys.
+# Backups, message rules and the setup restore note are stored that way, so renaming or removing
+# a field here would make files written by another build unreadable. Add any new class that goes
+# through Gson to this list.
+-keep class com.example.expensetracker.data.db.entity.** { <fields>; <init>(...); }
+-keep class com.example.expensetracker.data.backup.BackupData { <fields>; <init>(...); }
+-keep class com.example.expensetracker.data.backup.BackupSettings { <fields>; <init>(...); }
+-keep class com.example.expensetracker.data.recurring.BillMonth { <fields>; <init>(...); }
+-keep class com.example.expensetracker.sms.ParsingRule { <fields>; <init>(...); }
+-keep class com.example.expensetracker.sms.ParsingRule$Kind { *; }
+-keep class com.example.expensetracker.ui.screens.onboarding.RestoredInfo { <fields>; <init>(...); }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Gson 2.10 ships no R8 rules. TypeToken subclasses carry the list's element type in their
+# generic signature.
+-keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
+-keep class * extends com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Readable stack traces in Play Console's crash reports (R8's mapping file is uploaded with the build).
+-keepattributes SourceFile, LineNumberTable
+-renamesourcefileattribute SourceFile

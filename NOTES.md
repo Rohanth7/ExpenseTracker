@@ -120,7 +120,7 @@ Combined summary of earlier Claude Code sessions (May–Oct 2026). Use this as c
 - **Splash icon** is still pixelated — waiting on a high-res icon from the user.
 - **Notification keyword allowlist** (only treat as expense if it contains debit words like "debited", "paid", …) — discussed, user chose to leave it for now.
 - **Feature ideas not built:** payment-method breakdown chart, merchant mapping management screen (`MerchantMapping` table exists, no UI), PDF export, weekly spending digest notification, no-spend streaks, net worth snapshot, year-over-year comparison, receipt photo attachment.
-- **Sharing:** debug APK only. No release signing config yet.
+- **Release build:** `./gradlew assembleRelease` (or `bundleRelease` for Play) is shrunk with R8 and signed with the upload key named in `keystore.properties` at the project root (never committed; the key and a copy of that file live in `~/.thriftpot/`). Without the file, release builds come out unsigned. Gson classes are listed in `app/proguard-rules.pro`: their field names are the backup's JSON keys, so a new class that goes through Gson must be added there, or files written by one build won't read in another. Checked on the emulator with the release APK: SMS capture, a message rule saved and read back after a restart, backup export, Reset everything, restore.
 
 ## Release plan (from 2026-10-15 audit + competitor and store research)
 
@@ -128,7 +128,7 @@ Positioning: automatic expense tracking for India with no account, no ads, no lo
 
 **Phase 0 — make it work for a new user: done** (PRs #2–#7). Only database encryption is left, as a separate PR.
 
-**Phase 1 — Play Store launch (next):** the app is named **Thriftpot** and its package ID is `com.thriftpot.app` (decided 2026-11-14; permanent after the first upload; the code namespace stays `com.example.expensetracker`). Not yet done: a search of the US and Indian trademark registers for "Thriftpot", and renaming the on-screen text in `ui/screens/`, which waits for the screen redesign to merge, release signing, R8 with Gson keep rules, privacy policy, SMS Permissions Declaration + demo video, Data safety form, migrate Drive to the new authorization API + register the OAuth client, crash reporting, CSV export (done), $25 fee, closed test with 12 testers for 14 days, keep a no-SMS fallback build ready.
+**Phase 1 — Play Store launch (next):** the app is named **Thriftpot** and its package ID is `com.thriftpot.app` (decided 2026-11-14; permanent after the first upload; the code namespace stays `com.example.expensetracker`). Not yet done: a search of the US and Indian trademark registers for "Thriftpot", and renaming the on-screen text in `ui/screens/`, which waits for the screen redesign to merge, privacy policy hosting, submitting the SMS Permissions Declaration + demo video and the Data safety form (drafts and the policy are in `docs/store/`; release signing and R8 are done), migrate Drive to the new authorization API + register the OAuth client, crash reporting, CSV export (done), $25 fee, closed test with 12 testers for 14 days, keep a no-SMS fallback build ready.
 
 **Phase 2 — catch up:** PDF export, accounts with balances + credit cards, splits/IOUs, receipt photos, light theme, a "missed SMS" inbox.
 

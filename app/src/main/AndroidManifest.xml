@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Google Drive backup only; nothing else in the app goes online. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".ExpenseTrackerApp"
